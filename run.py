@@ -1,3 +1,4 @@
+import argparse
 import boto3
 from botocore.client import Config
 import json
@@ -50,8 +51,8 @@ def function_exists(client, name):
   except client.exceptions.ResourceNotFoundException:
     return False 
 
-def upload_function(client):
-  name = "CometIndex"
+def upload_function(client, params):
+  name = params["function_name"]
 
   os.chdir("lambda")
   subprocess.call(["zip", "../lambda.zip", "*"])
@@ -69,8 +70,8 @@ def upload_function(client):
 
     response = client.update_function_configuration( 
       FunctionName=name,
-      MemorySize=512,
-      Timeout=5*60,
+      MemorySize=params["memory_size"],
+      Timeout=params["timeout"],
     )
   else:
     response = client.create_function(
@@ -79,8 +80,8 @@ def upload_function(client):
       Role="arn:aws:iam::999145429263:role/service-role/lambdaFullAccessRole",
       Handler="main.handler",
       Code={ "ZipFile": zipped_code },
-      Timeout=5*60,
-      MemorySize=512,
+      Timeout=params["memory_size"],
+      MemorySize=params["timeout"],
     )
 
   assert(response["ResponseMetadata"]["HTTPStatusCode"] == 200)
@@ -133,12 +134,12 @@ def process():
     i += 1
   return i
 
-def run():
+def run(params):
   config = Config(read_timeout=5*60)
-  client = boto3.client("lambda", region_name="us-east-1", config=config)
+  client = boto3.client("lambda", region_name=params["region"], config=config)
 #  num_threads = process()
   num_threads = 1
-  upload_function(client)
+  upload_function(client, params)
 #  scans = get_scans()[:100]
   print("Number of threads", num_threads)
   threads = []
@@ -176,4 +177,11 @@ def run():
   print("var", var)
   print("std", std)
 
-run()
+def main():
+  parser = argparse.ArgumentParser()
+  parser.add_argument('--parameters', type=str, required=True, help="File containing paramters") 
+  args = parser.parse_args()
+  params = json.loads(open(args.parameters).read())
+  run(params)
+  
+main()
