@@ -40,8 +40,19 @@ class Task(threading.Thread):
     self.results[self.thread_id] = { "duration": end-start, "found": found }
     return
 
+
+def function_exists(client, name):
+  try:
+    client.get_function(
+      FunctionName=name
+    )
+    return True
+  except client.exceptions.ResourceNotFoundException:
+    return False 
+
 def upload_function(client):
-  print("Uploading...")
+  name = "CometIndex"
+
   os.chdir("lambda")
   subprocess.call(["zip", "../lambda.zip", "*"])
   os.chdir("..")
@@ -49,19 +60,30 @@ def upload_function(client):
   with open("lambda.zip", "rb") as f:
     zipped_code = f.read()
 
-  response = client.update_function_code(
-    FunctionName="CometIndex",
-    ZipFile=zipped_code,
-  )
+  if function_exists(client, name):
+    response = client.update_function_code(
+      FunctionName=name,
+      ZipFile=zipped_code,
+    )
+    assert(response["ResponseMetadata"]["HTTPStatusCode"] == 200)
+
+    response = client.update_function_configuration( 
+      FunctionName=name,
+      MemorySize=512,
+      Timeout=5*60,
+    )
+  else:
+    response = client.create_function(
+      FunctionName=name,
+      Runtime='python3.6',
+      Role="arn:aws:iam::999145429263:role/service-role/lambdaFullAccessRole",
+      Handler="main.handler",
+      Code={ "ZipFile": zipped_code },
+      Timeout=5*60,
+      MemorySize=512,
+    )
+
   assert(response["ResponseMetadata"]["HTTPStatusCode"] == 200)
- 
-  response = client.update_function_configuration( 
-    FunctionName="CometIndex",
-    MemorySize=512,
-    Timeout=5*60,
-  )
-  assert(response["ResponseMetadata"]["HTTPStatusCode"] == 200)
-  print("Uploaded!")
 
 def get_scans():
   output = subprocess.check_output("grep '^S' lambda/sorted-small.ms2 | awk '{print ""$2""}'", shell=True)
