@@ -18,23 +18,27 @@ SPECTRA = re.compile("S\s\d+.*")
 INTENSITY = re.compile("I\s+MS1Intensity\s+([0-9\.]+)")
 
 class Task(threading.Thread):
-  def __init__(self, thread_id, client, requests, results, name):
+  def __init__(self, thread_id, client, requests, results, params):
     super(Task, self).__init__()
     self.client = client
     self.requests = requests
     self.results = results
     self.thread_id = thread_id
-    self.name = name
+    self.params = params
  
   def run(self):
     while not self.requests.empty():
       try:
         request = self.requests.get()
-        arguments = { "start": request[0], "end": request[1] }
-        payload = json.dumps(arguments)
+      except Queue.Empty:
+        continue
+
+      arguments = { "start": request[0], "end": request[1] }
+      payload = json.dumps(arguments)
+      try:
         start = time.time()
         response = self.client.invoke(
-          FunctionName=self.name,
+          FunctionName=self.params["function_name"],
           InvocationType='RequestResponse',
           LogType='Tail',
           Payload=payload,
@@ -43,10 +47,12 @@ class Task(threading.Thread):
         assert(response["ResponseMetadata"]["HTTPStatusCode"] == 200)
         found = response["Payload"].read()
         self.results.put({ "duration": end-start, "found": found })
-        if self.thread_id == 0:
-          print("results", self.results.qsize())
-      except Queue.Empty:
-        pass
+      except:
+        end = time.time()
+        self.results.put({ "duration": end-start, "found": False })
+
+      if self.thread_id == 0:
+        print("results", self.results.qsize())
 
 def function_exists(client, name):
   try:
@@ -143,8 +149,13 @@ def process():
 
 def run(params):
   num_threads = params["num_threads"]
-  config = Config(read_timeout=5*60)
+  extra_time = 20
+  config = Config(read_timeout=params["timeout"] + extra_time)
   client = boto3.client("lambda", region_name=params["region"], config=config)
+  # https://github.com/boto/boto3/issues/1104#issuecomment-305136266
+  # boto3 by default retries even if max timeout is set. This is a workaround.
+  client.meta.events._unique_id_handlers['retry-config-lambda']['handler']._checker.__dict__['_max_attempts'] = 0
+
   upload_function(client, params)
   requests = get_requests(params["batch_size"])
   print("Number of requests", requests.qsize())
@@ -152,7 +163,7 @@ def run(params):
   threads = []
 
   for i in range(num_threads):
-    thread = Task(i, client, requests, results, params["function_name"])
+    thread = Task(i, client, requests, results, params)
     thread.start()
     threads.append(thread) 
 
