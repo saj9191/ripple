@@ -4,6 +4,7 @@ from botocore.client import Config
 import json
 import numpy
 import os
+import Queue
 import re
 import subprocess
 import sys
@@ -17,30 +18,35 @@ SPECTRA = re.compile("S\s\d+.*")
 INTENSITY = re.compile("I\s+MS1Intensity\s+([0-9\.]+)")
 
 class Task(threading.Thread):
-  def __init__(self, thread_id, client, results):#scan, results):
+  def __init__(self, thread_id, client, requests, results, name):
     super(Task, self).__init__()
     self.client = client
+    self.requests = requests
     self.results = results
-#    self.scan = scan
     self.thread_id = thread_id
+    self.name = name
  
   def run(self):
-    start = time.time()
-    arguments = { "start": self.thread_id }#self.scan[0], "end": self.scan[1] }
-    payload = json.dumps(arguments)
-    response = self.client.invoke(
-      FunctionName='CometIndex',
-      InvocationType='RequestResponse',
-      LogType='Tail',
-      Payload=payload,
-    )
-    assert(response["ResponseMetadata"]["HTTPStatusCode"] == 200)
-    end = time.time()
-
-    found = response["Payload"].read()
-    self.results[self.thread_id] = { "duration": end-start, "found": found }
-    return
-
+    while not self.requests.empty():
+      try:
+        request = self.requests.get()
+        arguments = { "start": request[0], "end": request[1] }
+        payload = json.dumps(arguments)
+        start = time.time()
+        response = self.client.invoke(
+          FunctionName=self.name,
+          InvocationType='RequestResponse',
+          LogType='Tail',
+          Payload=payload,
+        )
+        end = time.time()
+        assert(response["ResponseMetadata"]["HTTPStatusCode"] == 200)
+        found = response["Payload"].read()
+        self.results.put({ "duration": end-start, "found": found })
+        if self.thread_id == 0:
+          print("results", self.results.qsize())
+      except Queue.Empty:
+        pass
 
 def function_exists(client, name):
   try:
@@ -86,14 +92,15 @@ def upload_function(client, params):
 
   assert(response["ResponseMetadata"]["HTTPStatusCode"] == 200)
 
-def get_scans():
-  output = subprocess.check_output("grep '^S' lambda/sorted-small.ms2 | awk '{print ""$2""}'", shell=True)
+def get_requests(batch_size):
+  requests = Queue.Queue()
+  output = subprocess.check_output("grep '^S' lambda/small.ms2 | awk '{print ""$2""}'", shell=True)
   output = output.split("\n")
-  offset = 100
-  scans = []
-  for i in range(0, len(output), offset):
-    scans.append((output[i], output[min(i+offset-1, len(output)-1)])) 
-  return scans
+  for i in range(0, len(output), batch_size):
+    start = output[i]
+    end = output[min(i + batch_size - -1, len(output) - 1)]
+    requests.put((start, end))
+  return requests
 
 def process():
   print("process")
@@ -135,28 +142,24 @@ def process():
   return i
 
 def run(params):
+  num_threads = params["num_threads"]
   config = Config(read_timeout=5*60)
   client = boto3.client("lambda", region_name=params["region"], config=config)
-#  num_threads = process()
-  num_threads = 1
   upload_function(client, params)
-#  scans = get_scans()[:100]
-  print("Number of threads", num_threads)
+  requests = get_requests(params["batch_size"])
+  print("Number of requests", requests.qsize())
+  results = Queue.Queue()
   threads = []
-  results = [None] * num_threads#len(scans)
 
-  for i in range(num_threads):#len(scans)):
-    thread = Task(i, client, results)#scans[i], results)
+  for i in range(num_threads):
+    thread = Task(i, client, requests, results, params["function_name"])
     thread.start()
     threads.append(thread) 
 
-  joined = 0
   for i in range(len(threads)):
     threads[i].join()
-    joined += 1
-    if joined % 10 == 0:
-      print(joined, "out of", len(threads), "joined")
 
+  results = list(results.queue)
   min_time = min(results)
   max_time = max(results)
 
