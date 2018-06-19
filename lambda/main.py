@@ -21,8 +21,8 @@ def handler(event, context):
 #  for index_file in index_files:
 #    with open("/tmp/HUMAN.fasta.20170123.index/{0:s}".format(index_file), "wb") as f:
 #      bucket.download_fileobj(index_file, f)
-     
-  output_file = "/tmp/small.{0:s}-{1:s}.txt".format(event["start"], event["end"])
+
+  output_file = "/tmp/small.{0:s}-{1:s}.sqt".format(event["start"], event["end"])
 #  command = "./crux tide-search small.ms2 HUMAN.fasta.20170123.index"
   command = "./comet.2018011.linux.exe -N/tmp/small -F{0:s} -L{1:s} small.ms2".format(event["start"], event["end"])
 #  print(command)

@@ -45,11 +45,11 @@ class Task(threading.Thread):
         )
         end = time.time()
         assert(response["ResponseMetadata"]["HTTPStatusCode"] == 200)
-        found = response["Payload"].read()
-        self.results.put({ "duration": end-start, "found": found })
-      except:
+        output = response["Payload"].read().strip()
+        self.results.put({ "duration": end-start, "result": output })
+      except Exception as e:
         end = time.time()
-        self.results.put({ "duration": end-start, "found": False })
+        self.results.put({ "duration": end-start, "result": str.encode("") })
 
       if self.thread_id == 0:
         print("results", self.results.qsize())
@@ -99,12 +99,12 @@ def upload_function(client, params):
   assert(response["ResponseMetadata"]["HTTPStatusCode"] == 200)
 
 def get_requests(batch_size):
-  output = subprocess.check_output("grep '^S' lambda/small.ms2 | awk '{print ""$2""}'", shell=True)
-  output = output.split("\n")
   requests = queue.Queue()
+  output = subprocess.check_output("grep '^S' lambda/small.ms2 | awk '{print ""$2""}'", shell=True).decode("utf-8")
+  output = output.split("\n")
   for i in range(0, len(output), batch_size):
     start = output[i]
-    end = output[min(i + batch_size - -1, len(output) - 1)]
+    end = output[min(i + batch_size -1, len(output) - 1)]
     requests.put((start, end))
   return requests
 
@@ -147,6 +147,23 @@ def process():
     i += 1
   return i
 
+def combine_results(results):
+  final_result = ""
+  while not results.empty():
+    result = results.get()
+    output = result["result"].decode("utf-8")
+    if len(final_result) == 0 and len(output) > 2:
+      print("first")
+      final_result += output
+    elif len(output) > 2:
+      print("second")
+      t = output.split("\\n")
+      print("t", t[0:2])
+      s = list(filter(lambda o: not (o.startswith('H') or o.startswith('"H')), t))
+      print("s", s[0:2])
+      final_result += "\\n".join(s)
+  return final_result
+
 def run(params):
   num_threads = params["num_threads"]
   extra_time = 20
@@ -170,26 +187,32 @@ def run(params):
   for i in range(len(threads)):
     threads[i].join()
 
-  results = list(results.queue)
-  min_time = min(results)
-  max_time = max(results)
+  final_result = combine_results(results)
+  f = open("temp", "wb")
+  for line in final_result.split("\\n"):
+    if line.startswith('"'):
+      line = line[1:]
+    f.write(str.encode("\t".join(line.split("\\t")) + "\n"))
+  f.close()
+#  min_time = min(results)
+#  max_time = max(results)
 
-  durations = map(lambda r: r["duration"], results)
-  found = 0
-  for result in results:
-    if result["found"] == "true":
-      found += 1
-  payloads = map(lambda r: r["found"], results)
-  print("Num found", found)
+#  durations = map(lambda r: r["duration"], results)
+#  found = 0
+#  for result in results:
+#    if result["found"] == "true":
+#      found += 1
+#  payloads = map(lambda r: r["found"], results)
+#  print("Num found", found)
 #  print(payloads)
-  average = numpy.average(durations)
-  var = numpy.var(durations)
-  std = numpy.std(durations)
-  print("min", min_time)
-  print("max", max_time)
-  print("avg", average)
-  print("var", var)
-  print("std", std)
+#  average = numpy.average(durations)
+#  var = numpy.var(durations)
+#  std = numpy.std(durations)
+#  print("min", min_time)
+#  print("max", max_time)
+#  print("avg", average)
+#  print("var", var)
+#  print("std", std)
 
 def main():
   parser = argparse.ArgumentParser()
