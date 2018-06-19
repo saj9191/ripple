@@ -4,7 +4,7 @@ from botocore.client import Config
 import json
 import numpy
 import os
-import Queue
+import queue
 import re
 import subprocess
 import sys
@@ -30,7 +30,7 @@ class Task(threading.Thread):
     while not self.requests.empty():
       try:
         request = self.requests.get()
-      except Queue.Empty:
+      except queue.Empty:
         continue
 
       arguments = { "start": request[0], "end": request[1] }
@@ -99,9 +99,9 @@ def upload_function(client, params):
   assert(response["ResponseMetadata"]["HTTPStatusCode"] == 200)
 
 def get_requests(batch_size):
-  requests = Queue.Queue()
   output = subprocess.check_output("grep '^S' lambda/small.ms2 | awk '{print ""$2""}'", shell=True)
   output = output.split("\n")
+  requests = queue.Queue()
   for i in range(0, len(output), batch_size):
     start = output[i]
     end = output[min(i + batch_size - -1, len(output) - 1)]
@@ -159,7 +159,7 @@ def run(params):
   upload_function(client, params)
   requests = get_requests(params["batch_size"])
   print("Number of requests", requests.qsize())
-  results = Queue.Queue()
+  results = queue.Queue()
   threads = []
 
   for i in range(num_threads):
