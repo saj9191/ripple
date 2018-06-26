@@ -19,52 +19,6 @@ REPORT = re.compile(".*Duration:\s([0-9\.]+)\sms.*Billed Duration:\s([0-9\.]+)\s
 SPECTRA = re.compile("S\s\d+.*")
 INTENSITY = re.compile("I\s+MS1Intensity\s+([0-9\.]+)")
 
-class Task(threading.Thread):
-  def __init__(self, thread_id, client, requests, results, params):
-    super(Task, self).__init__()
-    self.client = client
-    self.requests = requests
-    self.results = results
-    self.thread_id = thread_id
-    self.params = params
- 
-  def run(self):
-    while not self.requests.empty():
-      try:
-        request = self.requests.get()
-      except queue.Empty:
-        continue
-
-      arguments = { "start": request[0], "end": request[1] }
-      payload = json.dumps(arguments)
-      try:
-        start = time.time()
-        response = self.client.invoke(
-          FunctionName=self.params["function_name"],
-          InvocationType='RequestResponse',
-          LogType='Tail',
-          Payload=payload,
-        )
-        end = time.time()
-        assert(response["ResponseMetadata"]["HTTPStatusCode"] == 200)
-        output = response["Payload"].read().strip()
-        self.results.put({ "duration": end-start, "result": output })
-      except Exception as e:
-        end = time.time()
-        self.results.put({ "duration": end-start, "result": str.encode("") })
-
-      if self.thread_id == 0:
-        print("results", self.results.qsize())
-
-def function_exists(client, name):
-  try:
-    client.get_function(
-      FunctionName=name
-    )
-    return True
-  except client.exceptions.ResourceNotFoundException:
-    return False 
-
 def upload_functions(client, params):
   functions = ["split_spectra", "analyze_spectra", "combine_spectra_results", "percolator"]
   names = ["SplitSpectra", "AnalyzeSpectra", "CombineSpectraResults", "Percolator"]
@@ -86,16 +40,7 @@ def upload_functions(client, params):
 
   os.chdir("..")
 
-def get_requests(batch_size):
-  requests = queue.Queue()
-  output = subprocess.check_output("grep '^S' lambda/small.ms2 | awk '{print ""$2""}'", shell=True).decode("utf-8")
-  output = output.split("\n")
-  for i in range(0, len(output), batch_size):
-    start = output[i]
-    end = output[min(i + batch_size -1, len(output) - 1)]
-    requests.put((start, end))
-  return requests
-
+# TODO: Remove once we incorporate this into the split lambda function
 def process():
   print("process")
   subprocess.call("rm lambda/sorted-small-*", shell=True)
