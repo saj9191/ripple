@@ -18,23 +18,29 @@ sys.path.insert(0, os.path.join(CWD, "lib"))
 REPORT = re.compile(".*Duration:\s([0-9\.]+)\sms.*Billed Duration:\s([0-9\.]+)\sms.*Memory Size:\s([0-9A-Z ]+).*Max Memory Used:\s([0-9A-Z ]+).*")
 SPECTRA = re.compile("S\s\d+.*")
 INTENSITY = re.compile("I\s+MS1Intensity\s+([0-9\.]+)")
+MEMORY_PARAMETERS = json.loads(open("json/memory.json").read())
 
 def upload_functions(client, params):
   functions = ["split_spectra", "analyze_spectra", "combine_spectra_results", "percolator"]
-  names = ["SplitSpectra", "AnalyzeSpectra", "CombineSpectraResults", "Percolator"]
 
   os.chdir("lambda")
-  for i in range(len(functions)):
-    function = functions[i]
-    name = names[i]
+  for function in functions:
+    fparams = json.loads(open("../json/{0:s}.json".format(function)).read())
     subprocess.call("zip {0:s}.zip {0:s}.py".format(function), shell=True)
 
     with open("{0:s}.zip".format(function), "rb") as f:
       zipped_code = f.read()
 
     response = client.update_function_code(
-      FunctionName=name,
+      FunctionName=fparams["name"],
       ZipFile=zipped_code,
+    )
+    assert(response["ResponseMetadata"]["HTTPStatusCode"] == 200)
+
+    response = client.update_function_configuration(
+      FunctionName=fparams["name"],
+      Timeout=fparams["timeout"],
+      MemorySize=fparams["memory_size"]
     )
     assert(response["ResponseMetadata"]["HTTPStatusCode"] == 200)
 
@@ -138,33 +144,63 @@ def fetch_events(client, num_events, log_name, start_time, filter_pattern):
   assert(len(events) == num_events)
   return events
 
+def calculate_cost(duration, memory_size):
+  # Cost per 100ms
+  millisecond_cost = MEMORY_PARAMETERS[str(memory_size)]
+  return int(duration / 100) * millisecond_cost 
+
 def parse_split_logs(client, start_time):
+  sparams = json.loads(open("json/split_spectra.json").read())
   events = fetch_events(client, 1, "SplitSpectra", start_time, "REPORT RequestId") 
   m = REPORT.match(events[0]["message"])
+  duration = int(m.group(2))
+  cost = calculate_cost(duration, sparams["memory_size"])
+
   print("Split Spectra")
-  print("Billed Duration", m.group(2), "milliseconds")
+  print("Billed Duration", duration, "milliseconds")
   print("Max Memory Used", m.group(4))
+  print("Cost", cost)
   print("")
-  return { "billed_duration": int(m.group(2)), "memory_used": m.group(4) }
+
+  return {
+    "billed_duration": duration,
+    "max_duration": duration,
+    "memory_used": m.group(4),
+    "cost": cost
+  }
 
 def parse_analyze_logs(client, start_time):
   num_lambdas = 42 # TODO: Unhardcode
   events = fetch_events(client, num_lambdas, "AnalyzeSpectra", start_time, "REPORT RequestId") 
-
+  aparams = json.loads(open("json/analyze_spectra.json").read())
   max_billed_duration = 0
+  total_billed_duration = 0
   max_memory_used = 0 # TODO: Handle
   
   for event in events:
     m = REPORT.match(event["message"])
     if m:
-      max_billed_duration = max(max_billed_duration, int(m.group(2)))
+      duration = int(m.group(2))
+      max_billed_duration = max(max_billed_duration, duration)
+      total_billed_duration += duration
+
+  cost = calculate_cost(total_billed_duration, aparams["memory_size"])
 
   print("Analyze Spectra")
   print("Max Billed Duration", max_billed_duration, "milliseconds")
+  print("Total Billed Duration", total_billed_duration, "milliseconds")
+  print("Cost", cost)
   print("")
-  return max_billed_duration
+
+  return {
+    "billed_duration": total_billed_duration,
+    "max_duration": max_billed_duration,
+    "memory_used": m.group(4),
+    "cost": cost
+  }
 
 def parse_combine_logs(client, start_time):
+  cparams = json.loads(open("json/combine_spectra_results.json").read())
   events = fetch_events(client, 1, "CombineSpectraResults", start_time, "Combining") 
   response = client.filter_log_events(
     logGroupName="/aws/lambda/CombineSpectraResults",
@@ -175,27 +211,63 @@ def parse_combine_logs(client, start_time):
   )
   assert(len(response["events"]) == 1)
   m = REPORT.match(response["events"][0]["message"])
+  duration = int(m.group(2))
+  cost = calculate_cost(duration, cparams["memory_size"])
+
   print("Combine Spectra")
-  print("Billed Duration", m.group(2), "milliseconds")
+  print("Billed Duration", duration, "milliseconds")
   print("Max Memory Used", m.group(4))
+  print("Cost", cost)
   print("")
-  return { "billed_duration": int(m.group(2)), "memory_used": m.group(4) }
+
+  return {
+    "billed_duration": duration,
+    "max_duration": duration,
+    "memory_used": m.group(4),
+    "cost": cost
+  }
 
 def parse_percolator_logs(client, start_time):
+  pparams = json.loads(open("json/percolator.json").read())
   events = fetch_events(client, 1, "Percolator", start_time, "REPORT RequestId") 
   m = REPORT.match(events[0]["message"])
+  duration = int(m.group(2))
+  cost = calculate_cost(duration, pparams["memory_size"])
+
   print("Percolator Spectra")
-  print("Billed Duration", m.group(2), "milliseconds")
+  print("Billed Duration", duration, "milliseconds")
   print("Max Memory Used", m.group(4))
+  print("Cost", cost)
   print("")
-  return { "billed_duration": int(m.group(2)), "memory_used": m.group(4) }
+
+  return {
+    "billed_duration": duration,
+    "max_duration": duration,
+    "memory_used": m.group(4),
+    "cost": cost
+  }
   
 def parse_logs(params, upload_timestamp):
   client = boto3.client("logs", region_name=params["region"])
-  split_stats = parse_split_logs(client, upload_timestamp)
-  analyze_stats = parse_analyze_logs(client, upload_timestamp)
-  combine_stats = parse_combine_logs(client, upload_timestamp)
-  percolator_stats = parse_percolator_logs(client, upload_timestamp)
+  stats = []
+  stats.append(parse_split_logs(client, upload_timestamp))
+  stats.append(parse_analyze_logs(client, upload_timestamp))
+  stats.append(parse_combine_logs(client, upload_timestamp))
+  stats.append(parse_percolator_logs(client, upload_timestamp))
+
+  cost = 0  
+  max_duration = 0
+  billed_duration = 0
+
+  for stat in stats:
+    cost += stat["cost"]
+    max_duration += stat["max_duration"]
+    billed_duration += stat["billed_duration"]
+
+  print("End Results")
+  print("Total Cost", cost)
+  print("Total Runtime", max_duration, "milliseconds")
+  print("Total Billed Duration", billed_duration, "milliseconds")
 
 def clear_buckets():
   s3 = boto3.resource("s3")
