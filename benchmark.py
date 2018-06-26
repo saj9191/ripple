@@ -158,6 +158,7 @@ def parse_split_logs(client, start_time):
   cost = calculate_cost(duration, sparams["memory_size"])
 
   print("Split Spectra")
+  print("Timestamp", events[0]["timestamp"])
   print("Billed Duration", duration, "milliseconds")
   print("Max Memory Used", m.group(4))
   print("Cost", cost)
@@ -177,19 +178,24 @@ def parse_analyze_logs(client, start_time):
   max_billed_duration = 0
   total_billed_duration = 0
   total_memory_used = 0 # TODO: Handle
+  min_timestamp = events[0]["timestamp"]
+  max_timestamp = events[0]["timestamp"]
 
   for event in events:
+    min_timestamp = min(timestamp, event["timestamp"])
+    max_timestamp = max(timestamp, event["timestamp"])
     m = REPORT.match(event["message"])
-    if m:
-      duration = int(m.group(2))
-      memory_used = int(m.group(4))
-      max_billed_duration = max(max_billed_duration, duration)
-      total_billed_duration += duration
-      total_memory_used += memory_used
+    duration = int(m.group(2))
+    memory_used = int(m.group(4))
+    max_billed_duration = max(max_billed_duration, duration)
+    total_billed_duration += duration
+    total_memory_used += memory_used
 
   cost = calculate_cost(total_billed_duration, aparams["memory_size"])
 
   print("Analyze Spectra")
+  print("Min Timestamp", min_timestamp)
+  print("Max Timestamp", max_timestamp)
   print("Max Billed Duration", max_billed_duration, "milliseconds")
   print("Total Billed Duration", total_billed_duration, "milliseconds")
   print("Cost", cost)
@@ -219,6 +225,7 @@ def parse_combine_logs(client, start_time):
   cost = calculate_cost(duration, cparams["memory_size"])
 
   print("Combine Spectra")
+  print("Timestamp", events[0][timestamp])
   print("Billed Duration", duration, "milliseconds")
   print("Max Memory Used", m.group(4))
   print("Cost", cost)
@@ -240,6 +247,7 @@ def parse_percolator_logs(client, start_time):
   cost = calculate_cost(duration, pparams["memory_size"])
 
   print("Percolator Spectra")
+  print("Timestamp", events[0][timestamp])
   print("Billed Duration", duration, "milliseconds")
   print("Max Memory Used", m.group(4))
   print("Cost", cost)
