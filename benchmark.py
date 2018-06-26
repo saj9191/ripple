@@ -71,9 +71,9 @@ def upload_functions(client, params):
   for i in range(len(functions)):
     function = functions[i]
     name = names[i]
-    subprocess.call("zip ../{0:s}.zip {0:s}.py".format(function), shell=True)
+    subprocess.call("zip {0:s}.zip {0:s}.py".format(function), shell=True)
 
-    with open("../{0:s}.zip".format(function), "rb") as f:
+    with open("{0:s}.zip".format(function), "rb") as f:
       zipped_code = f.read()
 
     response = client.update_function_code(
