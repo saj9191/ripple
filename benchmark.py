@@ -58,7 +58,7 @@ def process():
   intensity = None
   spectra = []
 
-  for line in lines: 
+  for line in lines:
     if SPECTRA.match(line):
       if intensity is not None:
         spectrum.append((intensity, "".join(spectra)))
@@ -66,7 +66,7 @@ def process():
         spectra = []
 
     m = INTENSITY.match(line)
-    if m: 
+    if m:
       intensity = float(m.group(1))
 
     spectra.append(line)
@@ -133,7 +133,7 @@ def fetch_events(client, num_events, log_name, start_time, filter_pattern):
       "logGroupName": "/aws/lambda/{0:s}".format(log_name),
       "startTime": start_time
     }
-    
+
     if next_token:
       args["nextToken"] = next_token
 
@@ -147,11 +147,11 @@ def fetch_events(client, num_events, log_name, start_time, filter_pattern):
 def calculate_cost(duration, memory_size):
   # Cost per 100ms
   millisecond_cost = MEMORY_PARAMETERS[str(memory_size)]
-  return int(duration / 100) * millisecond_cost 
+  return int(duration / 100) * millisecond_cost
 
 def parse_split_logs(client, start_time):
   sparams = json.loads(open("json/split_spectra.json").read())
-  events = fetch_events(client, 1, "SplitSpectra", start_time, "REPORT RequestId") 
+  events = fetch_events(client, 1, "SplitSpectra", start_time, "REPORT RequestId")
   m = REPORT.match(events[0]["message"])
   duration = int(m.group(2))
   memory_used = int(m.group(4))
@@ -172,12 +172,12 @@ def parse_split_logs(client, start_time):
 
 def parse_analyze_logs(client, start_time):
   num_lambdas = 42 # TODO: Unhardcode
-  events = fetch_events(client, num_lambdas, "AnalyzeSpectra", start_time, "REPORT RequestId") 
+  events = fetch_events(client, num_lambdas, "AnalyzeSpectra", start_time, "REPORT RequestId")
   aparams = json.loads(open("json/analyze_spectra.json").read())
   max_billed_duration = 0
   total_billed_duration = 0
   total_memory_used = 0 # TODO: Handle
-  
+
   for event in events:
     m = REPORT.match(event["message"])
     if m:
@@ -204,7 +204,7 @@ def parse_analyze_logs(client, start_time):
 
 def parse_combine_logs(client, start_time):
   cparams = json.loads(open("json/combine_spectra_results.json").read())
-  events = fetch_events(client, 1, "CombineSpectraResults", start_time, "Combining") 
+  events = fetch_events(client, 1, "CombineSpectraResults", start_time, "Combining")
   response = client.filter_log_events(
     logGroupName="/aws/lambda/CombineSpectraResults",
     logStreamNames=[events[0]["logStreamName"]],
@@ -233,7 +233,7 @@ def parse_combine_logs(client, start_time):
 
 def parse_percolator_logs(client, start_time):
   pparams = json.loads(open("json/percolator.json").read())
-  events = fetch_events(client, 1, "Percolator", start_time, "REPORT RequestId") 
+  events = fetch_events(client, 1, "Percolator", start_time, "REPORT RequestId")
   m = REPORT.match(events[0]["message"])
   duration = int(m.group(2))
   memory_used = int(m.group(4))
@@ -251,7 +251,7 @@ def parse_percolator_logs(client, start_time):
     "memory_used": memory_used,
     "cost": cost
   }
-  
+
 def parse_logs(params, upload_timestamp):
   client = boto3.client("logs", region_name=params["region"])
   stats = []
@@ -260,7 +260,7 @@ def parse_logs(params, upload_timestamp):
   stats.append(parse_combine_logs(client, upload_timestamp))
   stats.append(parse_percolator_logs(client, upload_timestamp))
 
-  cost = 0  
+  cost = 0
   max_duration = 0
   billed_duration = 0
   memory_used = 0
@@ -336,9 +336,9 @@ def run(params):
 
 def main():
   parser = argparse.ArgumentParser()
-  parser.add_argument('--parameters', type=str, required=True, help="File containing parameters") 
+  parser.add_argument('--parameters', type=str, required=True, help="File containing parameters")
   args = parser.parse_args()
   params = json.loads(open(args.parameters).read())
   run(params)
-  
+
 main()
