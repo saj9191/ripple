@@ -297,7 +297,7 @@ def benchmark(params):
   return parse_logs(params, upload_timestamp)
 
 def run(params):
-  print("Current Git commit", subprocess.check_output("git rev-parse HEAD", shell=True).format("utf-8").strip())
+  print("Current Git commit", subprocess.check_output("git rev-parse HEAD", shell=True).decode("utf-8").strip())
   iterations = params["iterations"]
   extra_time = 20
   config = Config(read_timeout=params["timeout"] + extra_time)
