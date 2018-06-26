@@ -1,6 +1,7 @@
 import argparse
 import boto3
 from botocore.client import Config
+from dateutil.parser import parse
 import json
 import numpy
 import os
@@ -14,6 +15,7 @@ import time
 CWD = os.path.dirname(os.path.realpath(__file__))
 sys.path.insert(0, os.path.join(CWD, "lib"))
 
+REPORT = re.compile(".*Duration:\s([0-9\.]+)\sms.*Billed Duration:\s([0-9\.]+)\sms.*Memory Size:\s([0-9A-Z ]+).*Max Memory Used:\s([0-9A-Z ]+).*")
 SPECTRA = re.compile("S\s\d+.*")
 INTENSITY = re.compile("I\s+MS1Intensity\s+([0-9\.]+)")
 
@@ -64,8 +66,8 @@ def function_exists(client, name):
     return False 
 
 def upload_functions(client, params):
-  functions = ["split_spectra", "analyze_spectra", "combine_spectra_results"]
-  names = ["SplitSpectra", "AnalyzeSpectra", "CombineSpectraResults"]
+  functions = ["split_spectra", "analyze_spectra", "combine_spectra_results", "percolator"]
+  names = ["SplitSpectra", "AnalyzeSpectra", "CombineSpectraResults", "Percolator"]
 
   os.chdir("lambda")
   for i in range(len(functions)):
@@ -133,22 +135,125 @@ def process():
     i += 1
   return i
 
-def combine_results(results):
-  final_result = ""
-  while not results.empty():
-    result = results.get()
-    output = result["result"].decode("utf-8")
-    if len(final_result) == 0 and len(output) > 2:
-      print("first")
-      final_result += output
-    elif len(output) > 2:
-      print("second")
-      t = output.split("\\n")
-      print("t", t[0:2])
-      s = list(filter(lambda o: not (o.startswith('H') or o.startswith('"H')), t))
-      print("s", s[0:2])
-      final_result += "\\n".join(s)
-  return final_result
+def upload_input():
+  bucket_name = "maccoss-human-input-spectra"
+  key = "20170403_HelaQC_01.ms2"
+  s3 = boto3.resource("s3")
+  s3.Object(bucket_name, key).put(Body=open(key, 'rb'))
+  obj = s3.Object(bucket_name, key)
+  print(key, "last modified", obj.last_modified)
+  timestamp = parse(obj.last_modified).timestamp()
+  return timestamp
+
+def check_objects(client, bucket_name, prefix, count):
+  done = False
+  suffix = ""
+  if count > 1:
+    suffix = "s"
+  while not done:
+    response = client.list_objects(
+      Bucket=bucket_name,
+      Prefix=prefix
+    )
+    done = (len(response["Contents"]) == count)
+    if not done:
+      print("Waiting for {0:s} function{1:s}...".format(prefix, suffix))
+    else:
+      print("Found {0:s} function{1:s}".format(prefix, suffix))
+
+def wait_for_completion(params):
+  client = boto3.client("s3", region_name=params["region"])
+  bucket_name = "maccoss-human-output-spectra"
+
+  check_objects(client, bucket_name, "combined", 1)
+  check_objects(client, bucket_name, "decoy", 2)
+  check_objects(client, bucket_name, "target", 2)
+
+def fetch_events(client, num_events, log_name, start_time, filter_pattern):
+  events = []
+  next_token = None
+  while len(events) < num_events:
+    args = {
+      "filterPattern": filter_pattern,
+      "limit": num_events - len(events),
+      "logGroupName": "/aws/lambda/{0:s}".format(log_name),
+      "startTime": start_time
+    }
+    
+    if next_token:
+      args["nextToken"] = next_token
+
+    response = client.filter_log_events(**args)
+    next_token = response["nextToken"]
+    events += response["events"]
+
+  assert(len(events) == num_events)
+  return events
+
+def parse_split_logs(client, start_time):
+  events = fetch_events(client, 1, "SplitSpectra", start_time, "REPORT RequestId") 
+  m = REPORT.match(events[0]["message"])
+  print("Split Spectra")
+  print("Billed Duration", m.group(2), "milliseconds")
+  print("Max Memory Used", m.group(4))
+  print("")
+  return { "billed_duration": int(m.group(2)), "memory_used": m.group(4) }
+
+def parse_analyze_logs(client, start_time):
+  num_lambdas = 42 # TODO: Unhardcode
+  events = fetch_events(client, num_lambdas, "AnalyzeSpectra", start_time, "REPORT RequestId") 
+
+  max_billed_duration = 0
+  max_memory_used = 0 # TODO: Handle
+  
+  for event in events:
+    m = REPORT.match(event["message"])
+    if m:
+      max_billed_duration = max(max_billed_duration, int(m.group(2)))
+
+  print("Analyze Spectra")
+  print("Max Billed Duration", max_billed_duration, "milliseconds")
+  print("")
+  return max_billed_duration
+
+def parse_combine_logs(client, start_time):
+  events = fetch_events(client, 1, "CombineSpectraResults", start_time, "Combining") 
+  response = client.filter_log_events(
+    logGroupName="/aws/lambda/CombineSpectraResults",
+    logStreamNames=[events[0]["logStreamName"]],
+    startTime=events[0]["timestamp"],
+    filterPattern="REPORT RequestId",
+    limit = 1
+  )
+  assert(len(response["events"]) == 1)
+  m = REPORT.match(response["events"][0]["message"])
+  print("Combine Spectra")
+  print("Billed Duration", m.group(2), "milliseconds")
+  print("Max Memory Used", m.group(4))
+  print("")
+  return { "billed_duration": int(m.group(2)), "memory_used": m.group(4) }
+
+def parse_percolator_logs(client, start_time):
+  events = fetch_events(client, 1, "Percolator", start_time, "REPORT RequestId") 
+  m = REPORT.match(events[0]["message"])
+  print("Percolator Spectra")
+  print("Billed Duration", m.group(2), "milliseconds")
+  print("Max Memory Used", m.group(4))
+  print("")
+  return { "billed_duration": int(m.group(2)), "memory_used": m.group(4) }
+  
+def parse_logs(params, upload_timestamp):
+  client = boto3.client("logs", region_name=params["region"])
+  split_stats = parse_split_logs(client, upload_timestamp)
+  analyze_stats = parse_analyze_logs(client, upload_timestamp)
+  combine_stats = parse_combine_logs(client, upload_timestamp)
+  percolator_stats = parse_percolator_logs(client, upload_timestamp)
+
+def benchmark(params):
+#  upload_timestamp = upload_input()
+#  wait_for_completion(params)
+  upload_timestamp = 1530025200000
+  parse_logs(params, upload_timestamp)
 
 def run(params):
   num_threads = params["num_threads"]
@@ -159,46 +264,8 @@ def run(params):
   # boto3 by default retries even if max timeout is set. This is a workaround.
   client.meta.events._unique_id_handlers['retry-config-lambda']['handler']._checker.__dict__['_max_attempts'] = 0
 
-  upload_functions(client, params)
-#  requests = get_requests(params["batch_size"])
-  #print("Number of requests", requests.qsize())
-#  results = queue.Queue()
-#  threads = []
-
-#  for i in range(num_threads):
-#    thread = Task(i, client, requests, results, params)
-#    thread.start()
-#    threads.append(thread) 
-
-#  for i in range(len(threads)):
-#    threads[i].join()
-
-#  final_result = combine_results(results)
-#  f = open("temp", "wb")
-#  for line in final_result.split("\\n"):
-#    if line.startswith('"'):
-#      line = line[1:]
-#    f.write(str.encode("\t".join(line.split("\\t")) + "\n"))
-#  f.close()
-#  min_time = min(results)
-#  max_time = max(results)
-
-#  durations = map(lambda r: r["duration"], results)
-#  found = 0
-#  for result in results:
-#    if result["found"] == "true":
-#      found += 1
-#  payloads = map(lambda r: r["found"], results)
-#  print("Num found", found)
-#  print(payloads)
-#  average = numpy.average(durations)
-#  var = numpy.var(durations)
-#  std = numpy.std(durations)
-#  print("min", min_time)
-#  print("max", max_time)
-#  print("avg", average)
-#  print("var", var)
-#  print("std", std)
+  #upload_functions(client, params)
+  benchmark(params)
 
 def main():
   parser = argparse.ArgumentParser()
