@@ -1,0 +1,5 @@
+{
+  "memory_size": 256,
+  "name": "CombineSpectraResults",
+  "timeout": 300
+}
