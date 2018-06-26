@@ -223,7 +223,7 @@ def run(params):
 
 def main():
   parser = argparse.ArgumentParser()
-  parser.add_argument('--parameters', type=str, required=True, help="File containing paramters") 
+  parser.add_argument('--parameters', type=str, required=True, help="File containing parameters") 
   args = parser.parse_args()
   params = json.loads(open(args.parameters).read())
   run(params)
