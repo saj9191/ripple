@@ -63,40 +63,26 @@ def function_exists(client, name):
   except client.exceptions.ResourceNotFoundException:
     return False 
 
-def upload_function(client, params):
-  name = params["function_name"]
+def upload_functions(client, params):
+  functions = ["split_spectra", "analyze_spectra", "combine_spectra_results"]
+  names = ["SplitSpectra", "AnalyzeSpectra", "CombineSpectraResults"]
 
   os.chdir("lambda")
-  subprocess.call(["zip", "../lambda.zip", "*"])
-  os.chdir("..")
+  for i in range(len(functions)):
+    function = functions[i]
+    name = names[i]
+    subprocess.call("zip ../{0:s}.zip {0:s}.py".format(function), shell=True)
 
-  with open("lambda.zip", "rb") as f:
-    zipped_code = f.read()
+    with open("../{0:s}.zip".format(function), "rb") as f:
+      zipped_code = f.read()
 
-  if function_exists(client, name):
     response = client.update_function_code(
       FunctionName=name,
       ZipFile=zipped_code,
     )
     assert(response["ResponseMetadata"]["HTTPStatusCode"] == 200)
 
-    response = client.update_function_configuration( 
-      FunctionName=name,
-      MemorySize=params["memory_size"],
-      Timeout=params["timeout"],
-    )
-  else:
-    response = client.create_function(
-      FunctionName=name,
-      Runtime='python3.6',
-      Role="arn:aws:iam::999145429263:role/service-role/lambdaFullAccessRole",
-      Handler="main.handler",
-      Code={ "ZipFile": zipped_code },
-      Timeout=params["memory_size"],
-      MemorySize=params["timeout"],
-    )
-
-  assert(response["ResponseMetadata"]["HTTPStatusCode"] == 200)
+  os.chdir("..")
 
 def get_requests(batch_size):
   requests = queue.Queue()
@@ -173,27 +159,27 @@ def run(params):
   # boto3 by default retries even if max timeout is set. This is a workaround.
   client.meta.events._unique_id_handlers['retry-config-lambda']['handler']._checker.__dict__['_max_attempts'] = 0
 
-  upload_function(client, params)
-  requests = get_requests(params["batch_size"])
-  print("Number of requests", requests.qsize())
-  results = queue.Queue()
-  threads = []
+  upload_functions(client, params)
+#  requests = get_requests(params["batch_size"])
+  #print("Number of requests", requests.qsize())
+#  results = queue.Queue()
+#  threads = []
 
-  for i in range(num_threads):
-    thread = Task(i, client, requests, results, params)
-    thread.start()
-    threads.append(thread) 
+#  for i in range(num_threads):
+#    thread = Task(i, client, requests, results, params)
+#    thread.start()
+#    threads.append(thread) 
 
-  for i in range(len(threads)):
-    threads[i].join()
+#  for i in range(len(threads)):
+#    threads[i].join()
 
-  final_result = combine_results(results)
-  f = open("temp", "wb")
-  for line in final_result.split("\\n"):
-    if line.startswith('"'):
-      line = line[1:]
-    f.write(str.encode("\t".join(line.split("\\t")) + "\n"))
-  f.close()
+#  final_result = combine_results(results)
+#  f = open("temp", "wb")
+#  for line in final_result.split("\\n"):
+#    if line.startswith('"'):
+#      line = line[1:]
+#    f.write(str.encode("\t".join(line.split("\\t")) + "\n"))
+#  f.close()
 #  min_time = min(results)
 #  max_time = max(results)
 
