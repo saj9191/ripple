@@ -15,7 +15,7 @@ import time
 CWD = os.path.dirname(os.path.realpath(__file__))
 sys.path.insert(0, os.path.join(CWD, "lib"))
 
-REPORT = re.compile(".*Duration:\s([0-9\.]+)\sms.*Billed Duration:\s([0-9\.]+)\sms.*Memory Size:\s([0-9A-Z ]+).*Max Memory Used:\s([0-9A-Z ]+).*")
+REPORT = re.compile(".*Duration:\s([0-9\.]+)\sms.*Billed Duration:\s([0-9\.]+)\sms.*Memory Size:\s([0-9]+)\sMB.*Max Memory Used:\s([0-9]+)\sMB.*")
 SPECTRA = re.compile("S\s\d+.*")
 INTENSITY = re.compile("I\s+MS1Intensity\s+([0-9\.]+)")
 MEMORY_PARAMETERS = json.loads(open("json/memory.json").read())
@@ -154,6 +154,7 @@ def parse_split_logs(client, start_time):
   events = fetch_events(client, 1, "SplitSpectra", start_time, "REPORT RequestId") 
   m = REPORT.match(events[0]["message"])
   duration = int(m.group(2))
+  memory_used = int(m.group(4))
   cost = calculate_cost(duration, sparams["memory_size"])
 
   print("Split Spectra")
@@ -165,7 +166,7 @@ def parse_split_logs(client, start_time):
   return {
     "billed_duration": duration,
     "max_duration": duration,
-    "memory_used": m.group(4),
+    "memory_used": memory_used,
     "cost": cost
   }
 
@@ -175,14 +176,16 @@ def parse_analyze_logs(client, start_time):
   aparams = json.loads(open("json/analyze_spectra.json").read())
   max_billed_duration = 0
   total_billed_duration = 0
-  max_memory_used = 0 # TODO: Handle
+  total_memory_used = 0 # TODO: Handle
   
   for event in events:
     m = REPORT.match(event["message"])
     if m:
       duration = int(m.group(2))
+      memory_used = int(m.group(4))
       max_billed_duration = max(max_billed_duration, duration)
       total_billed_duration += duration
+      total_memory_used += memory_used
 
   cost = calculate_cost(total_billed_duration, aparams["memory_size"])
 
@@ -195,7 +198,7 @@ def parse_analyze_logs(client, start_time):
   return {
     "billed_duration": total_billed_duration,
     "max_duration": max_billed_duration,
-    "memory_used": m.group(4),
+    "memory_used": total_memory_used,
     "cost": cost
   }
 
@@ -212,6 +215,7 @@ def parse_combine_logs(client, start_time):
   assert(len(response["events"]) == 1)
   m = REPORT.match(response["events"][0]["message"])
   duration = int(m.group(2))
+  memory_used = int(m.group(4))
   cost = calculate_cost(duration, cparams["memory_size"])
 
   print("Combine Spectra")
@@ -223,7 +227,7 @@ def parse_combine_logs(client, start_time):
   return {
     "billed_duration": duration,
     "max_duration": duration,
-    "memory_used": m.group(4),
+    "memory_used": memory_used,
     "cost": cost
   }
 
@@ -232,6 +236,7 @@ def parse_percolator_logs(client, start_time):
   events = fetch_events(client, 1, "Percolator", start_time, "REPORT RequestId") 
   m = REPORT.match(events[0]["message"])
   duration = int(m.group(2))
+  memory_used = int(m.group(4))
   cost = calculate_cost(duration, pparams["memory_size"])
 
   print("Percolator Spectra")
@@ -243,7 +248,7 @@ def parse_percolator_logs(client, start_time):
   return {
     "billed_duration": duration,
     "max_duration": duration,
-    "memory_used": m.group(4),
+    "memory_used": memory_used,
     "cost": cost
   }
   
@@ -258,16 +263,26 @@ def parse_logs(params, upload_timestamp):
   cost = 0  
   max_duration = 0
   billed_duration = 0
+  memory_used = 0
 
   for stat in stats:
     cost += stat["cost"]
     max_duration += stat["max_duration"]
     billed_duration += stat["billed_duration"]
+    memory_used += stat["memory_used"]
 
-  print("End Results")
+  print("END RESULTS")
   print("Total Cost", cost)
   print("Total Runtime", max_duration, "milliseconds")
   print("Total Billed Duration", billed_duration, "milliseconds")
+  print("Total Memory Used", memory_used, "MB")
+
+  return {
+    "cost": cost,
+    "max_duration": max_duration,
+    "billed_duration": billed_duration,
+    "memory_used": memory_used
+  }
 
 def clear_buckets():
   s3 = boto3.resource("s3")
@@ -279,10 +294,11 @@ def benchmark(params):
   clear_buckets()
   upload_timestamp = upload_input()
   wait_for_completion(params)
-  parse_logs(params, upload_timestamp)
+  return parse_logs(params, upload_timestamp)
 
 def run(params):
-  num_threads = params["num_threads"]
+  print("Current Git commit", subprocess.check_output("git rev-parse HEAD", shell=True).format("utf-8").strip())
+  iterations = params["iterations"]
   extra_time = 20
   config = Config(read_timeout=params["timeout"] + extra_time)
   client = boto3.client("lambda", region_name=params["region"], config=config)
@@ -291,7 +307,32 @@ def run(params):
   client.meta.events._unique_id_handlers['retry-config-lambda']['handler']._checker.__dict__['_max_attempts'] = 0
 
   upload_functions(client, params)
-  benchmark(params)
+
+  cost = 0
+  max_duration = 0
+  billed_duration = 0
+  memory_used = 0
+  for i in range(iterations):
+    print("Iteration {0:d}".format(i))
+    results = benchmark(params)
+    cost += results["cost"]
+    max_duration += results["max_duration"]
+    billed_duration += results["billed_duration"]
+    memory_used += results["memory_used"]
+    print("--------------------------")
+    print("")
+
+  cost = float(cost) / iterations
+  max_duration = float(max_duration) / iterations
+  billed_duration = float(billed_duration) / iterations
+  memory_used = float(memory_used) / iterations
+
+  print("AVERAGE RESULTS ({0:d} ITERATIONS)".format(iterations))
+  print("Average Cost", cost)
+  print("Average Runtime", max_duration, "milliseconds")
+  print("Average Billed Duration", billed_duration, "milliseconds")
+  print("Average Memory Used", memory_used, "MB")
+
 
 def main():
   parser = argparse.ArgumentParser()
