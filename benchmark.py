@@ -1,7 +1,7 @@
 import argparse
 import boto3
 from botocore.client import Config
-from dateutil.parser import parse
+import datetime
 import json
 import numpy
 import os
@@ -142,8 +142,8 @@ def upload_input():
   s3.Object(bucket_name, key).put(Body=open(key, 'rb'))
   obj = s3.Object(bucket_name, key)
   print(key, "last modified", obj.last_modified)
-  timestamp = parse(obj.last_modified).timestamp()
-  return timestamp
+  timestamp = obj.last_modified.timestamp()
+  return int(timestamp)
 
 def check_objects(client, bucket_name, prefix, count):
   done = False
@@ -155,11 +155,13 @@ def check_objects(client, bucket_name, prefix, count):
       Bucket=bucket_name,
       Prefix=prefix
     )
-    done = (len(response["Contents"]) == count)
+    done = (("Contents" in response) and (len(response["Contents"]) == count))
+    now = datetime.datetime.now().strftime("%H:%M:%S")
     if not done:
-      print("Waiting for {0:s} function{1:s}...".format(prefix, suffix))
+      print("{0:s}: Waiting for {1:s} function{2:s}...".format(now, prefix, suffix))
+      time.sleep(60)
     else:
-      print("Found {0:s} function{1:s}".format(prefix, suffix))
+      print("{0:s}: Found {1:s} function{2:s}".format(now, prefix, suffix))
 
 def wait_for_completion(params):
   client = boto3.client("s3", region_name=params["region"])
@@ -168,6 +170,7 @@ def wait_for_completion(params):
   check_objects(client, bucket_name, "combined", 1)
   check_objects(client, bucket_name, "decoy", 2)
   check_objects(client, bucket_name, "target", 2)
+  print("")
 
 def fetch_events(client, num_events, log_name, start_time, filter_pattern):
   events = []
@@ -249,10 +252,16 @@ def parse_logs(params, upload_timestamp):
   combine_stats = parse_combine_logs(client, upload_timestamp)
   percolator_stats = parse_percolator_logs(client, upload_timestamp)
 
+def clear_buckets():
+  s3 = boto3.resource("s3")
+  for bucket_name in ["maccoss-human-input-spectra", "maccoss-human-split-spectra", "maccoss-human-output-spectra"]:
+    bucket = s3.Bucket(bucket_name)
+    bucket.objects.all().delete()
+
 def benchmark(params):
-#  upload_timestamp = upload_input()
-#  wait_for_completion(params)
-  upload_timestamp = 1530025200000
+  clear_buckets()
+  upload_timestamp = upload_input()
+  wait_for_completion(params)
   parse_logs(params, upload_timestamp)
 
 def run(params):
@@ -264,7 +273,7 @@ def run(params):
   # boto3 by default retries even if max timeout is set. This is a workaround.
   client.meta.events._unique_id_handlers['retry-config-lambda']['handler']._checker.__dict__['_max_attempts'] = 0
 
-  #upload_functions(client, params)
+  upload_functions(client, params)
   benchmark(params)
 
 def main():
