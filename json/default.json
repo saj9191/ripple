@@ -1,0 +1,7 @@
+{
+  "batch_size": 1,
+  "memory_size": 512,
+  "num_threads": 1,
+  "region": "us-west-2",
+  "timeout": 300
+}
