@@ -182,8 +182,8 @@ def parse_analyze_logs(client, start_time):
   max_timestamp = events[0]["timestamp"]
 
   for event in events:
-    min_timestamp = min(timestamp, event["timestamp"])
-    max_timestamp = max(timestamp, event["timestamp"])
+    min_timestamp = min(min_timestamp, event["timestamp"])
+    max_timestamp = max(max_timestamp, event["timestamp"])
     m = REPORT.match(event["message"])
     duration = int(m.group(2))
     memory_used = int(m.group(4))
