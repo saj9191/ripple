@@ -174,8 +174,10 @@ def parse_split_logs(client, start_time, params):
   }
 
 def parse_analyze_logs(client, start_time, params):
-  num_lambdas = 42 # TODO: Unhardcode
+  num_spectra = int(subprocess.check_output("cat 20170403_HelaQC_01.ms2 | grep 'MS1Intensity' | wc -l", shell=True).decode("utf-8").strip())
   aparams = params["analyze_spectra"]
+  batch_size = aparams["batch_size"]
+  num_lambdas = int((num_spectra + batch_size - 1) / batch_size)
   events = fetch_events(client, num_lambdas, aparams["name"], start_time, "REPORT RequestId")
   max_billed_duration = 0
   total_billed_duration = 0
