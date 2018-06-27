@@ -140,6 +140,8 @@ def fetch_events(client, num_events, log_name, start_time, filter_pattern):
       args["nextToken"] = next_token
 
     response = client.filter_log_events(**args)
+    if "nextToken" not in response:
+      print(response)
     next_token = response["nextToken"]
     events += response["events"]
 
