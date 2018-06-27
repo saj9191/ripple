@@ -134,7 +134,8 @@ def fetch_events(client, num_events, log_name, start_time, filter_pattern, extra
       "limit": num_events - len(events),
       "logGroupName": "/aws/lambda/{0:s}".format(log_name),
       "startTime": start_time
-    }.merge(extra_args)
+    }
+    args = { **args, **extra_args }
 
     if next_token:
       args["nextToken"] = next_token
