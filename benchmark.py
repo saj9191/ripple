@@ -349,4 +349,5 @@ def main():
   params = json.loads(open(args.parameters).read())
   run(params)
 
-main()
+if __name__ == "__main__":
+  main()
