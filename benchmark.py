@@ -125,7 +125,7 @@ def wait_for_completion(params):
   check_objects(client, bucket_name, "target", 2)
   print("")
 
-def fetch_events(client, num_events, log_name, start_time, filter_pattern):
+def fetch_events(client, num_events, log_name, start_time, filter_pattern, extra_args = {}):
   events = []
   next_token = None
   while len(events) < num_events:
@@ -134,7 +134,7 @@ def fetch_events(client, num_events, log_name, start_time, filter_pattern):
       "limit": num_events - len(events),
       "logGroupName": "/aws/lambda/{0:s}".format(log_name),
       "startTime": start_time
-    }
+    }.merge(extra_args)
 
     if next_token:
       args["nextToken"] = next_token
@@ -218,24 +218,21 @@ def parse_analyze_logs(client, start_time, params):
 
 def parse_combine_logs(client, start_time, params):
   cparams = params["combine_spectra_results"]
-  events = fetch_events(client, 1, cparams["name"], start_time, "Combining")
-  response = client.filter_log_events(
-    logGroupName="/aws/lambda/{0:s}".format(cparams["name"]),
-    logStreamNames=[events[0]["logStreamName"]],
-    startTime=events[0]["timestamp"],
-    filterPattern="REPORT RequestId",
-    limit = 1
-  )
-  if len(response["events"]) != 1:
-    print(response)
-  assert(len(response["events"]) == 1)
-  m = REPORT.match(response["events"][0]["message"])
+  name = cparams["name"]
+  combine_events = fetch_events(client, 1, name, start_time, "Combining")
+
+  extra_args = {
+    logStreamNames: [combine_events[0]["logStreamName"]],
+  }
+  events = fetch_events(client, 1, name, combined_events[0]["timestamp"], "REPORT RequestId", extra_args)
+
+  m = REPORT.match(events[0]["message"])
   duration = int(m.group(2))
   memory_used = int(m.group(4))
   cost = calculate_cost(duration, cparams["memory_size"])
 
   print("Combine Spectra")
-  print("Timestamp", events[0]["timestamp"])
+  print("Timestamp", combine_events[0]["timestamp"])
   print("Billed Duration", duration, "milliseconds")
   print("Max Memory Used", m.group(4))
   print("Cost", cost)
