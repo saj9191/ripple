@@ -223,7 +223,7 @@ def parse_combine_logs(client, start_time, params):
   combine_events = fetch_events(client, 1, name, start_time, "Combining")
 
   extra_args = {
-    logStreamNames: [combine_events[0]["logStreamName"]],
+    "logStreamNames": [combine_events[0]["logStreamName"]],
   }
   events = fetch_events(client, 1, name, combined_events[0]["timestamp"], "REPORT RequestId", extra_args)
 
