@@ -92,8 +92,8 @@ def upload_input():
   s3 = boto3.resource("s3")
   s3.Object(bucket_name, key).put(Body=open(key, 'rb'))
   obj = s3.Object(bucket_name, key)
-  print(key, "last modified", obj.last_modified)
-  timestamp = obj.last_modified.timestamp()
+  timestamp = obj.last_modified.timestamp() * 1000
+  print(key, "last modified", timestamp)
   return int(timestamp)
 
 def check_objects(client, bucket_name, prefix, count):
