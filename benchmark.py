@@ -13,8 +13,8 @@ import threading
 import time
 
 REPORT = re.compile(".*Duration:\s([0-9\.]+)\sms.*Billed Duration:\s([0-9\.]+)\sms.*Memory Size:\s([0-9]+)\sMB.*Max Memory Used:\s([0-9]+)\sMB.*")
-SPECTRA = re.compile("S\s\d+.*")
-INTENSITY = re.compile("I\s+MS1Intensity\s+([0-9\.]+)")
+SPECTRA = re.compile("S\s+([0-9\.]+)\s+([0-9\.]+)\s+([0-9\.]+)*")
+MASS = re.compile("Z\s+([0-9\.]+)\s+([0-9\.]+)")
 MEMORY_PARAMETERS = json.loads(open("json/memory.json").read())
 
 def upload_functions(client, params):
@@ -54,20 +54,20 @@ def sort_spectra(name):
   f.close()
 
   spectrum = []
-  intensity = None
+  mass = None
   spectra = []
 
   for line in lines:
-    if SPECTRA.match(line):
-      if intensity is not None:
-        spectrum.append((intensity, "".join(spectra)))
-        intensity = None
+    m = SPECTRA.match(line)
+    if m:
+      if mass is not None:
+        spectrum.append((mass, "".join(spectra)))
+        mass = None
         spectra = []
 
-    m = INTENSITY.match(line)
+    m = MASS.match(line)
     if m:
-      intensity = float(m.group(1))
-
+      mass = float(m.group(2))
     spectra.append(line)
 
   spectrum = sorted(spectrum, key=lambda spectra: -spectra[0])
@@ -79,12 +79,9 @@ def sort_spectra(name):
     for line in spectra[1]:
       f.write(line)
 
-  return sorted_name
-
 def upload_input(params):
-  input_name = params["input_name"]
-  key = sort_spectra(input_name)
-
+  bucket_name = "maccoss-human-input-spectra"
+  key = "sorted_{0:s}".format(params["input_name"])
   s3 = boto3.resource("s3")
   s3.Object(bucket_name, key).put(Body=open(key, 'rb'))
   obj = s3.Object(bucket_name, key)
@@ -335,6 +332,7 @@ def run(params):
   # boto3 by default retries even if max timeout is set. This is a workaround.
   client.meta.events._unique_id_handlers['retry-config-lambda']['handler']._checker.__dict__['_max_attempts'] = 0
 
+  sort_spectra(params["input_name"])
   upload_functions(client, params)
 
   stats = ([], [], [], [], [])
