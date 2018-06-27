@@ -48,11 +48,8 @@ def upload_functions(client, params):
 
   os.chdir("..")
 
-# TODO: Remove once we incorporate this into the split lambda function
-def process():
-  print("process")
-  subprocess.call("rm lambda/sorted-small-*", shell=True)
-  f = open("lambda/small.ms2")
+def sort_spectra(name)
+  f = open(name)
   lines = f.readlines()[1:]
   f.close()
 
@@ -75,22 +72,19 @@ def process():
 
   spectrum = sorted(spectrum, key=lambda spectra: -spectra[0])
 
-  offset = 260
-  i = 0
-  print("offset", offset)
-  while i * offset < min(len(spectrum), 1):
-    index = i * offset
-    f = open("lambda/sorted-small-{0:d}.ms2".format(i), "w+")
-    f.write("H Extractor MzXML2Search\n")
-    for spectra in spectrum[index:min(index+offset, len(spectrum))]:
-      for line in spectra[1]:
-        f.write(line)
-    i += 1
-  return i
+  sorted_name = "sorted_{0:s}".format(name)
+  f = open(sorted_name, "w+")
+  f.write("H Extractor MzXML2Search\n")
+  for spectra in spectrum:
+    for line in spectra[1]:
+      f.write(line)
 
-def upload_input():
-  bucket_name = "maccoss-human-input-spectra"
-  key = "20170403_HelaQC_01.ms2"
+  return sorted_name
+
+def upload_input(params):
+  input_name = params["input_name"]
+  key = sort_spectra(input_name)
+
   s3 = boto3.resource("s3")
   s3.Object(bucket_name, key).put(Body=open(key, 'rb'))
   obj = s3.Object(bucket_name, key)
@@ -179,7 +173,7 @@ def parse_split_logs(client, start_time, params):
   }
 
 def parse_analyze_logs(client, start_time, params):
-  num_spectra = int(subprocess.check_output("cat 20170403_HelaQC_01.ms2 | grep 'MS1Intensity' | wc -l", shell=True).decode("utf-8").strip())
+  num_spectra = int(subprocess.check_output("cat {0:s} | grep 'MS1Intensity' | wc -l".format(params["input_name"]), shell=True).decode("utf-8").strip())
   aparams = params["analyze_spectra"]
   batch_size = params["split_spectra"]["batch_size"]
   num_lambdas = int((num_spectra + batch_size - 1) / batch_size)
@@ -327,7 +321,7 @@ def clear_buckets():
 
 def benchmark(params):
   clear_buckets()
-  upload_timestamp = upload_input()
+  upload_timestamp = upload_input(params)
   wait_for_completion(params)
   return parse_logs(params, upload_timestamp)
 
