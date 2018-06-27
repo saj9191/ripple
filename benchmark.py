@@ -145,6 +145,8 @@ def fetch_events(client, num_events, log_name, start_time, filter_pattern):
     next_token = response["nextToken"]
     events += response["events"]
 
+  if len(events) != num_events:
+    print(response)
   assert(len(events) == num_events)
   return events
 
@@ -224,6 +226,8 @@ def parse_combine_logs(client, start_time, params):
     filterPattern="REPORT RequestId",
     limit = 1
   )
+  if len(response["events"]) != 1:
+    print(response)
   assert(len(response["events"]) == 1)
   m = REPORT.match(response["events"][0]["message"])
   duration = int(m.group(2))
