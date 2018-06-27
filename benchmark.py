@@ -48,7 +48,7 @@ def upload_functions(client, params):
 
   os.chdir("..")
 
-def sort_spectra(name)
+def sort_spectra(name):
   f = open(name)
   lines = f.readlines()[1:]
   f.close()
