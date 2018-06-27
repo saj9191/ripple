@@ -12,9 +12,6 @@ import sys
 import threading
 import time
 
-CWD = os.path.dirname(os.path.realpath(__file__))
-sys.path.insert(0, os.path.join(CWD, "lib"))
-
 REPORT = re.compile(".*Duration:\s([0-9\.]+)\sms.*Billed Duration:\s([0-9\.]+)\sms.*Memory Size:\s([0-9]+)\sMB.*Max Memory Used:\s([0-9]+)\sMB.*")
 SPECTRA = re.compile("S\s\d+.*")
 INTENSITY = re.compile("I\s+MS1Intensity\s+([0-9\.]+)")
@@ -25,8 +22,13 @@ def upload_functions(client, params):
 
   os.chdir("lambda")
   for function in functions:
-    fparams = json.loads(open("../json/{0:s}.json".format(function)).read())
-    subprocess.call("zip {0:s}.zip {0:s}.py util.py".format(function), shell=True)
+    fparams = params[function]
+
+    f = open("{0:s}.json".format(function), "w")
+    f.write(json.dumps(fparams))
+    f.close()
+
+    subprocess.call("zip {0:s}.zip {0:s}.py {0:s}.json util.py".format(function), shell=True)
 
     with open("{0:s}.zip".format(function), "rb") as f:
       zipped_code = f.read()

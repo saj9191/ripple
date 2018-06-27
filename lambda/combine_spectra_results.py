@@ -15,7 +15,6 @@ def combine_files(s3, bucket_name, keys, temp_file):
       f.write(spectra)
     else:
       results = spectra.split("\n")[1:]
-      print("num lines", len(results))
       f.write("\n".join(results))
 
 def combine(bucket_name, output_file):
@@ -35,15 +34,12 @@ def combine(bucket_name, output_file):
     if file_regex.match(key.key):
       matching_keys.append(key.key)
 
-  print("Number of matching files", len(matching_keys))
   if len(matching_keys) == num_files:
     print("Combining")
     temp_file = "/tmp/combine.txt"
 
     output = combine_files(s3, bucket_name, matching_keys, temp_file)
     s3.Object(bucket_name, "combined-spectra-{0:s}-{1:d}.txt".format(ts, num_files)).put(Body=open(temp_file, 'rb'))
-
-    print("DONE")
   else:
     print("Passing")
     pass

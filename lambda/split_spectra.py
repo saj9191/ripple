@@ -1,4 +1,5 @@
 import boto3
+import json
 import re
 import subprocess
 import time
@@ -10,14 +11,12 @@ def save_spectra(output_bucket, spectra, ts, num_files, i):
   key = "spectra-{0:f}-{1:d}-{2:d}.ms2".format(ts, num_files, i)
   output_bucket.put_object(Key=key, Body=str.encode("\n".join(spectra)))
 
-def split_spectra(bucket_name, key, spectra_per_file):
+def split_spectra(bucket_name, key, batch_size):
   util.clear_tmp()
   s3 = boto3.resource("s3")
   output_bucket = s3.Bucket("maccoss-human-split-spectra")
 
-  print("Reading")
   spectra = s3.Object(bucket_name, key).get()["Body"].read().decode("utf-8")
-  print("Read")
 
   spectrum = []
   spectra_subset = []
@@ -26,7 +25,7 @@ def split_spectra(bucket_name, key, spectra_per_file):
   i = 0
   lines = spectra.split("\n")
   num_spectra = list(filter(lambda line: "MS1Intensity" in line, lines))
-  num_files = int((len(num_spectra) + spectra_per_file - 1) / spectra_per_file)
+  num_files = int((len(num_spectra) + batch_size - 1) / batch_size)
 
   print("There are", len(lines), "of files spectra")
   for line in lines:
@@ -35,7 +34,7 @@ def split_spectra(bucket_name, key, spectra_per_file):
         spectra_subset.append("\n".join(spectrum))
 
       spectrum = []
-      if len(spectra_subset) > spectra_per_file:
+      if len(spectra_subset) > batch_size:
         save_spectra(output_bucket, spectra_subset, ts, num_files, i)
         spectra_subset = []
         i += 1
@@ -48,6 +47,6 @@ def split_spectra(bucket_name, key, spectra_per_file):
 def handler(event, context):
   bucket_name = event["Records"][0]["s3"]["bucket"]["name"]
   key = event["Records"][0]["s3"]["object"]["key"]
-  spectra_per_file = 1000
-  split_spectra(bucket_name, key, spectra_per_file)
+  params = json.loads(open("split_spectra.json").read())
+  split_spectra(bucket_name, key, params["batch_size"])
 

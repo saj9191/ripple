@@ -1,4 +1,5 @@
 import boto3
+import json
 import os
 import re
 import subprocess
@@ -8,7 +9,7 @@ import util
 # spectra-1529609786.228432-2-0.ms2
 INPUT_FILE = re.compile("spectra-([0-9\.]+)-([0-9]+)-([0-9]+).ms2")
 
-def analyze_spectra(bucket_name, spectra_file):
+def analyze_spectra(bucket_name, spectra_file, num_threads):
   util.clear_tmp()
   m = INPUT_FILE.match(spectra_file)
   s3 = boto3.resource('s3')
@@ -38,7 +39,7 @@ def analyze_spectra(bucket_name, spectra_file):
   print(spectra_file, subprocess.check_output("cat /tmp/{0:s} | grep MS1Intensity | wc -l".format(spectra_file), shell=True))
 
   arguments = [
-    "--num-threads", "2",
+    "--num-threads", str(num_threads),
     "--txt-output", "T",
     "--concat", "T",
     "--output-dir", output_dir,
@@ -65,5 +66,6 @@ def analyze_spectra(bucket_name, spectra_file):
 def handler(event, context):
   bucket_name = event["Records"][0]["s3"]["bucket"]["name"]
   spectra_file = event["Records"][0]["s3"]["object"]["key"]
-  analyze_spectra(bucket_name, spectra_file)
+  params = json.loads(open("analyze_spectra.json").read())
+  analyze_spectra(bucket_name, spectra_file, params["num_threads"])
 

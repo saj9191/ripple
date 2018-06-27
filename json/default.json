@@ -1,8 +1,27 @@
 {
-  "batch_size": 1,
-  "iterations": 10,
-  "memory_size": 512,
-  "num_threads": 1,
+  "iterations": 1,
   "region": "us-west-2",
-  "timeout": 300
+  "timeout": 300,
+  "split_spectra": {
+    "batch_size": 1000,
+    "memory_size": 1024,
+    "name": "SplitSpectra",
+    "timeout": 300
+  },
+  "analyze_spectra": {
+    "memory_size": 1024,
+    "name": "AnalyzeSpectra",
+    "num_threads": 1,
+    "timeout": 300
+  },
+  "combine_spectra_results": {
+    "memory_size": 256,
+    "name": "CombineSpectraResults",
+    "timeout": 300
+  },
+  "percolator": {
+    "memory_size": 1024,
+    "name": "Percolator",
+    "timeout": 300
+  }
 }
