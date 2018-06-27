@@ -151,9 +151,9 @@ def calculate_cost(duration, memory_size):
   millisecond_cost = MEMORY_PARAMETERS[str(memory_size)]
   return int(duration / 100) * millisecond_cost
 
-def parse_split_logs(client, start_time):
-  sparams = json.loads(open("json/split_spectra.json").read())
-  events = fetch_events(client, 1, "SplitSpectra", start_time, "REPORT RequestId")
+def parse_split_logs(client, start_time, params):
+  sparams = params["split_spectra"]
+  events = fetch_events(client, 1, sparams["name"], start_time, "REPORT RequestId")
   m = REPORT.match(events[0]["message"])
   duration = int(m.group(2))
   memory_used = int(m.group(4))
@@ -173,10 +173,10 @@ def parse_split_logs(client, start_time):
     "cost": cost
   }
 
-def parse_analyze_logs(client, start_time):
+def parse_analyze_logs(client, start_time, params):
   num_lambdas = 42 # TODO: Unhardcode
-  events = fetch_events(client, num_lambdas, "AnalyzeSpectra", start_time, "REPORT RequestId")
-  aparams = json.loads(open("json/analyze_spectra.json").read())
+  aparams = params["analyze_spectra"]
+  events = fetch_events(client, num_lambdas, aparams["name"], start_time, "REPORT RequestId")
   max_billed_duration = 0
   total_billed_duration = 0
   total_memory_used = 0 # TODO: Handle
@@ -210,11 +210,11 @@ def parse_analyze_logs(client, start_time):
     "cost": cost
   }
 
-def parse_combine_logs(client, start_time):
-  cparams = json.loads(open("json/combine_spectra_results.json").read())
-  events = fetch_events(client, 1, "CombineSpectraResults", start_time, "Combining")
+def parse_combine_logs(client, start_time, params):
+  cparams = params["combine_spectra_results"]
+  events = fetch_events(client, 1, cparams["name"], start_time, "Combining")
   response = client.filter_log_events(
-    logGroupName="/aws/lambda/CombineSpectraResults",
+    logGroupName="/aws/lambda/{0:s}".format(cparams["name"]),
     logStreamNames=[events[0]["logStreamName"]],
     startTime=events[0]["timestamp"],
     filterPattern="REPORT RequestId",
@@ -240,9 +240,9 @@ def parse_combine_logs(client, start_time):
     "cost": cost
   }
 
-def parse_percolator_logs(client, start_time):
-  pparams = json.loads(open("json/percolator.json").read())
-  events = fetch_events(client, 1, "Percolator", start_time, "REPORT RequestId")
+def parse_percolator_logs(client, start_time, params):
+  pparams = params["percolator"]
+  events = fetch_events(client, 1, pparams["percolator"], start_time, "REPORT RequestId")
   m = REPORT.match(events[0]["message"])
   duration = int(m.group(2))
   memory_used = int(m.group(4))
@@ -265,10 +265,10 @@ def parse_percolator_logs(client, start_time):
 def parse_logs(params, upload_timestamp):
   client = boto3.client("logs", region_name=params["region"])
   stats = []
-  stats.append(parse_split_logs(client, upload_timestamp))
-  stats.append(parse_analyze_logs(client, upload_timestamp))
-  stats.append(parse_combine_logs(client, upload_timestamp))
-  stats.append(parse_percolator_logs(client, upload_timestamp))
+  stats.append(parse_split_logs(client, upload_timestamp, params))
+  stats.append(parse_analyze_logs(client, upload_timestamp, params))
+  stats.append(parse_combine_logs(client, upload_timestamp, params))
+  stats.append(parse_percolator_logs(client, upload_timestamp, params))
 
   cost = 0
   max_duration = 0
