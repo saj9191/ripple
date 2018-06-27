@@ -242,7 +242,7 @@ def parse_combine_logs(client, start_time, params):
 
 def parse_percolator_logs(client, start_time, params):
   pparams = params["percolator"]
-  events = fetch_events(client, 1, pparams["percolator"], start_time, "REPORT RequestId")
+  events = fetch_events(client, 1, pparams["name"], start_time, "REPORT RequestId")
   m = REPORT.match(events[0]["message"])
   duration = int(m.group(2))
   memory_used = int(m.group(4))
