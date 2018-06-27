@@ -2,6 +2,7 @@ import boto3
 import re
 import subprocess
 import time
+import util
 
 SPECTRA = re.compile("S\s\d+.*")
 
@@ -10,6 +11,7 @@ def save_spectra(output_bucket, spectra, ts, num_files, i):
   output_bucket.put_object(Key=key, Body=str.encode("\n".join(spectra)))
 
 def split_spectra(bucket_name, key, spectra_per_file):
+  util.clear_tmp()
   s3 = boto3.resource("s3")
   output_bucket = s3.Bucket("maccoss-human-split-spectra")
 
@@ -25,13 +27,13 @@ def split_spectra(bucket_name, key, spectra_per_file):
   lines = spectra.split("\n")
   num_spectra = list(filter(lambda line: "MS1Intensity" in line, lines))
   num_files = int((len(num_spectra) + spectra_per_file - 1) / spectra_per_file)
-  
+
   print("There are", len(lines), "of files spectra")
   for line in lines:
     if SPECTRA.match(line):
       if len(spectrum) > 0:
         spectra_subset.append("\n".join(spectrum))
-        
+
       spectrum = []
       if len(spectra_subset) > spectra_per_file:
         save_spectra(output_bucket, spectra_subset, ts, num_files, i)
@@ -39,7 +41,7 @@ def split_spectra(bucket_name, key, spectra_per_file):
         i += 1
 
     spectrum.append(line)
-    
+
   spectra_subset.append("\n".join(spectrum))
   save_spectra(output_bucket, spectra_subset, ts, num_files, i)
 

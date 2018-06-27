@@ -26,7 +26,7 @@ def upload_functions(client, params):
   os.chdir("lambda")
   for function in functions:
     fparams = json.loads(open("../json/{0:s}.json".format(function)).read())
-    subprocess.call("zip {0:s}.zip {0:s}.py".format(function), shell=True)
+    subprocess.call("zip {0:s}.zip {0:s}.py util.py".format(function), shell=True)
 
     with open("{0:s}.zip".format(function), "rb") as f:
       zipped_code = f.read()
