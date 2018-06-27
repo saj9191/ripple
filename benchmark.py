@@ -225,7 +225,7 @@ def parse_combine_logs(client, start_time, params):
   extra_args = {
     "logStreamNames": [combine_events[0]["logStreamName"]],
   }
-  events = fetch_events(client, 1, name, combined_events[0]["timestamp"], "REPORT RequestId", extra_args)
+  events = fetch_events(client, 1, name, combine_events[0]["timestamp"], "REPORT RequestId", extra_args)
 
   m = REPORT.match(events[0]["message"])
   duration = int(m.group(2))
