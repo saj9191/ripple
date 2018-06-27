@@ -264,37 +264,56 @@ def parse_percolator_logs(client, start_time, params):
     "cost": cost
   }
 
+STAT_FIELDS = ["cost", "max_duration", "billed_duration", "memory_used"]
+
+def calculate_total_stats(stats):
+  total_stats = {}
+
+  for field in STAT_FIELDS:
+    total_stats[field] = 0
+
+  for stat in stats:
+    for field in STAT_FIELDS:
+      total_stats[field] += stat[field]
+
+  return total_stats
+
+def calculate_average_results(stats, iterations):
+  total_stats = calculate_total_stats(stats)
+  average_stats = {}
+
+  for field in STAT_FIELDS:
+    average_stats[field] = float(total_stats[field]) / iterations
+
+  return average_stats
+
+def print_stats(stats):
+  print("Total Cost", stats["cost"])
+  print("Total Runtime", stats["max_duration"], "milliseconds")
+  print("Total Billed Duration", stats["billed_duration"], "milliseconds")
+  print("Total Memory Used", stats["memory_used"], "MB")
+
 def parse_logs(params, upload_timestamp):
   client = boto3.client("logs", region_name=params["region"])
   stats = []
-  stats.append(parse_split_logs(client, upload_timestamp, params))
-  stats.append(parse_analyze_logs(client, upload_timestamp, params))
-  stats.append(parse_combine_logs(client, upload_timestamp, params))
-  stats.append(parse_percolator_logs(client, upload_timestamp, params))
 
-  cost = 0
-  max_duration = 0
-  billed_duration = 0
-  memory_used = 0
+  split_stats = parse_split_logs(client, upload_timestamp, params)
+  stats.append(split_stats)
 
-  for stat in stats:
-    cost += stat["cost"]
-    max_duration += stat["max_duration"]
-    billed_duration += stat["billed_duration"]
-    memory_used += stat["memory_used"]
+  analyze_stats = parse_analyze_logs(client, upload_timestamp, params)
+  stats.append(analyze_stats)
 
+  combine_stats = parse_combine_logs(client, upload_timestamp, params)
+  stats.append(combine_stats)
+
+  percolator_stats = parse_percolator_logs(client, upload_timestamp, params)
+  stats.append(percolator_stats)
+
+  total_stats = calculate_total_stats(stats)
   print("END RESULTS")
-  print("Total Cost", cost)
-  print("Total Runtime", max_duration, "milliseconds")
-  print("Total Billed Duration", billed_duration, "milliseconds")
-  print("Total Memory Used", memory_used, "MB")
+  print_stats(total_stats)
 
-  return {
-    "cost": cost,
-    "max_duration": max_duration,
-    "billed_duration": billed_duration,
-    "memory_used": memory_used
-  }
+  return (split_stats, analyze_stats, combine_stats, percolator_stats, total_stats)
 
 def clear_buckets():
   s3 = boto3.resource("s3")
@@ -320,31 +339,34 @@ def run(params):
 
   upload_functions(client, params)
 
-  cost = 0
-  max_duration = 0
-  billed_duration = 0
-  memory_used = 0
+  stats = ([], [], [], [], [])
+
   for i in range(iterations):
     print("Iteration {0:d}".format(i))
     results = benchmark(params)
-    cost += results["cost"]
-    max_duration += results["max_duration"]
-    billed_duration += results["billed_duration"]
-    memory_used += results["memory_used"]
+    for i in range(len(results)):
+      stats[i].append(results[i])
+
     print("--------------------------")
     print("")
 
-  cost = float(cost) / iterations
-  max_duration = float(max_duration) / iterations
-  billed_duration = float(billed_duration) / iterations
-  memory_used = float(memory_used) / iterations
+  split_stats = calculate_average_results(stats[0], iterations)
+  analyze_stats = calculate_average_results(stats[1], iterations)
+  combine_stats = calculate_average_results(stats[2], iterations)
+  percolator_stats = calculate_average_results(stats[3], iterations)
+  total_stats = calculate_average_results(stats[4], iterations)
 
-  print("AVERAGE RESULTS ({0:d} ITERATIONS)".format(iterations))
-  print("Average Cost", cost)
-  print("Average Runtime", max_duration, "milliseconds")
-  print("Average Billed Duration", billed_duration, "milliseconds")
-  print("Average Memory Used", memory_used, "MB")
-
+  print("END RESULTS ({0:d} ITERATIONS)".format(iterations))
+  print("AVERAGE SPLIT RESULTS")
+  print_stats(split_stats)
+  print("AVERAGE ANALYZE RESULTS")
+  print_stats(analyze_stats)
+  print("AVERAGE COMBINE RESULTS")
+  print_stats(combine_stats)
+  print("AVERAGE PERCOLATOR RESULTS")
+  print_stats(percolator_stats)
+  print("AVERAGE TOTAL RESULTS")
+  print_stats(total_stats)
 
 def main():
   parser = argparse.ArgumentParser()
