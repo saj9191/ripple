@@ -225,7 +225,7 @@ def parse_combine_logs(client, start_time):
   cost = calculate_cost(duration, cparams["memory_size"])
 
   print("Combine Spectra")
-  print("Timestamp", events[0][timestamp])
+  print("Timestamp", events[0]["timestamp"])
   print("Billed Duration", duration, "milliseconds")
   print("Max Memory Used", m.group(4))
   print("Cost", cost)
@@ -247,7 +247,7 @@ def parse_percolator_logs(client, start_time):
   cost = calculate_cost(duration, pparams["memory_size"])
 
   print("Percolator Spectra")
-  print("Timestamp", events[0][timestamp])
+  print("Timestamp", events[0]["timestamp"])
   print("Billed Duration", duration, "milliseconds")
   print("Max Memory Used", m.group(4))
   print("Cost", cost)
