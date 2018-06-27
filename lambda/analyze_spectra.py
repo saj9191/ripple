@@ -38,7 +38,7 @@ def analyze_spectra(bucket_name, spectra_file):
   print(spectra_file, subprocess.check_output("cat /tmp/{0:s} | grep MS1Intensity | wc -l".format(spectra_file), shell=True))
 
   arguments = [
-    "--num-threads", "1",
+    "--num-threads", "2",
     "--txt-output", "T",
     "--concat", "T",
     "--output-dir", output_dir,
