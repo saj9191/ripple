@@ -1,0 +1,146 @@
+\def\whatisit{paper}
+
+\def\ala{{\`{a} la}~}
+\def\ie{{i.e.}}
+\def\eg{{\em e.g.}\xspace}
+\def\etal{{et al.}~}
+\def\wrt{{w.r.t.}~}
+\def\viz{viz.~}
+\def\vs{vs.~}
+\def\etc{etc.}
+\def\ith{${\textrm{i}}^{{\textrm{th}}}$\xspace}
+\def\jth{${\textrm{j}}^{{\textrm{th}}}$\xspace}
+\def\sa{${\textrm{SA}}$\xspace}
+\def\sai{${\textrm{SA}}[i]$\xspace}
+\def\saj{${\textrm{SA}}[j]$\xspace}
+\def\isa{${\textrm{ISA}}$\xspace}
+\def\isai{${\textrm{ISA}}[i]$\xspace}
+\def\aos{${\textrm{AoS}}$\xspace}
+\def\aosi{${\textrm{AoS}}[i]$\xspace}
+\def\npa{${\textrm{NPA}}$\xspace}
+\def\npai{${\textrm{NPA}}[i]$\xspace}
+\def\name{Ripple\xspace}
+\def\lcsa{$\ell$-CSA\xspace}
+\def\lsa{$\ell$-SA\xspace}
+\def\LSA{Layered Sampled Array\xspace}
+\def\sa{{\tt AoS2Input}\xspace}
+\def\isa{{\tt Input2AoS}\xspace}
+\def\npa{{\tt NextCharIdx}\xspace}
+
+\def\authnotes{1}
+
+\newcounter{mynote}[section]
+\newcommand{\notecolor}{blue}
+\newcommand{\thenote}{\thesection.\arabic{mynote}}
+\newcommand{\justinnote}[1]{\refstepcounter{mynote}{\bfseries \textcolor{\notecolor}{$\lbrack$ JustinM~\thenote: {\sf #1} $\rbrack$}}}
+\newcommand{\tnote}[1]{\ifnum\authnotes=1\refstepcounter{mynote}{\bf \textcolor{\notecolor}{$\ll$TCR~\thenote: {\sf #1}$\gg$}}\fi}
+
+\newcommand{\stretchval}{1.2}
+\newcommand{\gamesfontsize}{\scriptsize}
+
+
+
+\newcommand{\mpage}[2]{\begin{minipage}{#1\textwidth} #2 \end{minipage}}
+\newcommand{\fpage}[2]{\framebox{\begin{minipage}{#1\textwidth}\setstretch{\stretchval}\gamesfontsize #2 \end{minipage}}}
+
+\newcommand{\hfpages}[3]{\hfpagess{#1}{#1}{#2}{#3}}
+\newcommand{\hfpagess}[4]{
+		\begin{tabular}{c@{\hspace*{.5em}}c}
+		\framebox{\begin{minipage}[t]{#1\textwidth}\setstretch{\stretchval}\gamesfontsize #3 \end{minipage}}
+		&
+		\framebox{\begin{minipage}[t]{#2\textwidth}\setstretch{\stretchval}\gamesfontsize #4 \end{minipage}}
+		\end{tabular}
+	}
+\newcommand{\hfpagesss}[6]{
+		\begin{tabular}{c@{\hspace*{.5em}}c@{\hspace*{.5em}}c}
+		\framebox{\begin{minipage}[t]{#1\textwidth}\setstretch{\stretchval}\gamesfontsize #4 \end{minipage}}
+		&
+		\framebox{\begin{minipage}[t]{#2\textwidth}\setstretch{\stretchval}\gamesfontsize #5 \end{minipage}}
+		&
+		\framebox{\begin{minipage}[t]{#3\textwidth}\setstretch{\stretchval}\gamesfontsize #6 \end{minipage}}
+		\end{tabular}
+	}
+\newcommand{\hfpagessss}[8]{
+		\begin{tabular}{c@{\hspace*{.5em}}c@{\hspace*{.5em}}c@{\hspace*{.5em}}c}
+		\framebox{\begin{minipage}[t]{#1\textwidth}\setstretch{\stretchval}\gamesfontsize #5 \end{minipage}}
+		&
+		\framebox{\begin{minipage}[t]{#2\textwidth}\setstretch{\stretchval}\gamesfontsize #6 \end{minipage}}
+		&
+		\framebox{\begin{minipage}[t]{#3\textwidth}\setstretch{\stretchval}\gamesfontsize #7 \end{minipage}}
+		&
+		\framebox{\begin{minipage}[t]{#4\textwidth}\setstretch{\stretchval}\gamesfontsize #8 \end{minipage}}
+		\end{tabular}
+	}
+
+
+\def\codestretch{\stretchval}
+
+\newcommand{\hpagesl}[3]{
+	\begin{tabular}{c|c}
+	  \begin{minipage}{#1\textwidth}\setstretch{\codestretch} #2 \end{minipage}
+	  &
+	  \begin{minipage}{#1\textwidth} #3 \end{minipage}
+	\end{tabular}
+	}
+
+\newcommand{\hpagessl}[4]{
+	\begin{tabular}{c|@{\hspace*{.5em}}c}
+	   \begin{minipage}[t]{#1\textwidth}\setstretch{\codestretch} #3 \end{minipage}
+	   &
+	   \begin{minipage}[t]{#2\textwidth}\setstretch{\codestretch} #4 \end{minipage}
+	\end{tabular}
+	}
+
+\newcommand{\hpages}[3]{
+	\begin{tabular}{cc}
+	   \begin{minipage}[t]{#1\textwidth}\setstretch{\codestretch} #2 \end{minipage}
+	   &
+	   \begin{minipage}[t]{#1\textwidth}\setstretch{\codestretch} #3 \end{minipage}
+	\end{tabular}
+	}
+
+\newcommand{\hpagess}[4]{
+    \begin{tabular}{c@{\hspace*{1.5em}}c}
+	   \begin{minipage}[t]{#1\textwidth}\setstretch{\codestretch} #3 \end{minipage}
+	   &
+	   \begin{minipage}[t]{#2\textwidth}\setstretch{\codestretch} #4 \end{minipage}
+    \end{tabular}
+	}
+
+\newcommand{\hpagesss}[6]{
+	\begin{tabular}{ccc}
+	\begin{minipage}[t]{#1\textwidth}\setstretch{\codestretch} #4 \end{minipage} &
+	\begin{minipage}[t]{#2\textwidth}\setstretch{\codestretch} #5 \end{minipage} &
+	\begin{minipage}[t]{#3\textwidth}\setstretch{\codestretch} #6 \end{minipage}
+	\end{tabular}}
+\newcommand{\hpagesssl}[6]{
+	\begin{tabular}{c|c|c}
+	\begin{minipage}[t]{#1\textwidth}\setstretch{\codestretch} #4 \end{minipage} &
+	\begin{minipage}[t]{#2\textwidth}\setstretch{\codestretch} #5 \end{minipage} &
+	\begin{minipage}[t]{#3\textwidth}\setstretch{\codestretch} #6 \end{minipage}
+	\end{tabular}}
+\newcommand{\hpagessss}[8]{
+	\begin{tabular}{cccc}
+	\begin{minipage}[t]{#1\textwidth}\setstretch{\codestretch} #5 \end{minipage} &
+	\begin{minipage}[t]{#2\textwidth}\setstretch{\codestretch} #6 \end{minipage} &
+	\begin{minipage}[t]{#3\textwidth}\setstretch{\codestretch} #7 \end{minipage}
+	\begin{minipage}[t]{#4\textwidth}\setstretch{\codestretch} #8 \end{minipage}
+	\end{tabular}}
+
+\newcommand{\getsr}{{\:{\leftarrow{\hspace*{-3pt}\raisebox{.75pt}{$\scriptscriptstyle\$$}}}\:}}
+\newcommand{\bits}{\{0,1\}}
+
+
+\newcommand{\secref}[1]{\mbox{Section~\ref{#1}}}
+\newcommand{\subsecref}[1]{\mbox{Subsection~\ref{#1}}}
+\newcommand{\apref}[1]{\mbox{Appendix~\ref{#1}}}
+\newcommand{\thref}[1]{\mbox{Theorem~\ref{#1}}}
+\newcommand{\thmrefshort}[1]{\mbox{\textbf{Th~\ref{#1}}}}
+\newcommand{\exref}[1]{\mbox{Example~\ref{#1}}}
+\newcommand{\defref}[1]{\mbox{Definition~\ref{#1}}}
+\newcommand{\corref}[1]{\mbox{Corollary~\ref{#1}}}
+\newcommand{\lemref}[1]{\mbox{Lemma~\ref{#1}}}
+\newcommand{\clref}[1]{\mbox{Claim~\ref{#1}}}
+\newcommand{\propref}[1]{\mbox{Proposition~\ref{#1}}}
+\newcommand{\consref}[1]{\mbox{Construction~\ref{#1}}}
+\newcommand{\figref}[1]{\mbox{Figure~\ref{#1}}}

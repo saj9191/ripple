@@ -1,0 +1,94 @@
+% BEGIN Theorem environment settings
+\theoremstyle{plain}
+\theorempreskipamount2pt
+\theorempostskipamount2pt
+\newtheorem{myTheorem}{Theorem}[section]
+\newtheorem{myLemma}[myTheorem]{Lemma}
+\newtheorem{myCorollary}[myTheorem]{Corollary}
+\newtheorem{myClaim}{Claim}[section]
+\newtheorem{myRemark}{Remark}
+\newtheorem{myExample}{Example}[section]
+\newtheorem{myConjecture}{Conjecture}[section]
+\newtheorem{myDef}{Definition}[section]
+
+\theorembodyfont{}
+\newtheorem*{myNote}{Note}
+
+\definecolor{boxcolor}{gray}{0.9}
+\newenvironment{colframe}{%
+  \begin{Sbox}
+    \begin{minipage}
+      {0.96\columnwidth}
+    }{%
+    \end{minipage}
+  \end{Sbox}
+  \begin{center}
+    \colorbox{boxcolor}{\TheSbox}
+  \end{center}
+}
+
+
+% Proofs get merged into text, with a "Proof" flag and box at the end
+\theoremstyle{nonumberplain}
+\theoremheaderfont{\normalfont\bfseries}
+\newcommand{\proofsubhead}[1]{\noindent{\normalfont\bfseries\boldmath#1}}
+\theoremsymbol{$\blacksquare$} % {~{\rule[0.2ex]{1.17ex}{1.2ex}}}
+\theorembodyfont{}
+\theorempreskipamount0pt
+\theorempostskipamount0pt
+\theoremindent0pt\relax
+
+\newtheorem{myProof}{Proof}
+\newtheorem{myProofSketch}{Proof Sketch}
+
+\theoremstyle{break}
+\theoremheaderfont{\bfseries}
+\theorembodyfont{}
+\theoremsymbol{}
+% END Theorem environment settings
+
+\newenvironment{denseitemize}{
+\begin{itemize}[topsep=2pt, partopsep=0pt, leftmargin=1.5em]
+  \setlength{\itemsep}{4pt}
+  \setlength{\parskip}{0pt}
+  \setlength{\parsep}{0pt}
+}{\end{itemize}}
+
+\newenvironment{denseenum}{
+\begin{enumerate}[topsep=2pt, partopsep=0pt, leftmargin=1.5em]
+  \setlength{\itemsep}{4pt}
+  \setlength{\parskip}{0pt}
+  \setlength{\parsep}{0pt}
+}{\end{enumerate}}
+
+\newcommand{\rc}[1]{{\color{red}{#1}}}
+\newcommand{\rqc}[1]{{\color{blue}{#1}}}
+\newcommand{\cut}[1]{}
+\renewcommand{\ttdefault}{txtt}
+\newcommand{\paragraphb}[1]{\vspace{0.075in}\noindent{\bf #1.}}
+\newcommand{\paragrapha}[1]{\vspace{0.075in}\noindent{\bf #1}}
+\newcommand{\paragraphc}[1]{\vspace{0.075in}\noindent{#1}}
+\newcommand{\todo}[1]{\textcolor{Red}{\{#1\}}}
+
+\cut{
+\usepackage{draftwatermark}
+\SetWatermarkText{DRAFT -- DO NOT REDISTRIBUTE \ \ \ \ \ \ \ DRAFT -- DO NOT REDISTRIBUTE}
+\SetWatermarkFontSize{1.5cm}
+\SetWatermarkAngle{307}
+\SetWatermarkLightness{0.85}
+}
+
+%\renewcommand{\ttdefault}{lmtt} %Latin Modern for tt font
+%\renewcommand{\ttdefault}{cmtt} %Computer Modern for tt font
+% \renewcommand*{\backref}[1]{[#1]}
+%\pagestyle{fancy}
+%\lhead{}
+%\chead{--- DRAFT -- Please do not distribute. ---}
+%\rhead{}
+%\lfoot{}
+%\cfoot{\thepage}
+%\rfoot{}
+% \widowpenalty10000
+% \clubpenalty10000
+%\definecolor{boxcolor}{gray}{0.9}
+%\newmdenv[linecolor=boxcolor, backgroundcolor=boxcolor, skipabove=\parsep, skipbelow=\parsep, innerleftmargin=2pt, innerrightmargin=2pt]{codeblock}
