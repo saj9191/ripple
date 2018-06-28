@@ -1,0 +1,30 @@
+\newcommand{\LineComment}[1]{\Statex \hfill\textit{#1}}
+\vspace{-0.15in}
+\section{Overview}
+In proteomics, the composition of proteins is analyzed using mass spectrometry and the results are stored in plots called spectra.
+Experimental spectra results are identified by identifying the theoretical spectra in FASTA databases that best matches the experimental composition.
+A FASTA database can be up to (find the size).
+When a protein sample is analyzed, a mass spectrometer can create up to 70 spectra per second (source?).
+Tools such as Crux attempt to use database indices and multi-threading to speed up the analysis, however analyzing data is still slow (need numbers)\cite{crux}.\\
+\newline
+The proteomic community wants to share as many of these database and spectra as possible to increase changes of finding important results.
+Ideally, the community should not have to worry about scaling machine to meet their storage and computation needs. Serverless computing offers a potential solution.
+In serverless computing, a cloud provider provides the necessary resources for a task and the user specifies the code to execute the task.
+Serverless computing tasks tend to be event driven and stateless.
+This model benefits the user as users only need to pay for the resources used.
+The model also benefits the cloud provider as they only need to provide the resources needed by the user, thus allowing them to save resouces.\\
+%Proteins consists of chains of amino acids.
+%A segment of the chain is called a peptide.
+%The composition of peptides are analyzed using mass spectrometry and stored in plots call spectra.
+%Each spectrum contains the m/z (charged mass) of pieces of the peptide correlating to the amino acid composition of the peptide.
+%Comet is a piece of software that correlates these experimental spectra datasets with theoretical datasets generated using FASTA databases.
+%The largest FASTA database is the database containing human proteins.
+%This database contains 750 thousand entries.
+%An entry in the database is a match if the protein contains the peptide.
+%However proteins can have modifications.
+%An n-modification means n of the amino acids in a protein differ from the base protein.\\
+%\newline
+%Manually scaling servers to handle all modifications is a challenge and usually researchers resort to only searching a subset of the database.
+%This means the database may not contain the best match.
+%Another problem in the proteomics community is researchers want an easy way for people to add new entries to a shared database.
+%Serverless coputing offers a way for the proteomics community to cheaply and automatically scale these database and a potential way to share data in the community.
