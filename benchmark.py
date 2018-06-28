@@ -132,6 +132,10 @@ def fetch_events(client, num_events, log_name, start_time, filter_pattern, extra
       args["nextToken"] = next_token
 
     response = client.filter_log_events(**args)
+    if response["ResponseMetadata"]["HTTPStatusCode"] != 200
+      print(response)
+    assert(response["ResponseMetadata"]["HTTPStatusCode"] == 200)
+
     if "nextToken" not in response:
       print(response)
     next_token = response["nextToken"]
