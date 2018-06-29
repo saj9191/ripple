@@ -1,6 +1,8 @@
 lambda/*.zip
 lambda/*.json
 paper/*.aux
+paper/*.bbl
+paper/*.blg
 paper/*.out
 paper/*.pdf
 paper/*.log
