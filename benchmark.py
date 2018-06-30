@@ -2,20 +2,19 @@ import argparse
 import boto3
 from botocore.client import Config
 import datetime
+from enum import Enum
 import json
-import numpy
 import os
-import queue
 import re
 import subprocess
-import sys
-import threading
 import time
+
 
 REPORT = re.compile(".*Duration:\s([0-9\.]+)\sms.*Billed Duration:\s([0-9\.]+)\sms.*Memory Size:\s([0-9]+)\sMB.*Max Memory Used:\s([0-9]+)\sMB.*")
 SPECTRA = re.compile("S\s+([0-9\.]+)\s+([0-9\.]+)\s+([0-9\.]+)*")
 MASS = re.compile("Z\s+([0-9\.]+)\s+([0-9\.]+)")
 MEMORY_PARAMETERS = json.loads(open("json/memory.json").read())
+
 
 def upload_functions(client, params):
   functions = ["split_spectra", "analyze_spectra", "combine_spectra_results", "percolator"]
@@ -83,11 +82,13 @@ def upload_input(params):
   bucket_name = "maccoss-human-input-spectra"
   key = "sorted_{0:s}".format(params["input_name"])
   s3 = boto3.resource("s3")
+  start = time.time()
   s3.Object(bucket_name, key).put(Body=open(key, 'rb'))
+  end = time.time()
   obj = s3.Object(bucket_name, key)
   timestamp = obj.last_modified.timestamp() * 1000
   print(key, "last modified", timestamp)
-  return int(timestamp)
+  return int(timestamp), end - start
 
 def check_objects(client, bucket_name, prefix, count):
   done = False
@@ -292,9 +293,17 @@ def print_stats(stats):
   print("Total Billed Duration", stats["billed_duration"], "milliseconds")
   print("Total Memory Used", stats["memory_used"], "MB")
 
-def parse_logs(params, upload_timestamp):
+def parse_logs(params, upload_timestamp, upload_duration):
   client = boto3.client("logs", region_name=params["region"])
   stats = []
+
+  load_stats = {
+    "billed_duration": 0,
+    "max_duration": upload_duration,
+    "memory_used": 0,
+    "cost": 0
+  }
+  stats.append(load_stats)
 
   split_stats = parse_split_logs(client, upload_timestamp, params)
   stats.append(split_stats)
@@ -312,7 +321,7 @@ def parse_logs(params, upload_timestamp):
   print("END RESULTS")
   print_stats(total_stats)
 
-  return (split_stats, analyze_stats, combine_stats, percolator_stats, total_stats)
+  return (load_stats, split_stats, analyze_stats, combine_stats, percolator_stats, total_stats)
 
 def clear_buckets():
   s3 = boto3.resource("s3")
@@ -322,9 +331,18 @@ def clear_buckets():
 
 def benchmark(params):
   clear_buckets()
-  upload_timestamp = upload_input(params)
+  [upload_timestamp, upload_duration] = upload_input(params)
   wait_for_completion(params)
-  return parse_logs(params, upload_timestamp)
+  return parse_logs(params, upload_timestamp, upload_duration)
+
+
+class Stage(Enum):
+  LOAD = 0
+  SPLIT = 1
+  ANALYZE = 2
+  COMBINE = 3
+  PERCOLATOR = 4
+  TOTAL = 5
 
 def run(params):
   print("Current Git commit", subprocess.check_output("git rev-parse HEAD", shell=True).decode("utf-8").strip())
@@ -339,7 +357,9 @@ def run(params):
   sort_spectra(params["input_name"])
   upload_functions(client, params)
 
-  stats = ([], [], [], [], [])
+  stats = []
+  for stage in Stage:
+    stats.append([])
 
   for i in range(iterations):
     print("Iteration {0:d}".format(i))
@@ -350,23 +370,10 @@ def run(params):
     print("--------------------------")
     print("")
 
-  split_stats = calculate_average_results(stats[0], iterations)
-  analyze_stats = calculate_average_results(stats[1], iterations)
-  combine_stats = calculate_average_results(stats[2], iterations)
-  percolator_stats = calculate_average_results(stats[3], iterations)
-  total_stats = calculate_average_results(stats[4], iterations)
-
   print("END RESULTS ({0:d} ITERATIONS)".format(iterations))
-  print("AVERAGE SPLIT RESULTS")
-  print_stats(split_stats)
-  print("AVERAGE ANALYZE RESULTS")
-  print_stats(analyze_stats)
-  print("AVERAGE COMBINE RESULTS")
-  print_stats(combine_stats)
-  print("AVERAGE PERCOLATOR RESULTS")
-  print_stats(percolator_stats)
-  print("AVERAGE TOTAL RESULTS")
-  print_stats(total_stats)
+  for stage in Stage:
+    print("AVERAGE {0:s} RESULTS".format(stage.name))
+    print_stats(calculate_average_results(stats[stage.value], iterations))
 
 def main():
   parser = argparse.ArgumentParser()
