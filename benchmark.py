@@ -49,33 +49,38 @@ def upload_functions(client, params):
 
 def sort_spectra(name):
   f = open(name)
-  lines = f.readlines()[1:]
-  f.close()
 
   spectrum = []
   mass = None
   spectra = []
 
-  for line in lines:
+  line = f.readline()
+  while line:
     m = SPECTRA.match(line)
     if m:
       if mass is not None:
-        spectrum.append((mass, "".join(spectra)))
+        spectra.append((mass, "".join(spectrum)))
         mass = None
-        spectra = []
+        spectrum = []
 
     m = MASS.match(line)
     if m:
       mass = float(m.group(2))
-    spectra.append(line)
+    spectrum.append(line)
+    line = f.readline()
 
-  spectrum = sorted(spectrum, key=lambda spectra: -spectra[0])
+  f.close()
+
+  def getMass(spectrum):
+    return spectrum[0]
+
+  spectra.sort(key=getMass)
 
   sorted_name = "sorted_{0:s}".format(name)
   f = open(sorted_name, "w+")
   f.write("H Extractor MzXML2Search\n")
-  for spectra in spectrum:
-    for line in spectra[1]:
+  for spectrum in spectra:
+    for line in spectrum[1]:
       f.write(line)
 
 def upload_input(params):
