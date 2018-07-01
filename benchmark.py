@@ -373,7 +373,9 @@ def run(params):
   # boto3 by default retries even if max timeout is set. This is a workaround.
   client.meta.events._unique_id_handlers['retry-config-lambda']['handler']._checker.__dict__['_max_attempts'] = 0
 
-  sort_spectra(params["input_name"])
+  if params["sort"]:
+    sort_spectra(params["input_name"])
+
   upload_functions(client, params)
 
   stats = []

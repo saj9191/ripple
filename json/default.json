@@ -2,6 +2,7 @@
   "input_name": "20170403_HelaQC_01.ms2",
   "iterations": 1,
   "region": "us-west-2",
+	"sort": false,
   "timeout": 300,
   "split_spectra": {
     "batch_size": 1000,
