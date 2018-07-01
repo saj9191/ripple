@@ -113,7 +113,7 @@ def sort_spectra(name):
 def upload_input(params):
   bucket_name = "maccoss-human-input-spectra"
   key = "sorted_{0:s}".format(params["input_name"])
-  s3 = boto3.resource("s3")
+  s3 = setup_connection("s3", params)
   start = time.time()
   s3.Object(bucket_name, key).put(Body=open(key, 'rb'))
   end = time.time()
