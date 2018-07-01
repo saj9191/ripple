@@ -16,6 +16,8 @@ def run_percolator(bucket_name, spectra_file):
   s3 = boto3.resource('s3')
   database_bucket = s3.Bucket("maccoss-human-fasta")
   spectra_bucket = s3.Bucket(bucket_name)
+  print("bn", bucket_name)
+  print("sf", spectra_file)
 
   with open("/tmp/{0:s}".format(spectra_file), "wb") as f:
     spectra_bucket.download_fileobj(spectra_file, f)
