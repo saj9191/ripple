@@ -47,6 +47,22 @@ def upload_functions(client, params):
 
   os.chdir("..")
 
+def setup_client(service, params):
+  extra_time = 20
+  f = open("/home/shannon/.aws/credentials")
+  lines = f.readlines()
+  access_key = lines[1].split("=")[1].strip()
+  secret_key = lines[2].split("=")[1].strip()
+
+  config = Config(read_timeout=params["timeout"] + extra_time)
+  client = boto3.client(service,
+                        aws_access_key_id=access_key,
+                        aws_secret_access_key=secret_key,
+                        region_name=params["region"],
+                        config=config
+                        )
+  return client
+
 def sort_spectra(name):
   f = open(name)
 
@@ -114,7 +130,7 @@ def check_objects(client, bucket_name, prefix, count):
       print("{0:s}: Found {1:s} function{2:s}".format(now, prefix, suffix))
 
 def wait_for_completion(params):
-  client = boto3.client("s3", region_name=params["region"])
+  client = setup_client("s3", params)
   bucket_name = "maccoss-human-output-spectra"
 
   check_objects(client, bucket_name, "combined", 1)
@@ -299,7 +315,7 @@ def print_stats(stats):
   print("Total Memory Used", stats["memory_used"], "MB")
 
 def parse_logs(params, upload_timestamp, upload_duration):
-  client = boto3.client("logs", region_name=params["region"])
+  client = setup_client("logs", params)
   stats = []
 
   load_stats = {
@@ -352,9 +368,7 @@ class Stage(Enum):
 def run(params):
   print("Current Git commit", subprocess.check_output("git rev-parse HEAD", shell=True).decode("utf-8").strip())
   iterations = params["iterations"]
-  extra_time = 20
-  config = Config(read_timeout=params["timeout"] + extra_time)
-  client = boto3.client("lambda", region_name=params["region"], config=config)
+  client = setup_client("lambda", params)
   # https://github.com/boto/boto3/issues/1104#issuecomment-305136266
   # boto3 by default retries even if max timeout is set. This is a workaround.
   client.meta.events._unique_id_handlers['retry-config-lambda']['handler']._checker.__dict__['_max_attempts'] = 0
