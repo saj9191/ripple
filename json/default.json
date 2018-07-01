@@ -23,6 +23,7 @@
     "timeout": 300
   },
   "percolator": {
+    "max_train": 100000,
     "memory_size": 1024,
     "name": "Percolator",
     "timeout": 300
