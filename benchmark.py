@@ -47,13 +47,24 @@ def upload_functions(client, params):
 
   os.chdir("..")
 
-def setup_client(service, params):
-  extra_time = 20
+def get_credentials():
   f = open("/home/shannon/.aws/credentials")
   lines = f.readlines()
   access_key = lines[1].split("=")[1].strip()
   secret_key = lines[2].split("=")[1].strip()
+  return access_key, secret_key
 
+def setup_connection(service, params):
+  [access_key, secret_key] = get_credentials()
+  session = boto3.Session(
+      aws_access_key_id=access_key,
+      aws_secret_access_key=secret_key
+  )
+  return session.resource(service)
+
+def setup_client(service, params):
+  extra_time = 20
+  [access_key, secret_key] = get_credentials()
   config = Config(read_timeout=params["timeout"] + extra_time)
   client = boto3.client(service,
                         aws_access_key_id=access_key,
@@ -344,14 +355,14 @@ def parse_logs(params, upload_timestamp, upload_duration):
 
   return (load_stats, split_stats, analyze_stats, combine_stats, percolator_stats, total_stats)
 
-def clear_buckets():
-  s3 = boto3.resource("s3")
+def clear_buckets(params):
+  s3 = setup_connection("s3", params)
   for bucket_name in ["maccoss-human-input-spectra", "maccoss-human-split-spectra", "maccoss-human-output-spectra"]:
     bucket = s3.Bucket(bucket_name)
     bucket.objects.all().delete()
 
 def benchmark(params):
-  clear_buckets()
+  clear_buckets(params)
   [upload_timestamp, upload_duration] = upload_input(params)
   wait_for_completion(params)
   return parse_logs(params, upload_timestamp, upload_duration)
