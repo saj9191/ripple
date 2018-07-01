@@ -2,7 +2,7 @@ import boto3
 import re
 import util
 
-RESULT_FILE = re.compile("spectra-([0-9\.]+)-([0-9]+)-([0-9]+).txt")
+RESULT_FILE = util.spectra_regex("txt")
 
 def combine_files(s3, bucket_name, keys, temp_file):
   f = open(temp_file, "w")
@@ -21,24 +21,27 @@ def combine(bucket_name, output_file):
   util.clear_tmp()
   m = RESULT_FILE.match(output_file)
   ts = m.group(1)
-  num_files = int(m.group(2))
+  num_bytes = int(m.group(4))
 
   s3 = boto3.resource("s3")
   bucket = s3.Bucket(bucket_name)
 
-  file_format = "spectra-{0:s}-{1:d}-([0-9]+).txt".format(ts, num_files)
+  file_format = "spectra-{0:s}-([0-9]+)-([0-9]+)-{1:d}.txt".format(ts, num_bytes)
   file_regex = re.compile(file_format)
 
   matching_keys = []
+  num_files = None
   for key in bucket.objects.all():
-    if file_regex.match(key.key):
+    m = file_regex.match(key.key)
+    if m:
       matching_keys.append(key.key)
+      if int(m.group(2)) == num_bytes:
+        num_files = int(m.group(1))
 
   if len(matching_keys) == num_files:
     print("Combining")
     temp_file = "/tmp/combine.txt"
-
-    output = combine_files(s3, bucket_name, matching_keys, temp_file)
+    combine_files(s3, bucket_name, matching_keys, temp_file)
     s3.Object(bucket_name, "combined-spectra-{0:s}-{1:d}.txt".format(ts, num_files)).put(Body=open(temp_file, 'rb'))
   else:
     print("Passing")

@@ -6,6 +6,7 @@
   "timeout": 300,
   "split_spectra": {
     "batch_size": 1000,
+    "chunk_size": 100000000,
     "memory_size": 1024,
     "name": "SplitSpectra",
     "timeout": 300

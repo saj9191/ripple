@@ -1,13 +1,11 @@
 import boto3
 import json
 import os
-import re
 import subprocess
 import time
 import util
 
-# spectra-1529609786.228432-2-0.ms2
-INPUT_FILE = re.compile("spectra-([0-9\.]+)-([0-9]+)-([0-9]+).ms2")
+INPUT_FILE = util.spectra_regex("ms2")
 
 def analyze_spectra(bucket_name, spectra_file, num_threads):
   util.clear_tmp()
