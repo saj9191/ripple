@@ -1,5 +1,5 @@
 import boto3
-import os
+import json
 import re
 import subprocess
 import time
@@ -8,7 +8,7 @@ import util
 # combined-spectra-1529609786.228432-2-0.txt
 INPUT_FILE = re.compile("combined-spectra-([0-9\.]+)-([0-9]+).txt")
 
-def run_percolator(bucket_name, spectra_file):
+def run_percolator(bucket_name, spectra_file, max_train):
   util.clear_tmp()
   m = INPUT_FILE.match(spectra_file)
   ts = m.group(1)
@@ -16,8 +16,6 @@ def run_percolator(bucket_name, spectra_file):
   s3 = boto3.resource('s3')
   database_bucket = s3.Bucket("maccoss-human-fasta")
   spectra_bucket = s3.Bucket(bucket_name)
-  print("bn", bucket_name)
-  print("sf", spectra_file)
 
   with open("/tmp/{0:s}".format(spectra_file), "wb") as f:
     spectra_bucket.download_fileobj(spectra_file, f)
@@ -30,6 +28,7 @@ def run_percolator(bucket_name, spectra_file):
   output_dir = "/tmp/percolator-crux-output-{0:s}".format(m.group(1))
 
   arguments = [
+    "--subset-max-train", str(max_train),
     "--quick-validation", "T",
     "--output-dir", output_dir
   ]
@@ -49,5 +48,5 @@ def run_percolator(bucket_name, spectra_file):
 def handler(event, context):
   bucket_name = event["Records"][0]["s3"]["bucket"]["name"]
   spectra_file = event["Records"][0]["s3"]["object"]["key"]
-  run_percolator(bucket_name, spectra_file)
-
+  params = json.loads(open("percolator.json").read())
+  run_percolator(bucket_name, spectra_file, params["max_train"])
