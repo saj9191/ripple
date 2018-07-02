@@ -122,20 +122,25 @@ def upload_input(params):
   print(key, "last modified", timestamp)
   return int(timestamp), end - start
 
-def check_objects(client, bucket_name, prefix, count):
+def check_objects(client, bucket_name, prefix, count, timeout):
   done = False
   suffix = ""
   if count > 1:
     suffix = "s"
+
+  start = datetime.datetime.now()
   while not done:
     response = client.list_objects(
       Bucket=bucket_name,
       Prefix=prefix
     )
     done = (("Contents" in response) and (len(response["Contents"]) == count))
-    now = datetime.datetime.now().strftime("%H:%M:%S")
+    end = datetime.datetime.now()
+    now = end.strftime("%H:%M:%S")
     if not done:
       print("{0:s}: Waiting for {1:s} function{2:s}...".format(now, prefix, suffix))
+      if (end - start).total_seconds() > timeout:
+        raise Exception("Could not find bucket {0:s} prefix {1:s}".format(bucket_name, prefix))
       time.sleep(60)
     else:
       print("{0:s}: Found {1:s} function{2:s}".format(now, prefix, suffix))
@@ -144,9 +149,12 @@ def wait_for_completion(params):
   client = setup_client("s3", params)
   bucket_name = "maccoss-human-output-spectra"
 
-  check_objects(client, bucket_name, "combined", 1)
-  check_objects(client, bucket_name, "decoy", 2)
-  check_objects(client, bucket_name, "target", 2)
+  overhead = 1.5 # Give ourselves extra time since there could be delays
+  check_objects(client, bucket_name, "combined", 1, params["combine_spectra_results"]["timeout"] * overhead)
+  check_objects(client, bucket_name, "decoy", 2, params["percolator"]["timeout"] * overhead)
+
+  target_timeout = 30 # Target should be created around the same time as decoys
+  check_objects(client, bucket_name, "target", 2, target_timeout)
   print("")
 
 def fetch_events(client, num_events, log_name, start_time, filter_pattern, extra_args = {}):
