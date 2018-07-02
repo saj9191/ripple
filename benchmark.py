@@ -9,12 +9,13 @@ import re
 import subprocess
 import time
 
-
 REPORT = re.compile(".*Duration:\s([0-9\.]+)\sms.*Billed Duration:\s([0-9\.]+)\sms.*Memory Size:\s([0-9]+)\sMB.*Max Memory Used:\s([0-9]+)\sMB.*")
 SPECTRA = re.compile("S\s+([0-9\.]+)\s+([0-9\.]+)\s+([0-9\.]+)*")
 MASS = re.compile("Z\s+([0-9\.]+)\s+([0-9\.]+)")
 MEMORY_PARAMETERS = json.loads(open("json/memory.json").read())
 
+class BenchmarkException(Exception):
+  pass
 
 def upload_functions(client, params):
   functions = ["split_spectra", "analyze_spectra", "combine_spectra_results", "percolator"]
@@ -140,7 +141,7 @@ def check_objects(client, bucket_name, prefix, count, timeout):
     if not done:
       print("{0:s}: Waiting for {1:s} function{2:s}...".format(now, prefix, suffix))
       if (end - start).total_seconds() > timeout:
-        raise Exception("Could not find bucket {0:s} prefix {1:s}".format(bucket_name, prefix))
+        raise BenchmarkException("Could not find bucket {0:s} prefix {1:s}".format(bucket_name, prefix))
       time.sleep(60)
     else:
       print("{0:s}: Found {1:s} function{2:s}".format(now, prefix, suffix))
@@ -403,9 +404,16 @@ def run(params):
 
   for i in range(iterations):
     print("Iteration {0:d}".format(i))
-    results = benchmark(params)
-    for i in range(len(results)):
-      stats[i].append(results[i])
+    done = False
+    while not done:
+      try:
+        results = benchmark(params)
+        for i in range(len(results)):
+            stats[i].append(results[i])
+        done = True
+      except BenchmarkException:
+        print("Error during iteration {0:d}".format(i))
+        done = False
 
     print("--------------------------")
     print("")
