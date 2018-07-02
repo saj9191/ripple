@@ -22,7 +22,7 @@ def run_percolator(bucket_name, spectra_file, max_train):
   output_dir = "/tmp/percolator-crux-output-{0:s}".format(m.group(1))
 
   arguments = [
-    "--subset-max-train", max_train,
+    "--subset-max-train", str(max_train),
     "--quick-validation", "T",
     "--output-dir", output_dir
   ]
