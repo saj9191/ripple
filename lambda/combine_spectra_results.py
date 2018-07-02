@@ -36,15 +36,15 @@ def combine(bucket_name, output_file):
     if m:
       matching_keys.append(key.key)
       if int(m.group(2)) == num_bytes:
-        num_files = int(m.group(1))
+        num_files = int(m.group(1)) + 1
 
   if len(matching_keys) == num_files:
-    print("Combining")
+    print("Combining", len(matching_keys), num_files)
     temp_file = "/tmp/combine.txt"
     combine_files(s3, bucket_name, matching_keys, temp_file)
     s3.Object(bucket_name, "combined-spectra-{0:s}-{1:d}.txt".format(ts, num_files)).put(Body=open(temp_file, 'rb'))
   else:
-    print("Passing")
+    print("Passing", len(matching_keys), num_files)
     pass
 
 def handler(event, context):

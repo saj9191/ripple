@@ -39,7 +39,7 @@ def split_spectra(bucket_name, key, batch_size, chunk_size):
     if len(parts) > 1:
       spectra += parts[:-1]
       while len(spectra) >= batch_size:
-        save_spectra(output_bucket, header, "S ".join(spectra[:batch_size]), ts, end_byte, num_bytes, num_files, False)
+        save_spectra(output_bucket, header, "S ".join(spectra[:batch_size]), ts, start_byte, num_bytes, num_files, False)
         spectra = spectra[batch_size:]
         num_files += 1
 
@@ -47,8 +47,9 @@ def split_spectra(bucket_name, key, batch_size, chunk_size):
     start_byte = end_byte + 1
 
   print("number of files", num_files)
-  parts = spectra + [remainder]
-  save_spectra(output_bucket, header, "S ".join(spectra), ts, num_bytes, num_bytes, num_files, True)
+  if len(spectra) > 0 or len(remainder) > 0:
+    parts = spectra + [remainder]
+    save_spectra(output_bucket, header, "S ".join(spectra), ts, num_bytes, num_files, num_files, True)
 
 def handler(event, context):
   bucket_name = event["Records"][0]["s3"]["bucket"]["name"]

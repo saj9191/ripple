@@ -19,7 +19,7 @@
   },
   "combine_spectra_results": {
     "memory_size": 256,
-    "name": "CombineSpectraResults",
+    "name": "CombineSpectra",
     "timeout": 300
   },
   "percolator": {
