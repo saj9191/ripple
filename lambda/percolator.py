@@ -1,6 +1,11 @@
 import boto3
 import json
-import re.compile("combined-spectra-([0-9\.]+)-([0-9]+).txt")
+import re
+import subprocess
+import time
+import util
+
+INPUT_FILE = re.compile("combined-spectra-([0-9\.]+)-([0-9]+).txt")
 
 def run_percolator(bucket_name, spectra_file, max_train):
   util.clear_tmp()
@@ -33,8 +38,7 @@ def run_percolator(bucket_name, spectra_file, max_train):
   done = False
   while not done:
     process_output = str(subprocess.check_output("ps aux | grep crux", shell=True))
-    done = len(process_output.split("
-")) == 1
+    done = len(process_output.split("\n")) == 1
     time.sleep(1)
 
   for item in ["target.psms", "decoy.psms", "target.peptides", "decoy.peptides"]:
