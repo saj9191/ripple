@@ -215,7 +215,7 @@ def parse_split_logs(client, start_time, params):
   }
 
 def parse_analyze_logs(client, start_time, params):
-  num_spectra = int(subprocess.check_output("cat {0:s} | grep 'MS1Intensity' | wc -l".format(params["input_name"]), shell=True).decode("utf-8").strip())
+  num_spectra = int(subprocess.check_output("cat sorted_{0:s} | grep 'S\s' | wc -l".format(params["input_name"]), shell=True).decode("utf-8").strip())
   aparams = params["analyze_spectra"]
   batch_size = params["split_spectra"]["batch_size"]
   num_lambdas = int((num_spectra + batch_size - 1) / batch_size)
