@@ -152,8 +152,7 @@ def wait_for_completion(start_time, params):
   log_client = setup_client("logs", params)
   bucket_name = "maccoss-human-output-spectra"
 
-  overhead = 1.5 # Give ourselves extra time since there could be delays
-  fetch_events(log_client, 1, params["split_spectra"]["name"], start_time, [
+  overhead = 3.5 # Give ourselves time as we need to wait for the split and analyze functions to finish.
   check_objects(client, bucket_name, "combined", 1, params["combine_spectra_results"]["timeout"] * overhead)
   check_objects(client, bucket_name, "decoy", 2, params["percolator"]["timeout"] * overhead)
 
