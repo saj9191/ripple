@@ -179,7 +179,7 @@ def fetch_events(client, num_events, log_name, start_time, filter_pattern, extra
     assert(response["ResponseMetadata"]["HTTPStatusCode"] == 200)
 
     if "nextToken" not in response:
-      print(response)
+      raise BenchmarkException(response)
     next_token = response["nextToken"]
     events += response["events"]
 
