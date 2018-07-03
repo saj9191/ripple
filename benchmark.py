@@ -386,7 +386,8 @@ class Stage(Enum):
   TOTAL = 5
 
 def run(params):
-  print("Current Git commit", subprocess.check_output("git rev-parse HEAD", shell=True).decode("utf-8").strip())
+  git_output = subprocess.check_output("git log --oneline | head -n 1", shell=True).decode("utf-8").strip()
+  print("Current Git commit", git_output)
   iterations = params["iterations"]
   client = setup_client("lambda", params)
   # https://github.com/boto/boto3/issues/1104#issuecomment-305136266
