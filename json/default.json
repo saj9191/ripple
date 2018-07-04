@@ -4,6 +4,11 @@
   "region": "us-west-2",
 	"sort": false,
   "timeout": 300,
+  "ec2": {
+    "key": "lambda.pem",
+    "timeout": 60,
+    "type": "t2.medium"
+  },
   "split_spectra": {
     "batch_size": 1000,
     "chunk_size": 100000000,

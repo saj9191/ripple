@@ -5,6 +5,7 @@ import datetime
 from enum import Enum
 import json
 import os
+import paramiko
 import re
 import subprocess
 import time
@@ -146,11 +147,13 @@ def check_objects(client, bucket_name, prefix, count, timeout):
     else:
       print("{0:s}: Found {1:s} function{2:s}".format(now, prefix, suffix))
 
-def wait_for_completion(params):
+def wait_for_completion(start_time, params):
   client = setup_client("s3", params)
+  log_client = setup_client("logs", params)
   bucket_name = "maccoss-human-output-spectra"
 
   overhead = 1.5 # Give ourselves extra time since there could be delays
+  fetch_events(log_client, 1, params["split_spectra"]["name"], start_time, [
   check_objects(client, bucket_name, "combined", 1, params["combine_spectra_results"]["timeout"] * overhead)
   check_objects(client, bucket_name, "decoy", 2, params["percolator"]["timeout"] * overhead)
 
@@ -158,7 +161,8 @@ def wait_for_completion(params):
   check_objects(client, bucket_name, "target", 2, target_timeout)
   print("")
 
-def fetch_events(client, num_events, log_name, start_time, filter_pattern, extra_args = {}):
+
+def fetch(client, num_events, log_name, start_time, filter_pattern, extra_args = {}):
   events = []
   next_token = None
   while len(events) < num_events:
@@ -179,13 +183,17 @@ def fetch_events(client, num_events, log_name, start_time, filter_pattern, extra
     assert(response["ResponseMetadata"]["HTTPStatusCode"] == 200)
 
     if "nextToken" not in response:
-      raise BenchmarkException(response)
+      break
     next_token = response["nextToken"]
     events += response["events"]
 
+  return events
+
+def fetch_events(client, num_events, log_name, start_time, filter_pattern, extra_args = {}):
+  events = fetch(client, num_events, log_name, start_time, filter_pattern, extra_args)
   if len(events) != num_events:
-    print(response)
-  assert(len(events) == num_events)
+    error_events = fetch(client, num_events - len(events), log_name, start_time, "*Task timed out after*", extra_args)
+    raise BenchmarkException(log_name, "has", len(error_events), "timeouts", extra_args)
   return events
 
 def calculate_cost(duration, memory_size):
@@ -373,9 +381,107 @@ def clear_buckets(params):
 def benchmark(params):
   clear_buckets(params)
   [upload_timestamp, upload_duration] = upload_input(params)
-  wait_for_completion(params)
+  wait_for_completion(upload_timestamp, params)
   return parse_logs(params, upload_timestamp, upload_duration)
 
+################################
+############# EC2 ##############
+################################
+
+def create_instance(params):
+  ec2 = boto3.resource("ec2")
+  start_time = time.time()
+  instances = ec2.create_instances(
+    ImageId="ami-0ad99772",
+    InstanceType=params["ec2"]["type"],
+    KeyName=params["ec2"]["key"],
+    MinCount=1,
+    MaxCount=1
+  )
+  assert(len(instances) = 1)
+  instance = instances[0]
+  instance.wait_util_running()
+  end_time = time.time()
+  duraiton = end_time - start_time
+
+  return {
+    "duration": duration,
+    "billed_duration": duration,
+    "memory_used": 0,
+    "cost": 0,
+    "instance": instance
+  }
+
+def setup_instance(instance, params):
+  ec2_dir = "/home/ec2"
+  client = paramiko.SSHClient()
+  client.connect(client.public_ip_address, username="ubuntu", key_filename=params["ec2"]["key"], timeout=params["ec2"]["timeout"])
+  sftp = client.open_sftp()
+
+  start_time = time.time()
+  sftp.put("crux", ec2_dir)
+  sftp.put("HUMAN.fasta.20170123", ec2_dir)
+  sftp.mkdir("{0:s}/HUMAN.fasta.20170123.index".format(ec2_dir))
+  # TODO: Upload index
+  sftp.put(params["input_name"], ec2_dir)
+  end_time = time.time()
+
+  sftp.close()
+  duration = end_time - start_time
+
+  return {
+    "duration": duration,
+    "billed_duration": duration,
+    "memory_used": 0,
+    "cost": 0,
+    "client", client
+  }
+
+def run_analyze(params, client):
+  arguments = [
+    "--num-threads", str(params["analyze_spectra"]["num_threads"]),
+    "--txt-output", "T",
+    "--concat", "T",
+  ]
+  start_time = time.time()
+  (stdin, stdout, stderr) = client.execute_command("./crux tide-search {0:s} HUMAN.fasta.20170123.index {1:s}".format(params["input_name"], " ".join(arguments)))
+  print("stdin", stdin)
+  print("stdout", stdout)
+  print("stderr", stderr)
+  end_time = time.time()
+  duration = end_time - start_time
+
+  return {
+    "duration": duration,
+    "billed_duration": duration,
+    "memory_used": 0,
+    "cost": 0
+  }
+
+def run_percolator(params, client):
+  arguments = [
+    "--subset-max-train", str(max_train),
+    "--quick-validation", "T",
+    "--output-dir", output_dir
+  ]
+
+  start_time = time.time()
+  (stdin, stdout, stderr) = client.execute_command("./crux percolator {0:s} {1:s}".format("crux-output/????"), " ".join(arguments))
+  print("stdin", stdin)
+  print("stdout", stdout)
+  print("stderr", stderr)
+  end_time = time.time()
+  duration = end_time - start_time
+
+  return {
+    "duration": duration,
+    "billed_duration": duration,
+    "memory_used": 0,
+    "cost": 0
+  }
+################################
+############ COMMON ############
+################################
 
 class Stage(Enum):
   LOAD = 0
