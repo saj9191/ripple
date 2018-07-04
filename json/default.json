@@ -3,6 +3,7 @@
   "iterations": 1,
   "region": "us-west-2",
 	"sort": false,
+	"lambda": false,
   "timeout": 300,
   "ec2": {
     "key": "lambda.pem",

@@ -10,15 +10,135 @@ import re
 import subprocess
 import time
 
-REPORT = re.compile(".*Duration:\s([0-9\.]+)\sms.*Billed Duration:\s([0-9\.]+)\sms.*Memory Size:\s([0-9]+)\sMB.*Max Memory Used:\s([0-9]+)\sMB.*")
-SPECTRA = re.compile("S\s+([0-9\.]+)\s+([0-9\.]+)\s+([0-9\.]+)*")
 MASS = re.compile("Z\s+([0-9\.]+)\s+([0-9\.]+)")
 MEMORY_PARAMETERS = json.loads(open("json/memory.json").read())
+REPORT = re.compile(".*Duration:\s([0-9\.]+)\sms.*Billed Duration:\s([0-9\.]+)\sms.*Memory Size:\s([0-9]+)\sMB.*Max Memory Used:\s([0-9]+)\sMB.*")
+SPECTRA = re.compile("S\s+([0-9\.]+)\s+([0-9\.]+)\s+([0-9\.]+)*")
 STAT_FIELDS = ["cost", "max_duration", "billed_duration", "memory_used"]
+
+#############################
+#         COMMON            #
+#############################
 
 
 class BenchmarkException(Exception):
   pass
+
+
+def run(params):
+  git_output = subprocess.check_output("git log --oneline | head -n 1", shell=True).decode("utf-8").strip()
+  print("Current Git commit", git_output)
+  iterations = params["iterations"]
+  client = setup_client("lambda", params)
+  # https://github.com/boto/boto3/issues/1104#issuecomment-305136266
+  # boto3 by default retries even if max timeout is set. This is a workaround.
+  client.meta.events._unique_id_handlers['retry-config-lambda']['handler']._checker.__dict__['_max_attempts'] = 0
+
+  if params["sort"]:
+    sort_spectra(params["input_name"])
+
+  upload_functions(client, params)
+
+  stats = []
+
+  stages = LambdaStage
+  if not params["lambda"]:
+    stages = Ec2Stage
+
+  for stage in stages:
+    stats.append([])
+
+  for i in range(iterations):
+    print("Iteration {0:d}".format(i))
+    done = False
+    while not done:
+      try:
+        if params["lambda"]:
+          results = lambda_benchmark(params)
+        else:
+          results = ec2_benchmark(params)
+
+        for i in range(len(results)):
+          stats[i].append(results[i])
+        done = True
+      except BenchmarkException:
+        print("Error during iteration {0:d}".format(i))
+        done = False
+
+    print("--------------------------")
+    print("")
+
+  print("END RESULTS ({0:d} ITERATIONS)".format(iterations))
+  for stage in stages:
+    print("AVERAGE {0:s} RESULTS".format(stage.name))
+    print_stats(calculate_average_results(stats[stage.value], iterations))
+
+
+def calculate_total_stats(stats):
+  total_stats = {}
+
+  for field in STAT_FIELDS:
+    total_stats[field] = 0
+
+  for stat in stats:
+    for field in STAT_FIELDS:
+      total_stats[field] += stat[field]
+
+  return total_stats
+
+
+def calculate_average_results(stats, iterations):
+  total_stats = calculate_total_stats(stats)
+  average_stats = {}
+
+  for field in STAT_FIELDS:
+    average_stats[field] = float(total_stats[field]) / iterations
+
+  return average_stats
+
+
+def print_stats(stats):
+  print("Total Cost", stats["cost"])
+  print("Total Runtime", stats["max_duration"], "milliseconds")
+  print("Total Billed Duration", stats["billed_duration"], "milliseconds")
+  print("Total Memory Used", stats["memory_used"], "MB")
+
+
+def get_credentials():
+  f = open("/home/shannon/.aws/credentials")
+  lines = f.readlines()
+  access_key = lines[1].split("=")[1].strip()
+  secret_key = lines[2].split("=")[1].strip()
+  return access_key, secret_key
+
+
+def setup_connection(service, params):
+  [access_key, secret_key] = get_credentials()
+  session = boto3.Session(
+      aws_access_key_id=access_key,
+      aws_secret_access_key=secret_key
+  )
+  return session.resource(service)
+
+
+def clear_buckets(params):
+  s3 = setup_connection("s3", params)
+  for bucket_name in ["maccoss-human-input-spectra", "maccoss-human-split-spectra", "maccoss-human-output-spectra"]:
+    bucket = s3.Bucket(bucket_name)
+    bucket.objects.all().delete()
+
+
+#############################
+#         LAMBDA            #
+#############################
+
+class LambdaStage(Enum):
+  LOAD = 0
+  SPLIT = 1
+  ANALYZE = 2
+  COMBINE = 3
+  PERCOLATOR = 4
+  TOTAL = 5
 
 
 def upload_functions(client, params):
@@ -51,23 +171,6 @@ def upload_functions(client, params):
     assert(response["ResponseMetadata"]["HTTPStatusCode"] == 200)
 
   os.chdir("..")
-
-
-def get_credentials():
-  f = open("/home/shannon/.aws/credentials")
-  lines = f.readlines()
-  access_key = lines[1].split("=")[1].strip()
-  secret_key = lines[2].split("=")[1].strip()
-  return access_key, secret_key
-
-
-def setup_connection(service, params):
-  [access_key, secret_key] = get_credentials()
-  session = boto3.Session(
-      aws_access_key_id=access_key,
-      aws_secret_access_key=secret_key
-  )
-  return session.resource(service)
 
 
 def setup_client(service, params):
@@ -328,36 +431,6 @@ def parse_percolator_logs(client, start_time, params):
   }
 
 
-def calculate_total_stats(stats):
-  total_stats = {}
-
-  for field in STAT_FIELDS:
-    total_stats[field] = 0
-
-  for stat in stats:
-    for field in STAT_FIELDS:
-      total_stats[field] += stat[field]
-
-  return total_stats
-
-
-def calculate_average_results(stats, iterations):
-  total_stats = calculate_total_stats(stats)
-  average_stats = {}
-
-  for field in STAT_FIELDS:
-    average_stats[field] = float(total_stats[field]) / iterations
-
-  return average_stats
-
-
-def print_stats(stats):
-  print("Total Cost", stats["cost"])
-  print("Total Runtime", stats["max_duration"], "milliseconds")
-  print("Total Billed Duration", stats["billed_duration"], "milliseconds")
-  print("Total Memory Used", stats["memory_used"], "MB")
-
-
 def parse_logs(params, upload_timestamp, upload_duration):
   client = setup_client("logs", params)
   stats = []
@@ -389,14 +462,7 @@ def parse_logs(params, upload_timestamp, upload_duration):
   return (load_stats, split_stats, analyze_stats, combine_stats, percolator_stats, total_stats)
 
 
-def clear_buckets(params):
-  s3 = setup_connection("s3", params)
-  for bucket_name in ["maccoss-human-input-spectra", "maccoss-human-split-spectra", "maccoss-human-output-spectra"]:
-    bucket = s3.Bucket(bucket_name)
-    bucket.objects.all().delete()
-
-
-def benchmark(params):
+def lambda_benchmark(params):
   clear_buckets(params)
   [upload_timestamp, upload_duration] = upload_input(params)
   wait_for_completion(upload_timestamp, params)
@@ -405,6 +471,16 @@ def benchmark(params):
 #############################
 #           EC2             #
 #############################
+
+
+class Ec2Stage(Enum):
+  CREATE = 0
+  LOAD = 1
+  TIDE = 2
+  PERCOLATOR = 3
+  UPLOAD = 4
+  TERMINATE = 5
+  TOTAL = 6
 
 
 def create_instance(params):
@@ -436,6 +512,7 @@ def setup_instance(instance, params):
   ec2_dir = "/home/ec2"
   client = paramiko.SSHClient()
   client.connect(client.public_ip_address, username="ubuntu", key_filename=params["ec2"]["key"], timeout=params["ec2"]["timeout"])
+  client.execute_command("sudo apt-get install s3cmd --yes")
   sftp = client.open_sftp()
 
   start_time = time.time()
@@ -461,7 +538,7 @@ def setup_instance(instance, params):
   }
 
 
-def run_analyze(params, client):
+def run_analyze(client, params):
   arguments = [
     "--num-threads", str(params["analyze_spectra"]["num_threads"]),
     "--txt-output", "T",
@@ -484,7 +561,7 @@ def run_analyze(params, client):
   }
 
 
-def run_percolator(params, client):
+def run_percolator(client, params):
   arguments = [
     "--subset-max-train", str(params["percolator"]["max_train"]),
     "--quick-validation", "T",
@@ -506,58 +583,38 @@ def run_percolator(params, client):
   }
 
 
+def upload_results(client, params):
+  start_time = time.time()
+  for pep in ["decoy", "target"]:
+    for item in ["peptides", "psms"]:
+      file = "percolator.{0:s}.{1:s}.txt".format(pep, item)
+      client.execute_command("s3cmd put crux-output/{0:s} s3://maccoss-human-output-spectra/{0:s}".format(file))
+  end_time = time.time()
+  duration = end_time - start_time
+
+  return {
+    "duration": duration,
+    "billed_duration": duration,
+    "memory_used": 0,
+    "cost": 0
+  }
+
+
+def ec2_benchmark(params):
+  clear_buckets(params)
+  create_stats = create_instance(params)
+  instance = create_stats["instance"]
+  setup_stats = setup_instance(instance, params)
+  client = setup_stats["client"]
+  analyze_stats = run_analyze(client, params)
+  percolator_stats = run_percolator(client, params)
+  upload_stats = upload_results(client, params)
+
+  return (create_stats, setup_stats, analyze_stats, percolator_stats, upload_stats)
+
 #############################
-#         COMMON            #
+#           MAIN            #
 #############################
-
-
-class Stage(Enum):
-  LOAD = 0
-  SPLIT = 1
-  ANALYZE = 2
-  COMBINE = 3
-  PERCOLATOR = 4
-  TOTAL = 5
-
-
-def run(params):
-  git_output = subprocess.check_output("git log --oneline | head -n 1", shell=True).decode("utf-8").strip()
-  print("Current Git commit", git_output)
-  iterations = params["iterations"]
-  client = setup_client("lambda", params)
-  # https://github.com/boto/boto3/issues/1104#issuecomment-305136266
-  # boto3 by default retries even if max timeout is set. This is a workaround.
-  client.meta.events._unique_id_handlers['retry-config-lambda']['handler']._checker.__dict__['_max_attempts'] = 0
-
-  if params["sort"]:
-    sort_spectra(params["input_name"])
-
-  upload_functions(client, params)
-
-  stats = []
-  for stage in Stage:
-    stats.append([])
-
-  for i in range(iterations):
-    print("Iteration {0:d}".format(i))
-    done = False
-    while not done:
-      try:
-        results = benchmark(params)
-        for i in range(len(results)):
-            stats[i].append(results[i])
-        done = True
-      except BenchmarkException:
-        print("Error during iteration {0:d}".format(i))
-        done = False
-
-    print("--------------------------")
-    print("")
-
-  print("END RESULTS ({0:d} ITERATIONS)".format(iterations))
-  for stage in Stage:
-    print("AVERAGE {0:s} RESULTS".format(stage.name))
-    print_stats(calculate_average_results(stats[stage.value], iterations))
 
 
 def main():
