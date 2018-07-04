@@ -441,8 +441,11 @@ def setup_instance(instance, params):
   start_time = time.time()
   sftp.put("crux", ec2_dir)
   sftp.put("HUMAN.fasta.20170123", ec2_dir)
-  sftp.mkdir("{0:s}/HUMAN.fasta.20170123.index".format(ec2_dir))
-  # TODO: Upload index
+
+  index_dir = "{0:s}/HUMAN.fasta.20170123.index".format(ec2_dir)
+  sftp.mkdir(index_dir)
+  for item in os.listdir("HUMAN.fasta.20170123.index"):
+    sftp.put(item, "{0:s}/{1:s}".format(index_dir, item))
   sftp.put(params["input_name"], ec2_dir)
   end_time = time.time()
 
@@ -488,7 +491,7 @@ def run_percolator(params, client):
   ]
 
   start_time = time.time()
-  (stdin, stdout, stderr) = client.execute_command("./crux percolator {0:s} {1:s}".format("crux-output/????"), " ".join(arguments))
+  (stdin, stdout, stderr) = client.execute_command("./crux percolator {0:s} {1:s}".format("crux-output/tide-search.txt"), " ".join(arguments))
   print("stdin", stdin)
   print("stdout", stdout)
   print("stderr", stderr)
