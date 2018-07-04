@@ -14,9 +14,12 @@ REPORT = re.compile(".*Duration:\s([0-9\.]+)\sms.*Billed Duration:\s([0-9\.]+)\s
 SPECTRA = re.compile("S\s+([0-9\.]+)\s+([0-9\.]+)\s+([0-9\.]+)*")
 MASS = re.compile("Z\s+([0-9\.]+)\s+([0-9\.]+)")
 MEMORY_PARAMETERS = json.loads(open("json/memory.json").read())
+STAT_FIELDS = ["cost", "max_duration", "billed_duration", "memory_used"]
+
 
 class BenchmarkException(Exception):
   pass
+
 
 def upload_functions(client, params):
   functions = ["split_spectra", "analyze_spectra", "combine_spectra_results", "percolator"]
@@ -49,12 +52,14 @@ def upload_functions(client, params):
 
   os.chdir("..")
 
+
 def get_credentials():
   f = open("/home/shannon/.aws/credentials")
   lines = f.readlines()
   access_key = lines[1].split("=")[1].strip()
   secret_key = lines[2].split("=")[1].strip()
   return access_key, secret_key
+
 
 def setup_connection(service, params):
   [access_key, secret_key] = get_credentials()
@@ -63,6 +68,7 @@ def setup_connection(service, params):
       aws_secret_access_key=secret_key
   )
   return session.resource(service)
+
 
 def setup_client(service, params):
   extra_time = 20
@@ -75,6 +81,7 @@ def setup_client(service, params):
                         config=config
                         )
   return client
+
 
 def sort_spectra(name):
   f = open(name)
@@ -112,6 +119,7 @@ def sort_spectra(name):
     for line in spectrum[1]:
       f.write(line)
 
+
 def upload_input(params):
   bucket_name = "maccoss-human-input-spectra"
   key = "sorted_{0:s}".format(params["input_name"])
@@ -123,6 +131,7 @@ def upload_input(params):
   timestamp = obj.last_modified.timestamp() * 1000
   print(key, "last modified", timestamp)
   return int(timestamp), end - start
+
 
 def check_objects(client, bucket_name, prefix, count, timeout):
   done = False
@@ -147,21 +156,21 @@ def check_objects(client, bucket_name, prefix, count, timeout):
     else:
       print("{0:s}: Found {1:s} function{2:s}".format(now, prefix, suffix))
 
+
 def wait_for_completion(start_time, params):
   client = setup_client("s3", params)
-  log_client = setup_client("logs", params)
   bucket_name = "maccoss-human-output-spectra"
 
-  overhead = 3.5 # Give ourselves time as we need to wait for the split and analyze functions to finish.
+  overhead = 3.5  # Give ourselves time as we need to wait for the split and analyze functions to finish.
   check_objects(client, bucket_name, "combined", 1, params["combine_spectra_results"]["timeout"] * overhead)
   check_objects(client, bucket_name, "decoy", 2, params["percolator"]["timeout"] * overhead)
 
-  target_timeout = 30 # Target should be created around the same time as decoys
+  target_timeout = 30  # Target should be created around the same time as decoys
   check_objects(client, bucket_name, "target", 2, target_timeout)
   print("")
 
 
-def fetch(client, num_events, log_name, start_time, filter_pattern, extra_args = {}):
+def fetch(client, num_events, log_name, start_time, filter_pattern, extra_args={}):
   events = []
   next_token = None
   while len(events) < num_events:
@@ -171,7 +180,7 @@ def fetch(client, num_events, log_name, start_time, filter_pattern, extra_args =
       "logGroupName": "/aws/lambda/{0:s}".format(log_name),
       "startTime": start_time
     }
-    args = { **args, **extra_args }
+    args = {**args, **extra_args}
 
     if next_token:
       args["nextToken"] = next_token
@@ -188,17 +197,20 @@ def fetch(client, num_events, log_name, start_time, filter_pattern, extra_args =
 
   return events
 
-def fetch_events(client, num_events, log_name, start_time, filter_pattern, extra_args = {}):
+
+def fetch_events(client, num_events, log_name, start_time, filter_pattern, extra_args={}):
   events = fetch(client, num_events, log_name, start_time, filter_pattern, extra_args)
   if len(events) != num_events:
     error_events = fetch(client, num_events - len(events), log_name, start_time, "*Task timed out after*", extra_args)
     raise BenchmarkException(log_name, "has", len(error_events), "timeouts", extra_args)
   return events
 
+
 def calculate_cost(duration, memory_size):
   # Cost per 100ms
   millisecond_cost = MEMORY_PARAMETERS[str(memory_size)]
   return int(duration / 100) * millisecond_cost
+
 
 def parse_split_logs(client, start_time, params):
   sparams = params["split_spectra"]
@@ -222,6 +234,7 @@ def parse_split_logs(client, start_time, params):
     "cost": cost
   }
 
+
 def parse_analyze_logs(client, start_time, params):
   num_spectra = int(subprocess.check_output("cat sorted_{0:s} | grep 'S\s' | wc -l".format(params["input_name"]), shell=True).decode("utf-8").strip())
   aparams = params["analyze_spectra"]
@@ -230,7 +243,7 @@ def parse_analyze_logs(client, start_time, params):
   events = fetch_events(client, num_lambdas, aparams["name"], start_time, "REPORT RequestId")
   max_billed_duration = 0
   total_billed_duration = 0
-  total_memory_used = 0 # TODO: Handle
+  total_memory_used = 0  # TODO: Handle
   min_timestamp = events[0]["timestamp"]
   max_timestamp = events[0]["timestamp"]
 
@@ -261,6 +274,7 @@ def parse_analyze_logs(client, start_time, params):
     "cost": cost
   }
 
+
 def parse_combine_logs(client, start_time, params):
   cparams = params["combine_spectra_results"]
   name = cparams["name"]
@@ -290,6 +304,7 @@ def parse_combine_logs(client, start_time, params):
     "cost": cost
   }
 
+
 def parse_percolator_logs(client, start_time, params):
   pparams = params["percolator"]
   events = fetch_events(client, 1, pparams["name"], start_time, "REPORT RequestId")
@@ -312,7 +327,6 @@ def parse_percolator_logs(client, start_time, params):
     "cost": cost
   }
 
-STAT_FIELDS = ["cost", "max_duration", "billed_duration", "memory_used"]
 
 def calculate_total_stats(stats):
   total_stats = {}
@@ -326,6 +340,7 @@ def calculate_total_stats(stats):
 
   return total_stats
 
+
 def calculate_average_results(stats, iterations):
   total_stats = calculate_total_stats(stats)
   average_stats = {}
@@ -335,11 +350,13 @@ def calculate_average_results(stats, iterations):
 
   return average_stats
 
+
 def print_stats(stats):
   print("Total Cost", stats["cost"])
   print("Total Runtime", stats["max_duration"], "milliseconds")
   print("Total Billed Duration", stats["billed_duration"], "milliseconds")
   print("Total Memory Used", stats["memory_used"], "MB")
+
 
 def parse_logs(params, upload_timestamp, upload_duration):
   client = setup_client("logs", params)
@@ -371,11 +388,13 @@ def parse_logs(params, upload_timestamp, upload_duration):
 
   return (load_stats, split_stats, analyze_stats, combine_stats, percolator_stats, total_stats)
 
+
 def clear_buckets(params):
   s3 = setup_connection("s3", params)
   for bucket_name in ["maccoss-human-input-spectra", "maccoss-human-split-spectra", "maccoss-human-output-spectra"]:
     bucket = s3.Bucket(bucket_name)
     bucket.objects.all().delete()
+
 
 def benchmark(params):
   clear_buckets(params)
@@ -383,9 +402,10 @@ def benchmark(params):
   wait_for_completion(upload_timestamp, params)
   return parse_logs(params, upload_timestamp, upload_duration)
 
-################################
-############# EC2 ##############
-################################
+#############################
+#           EC2             #
+#############################
+
 
 def create_instance(params):
   ec2 = boto3.resource("ec2")
@@ -397,11 +417,11 @@ def create_instance(params):
     MinCount=1,
     MaxCount=1
   )
-  assert(len(instances) = 1)
+  assert(len(instances) == 1)
   instance = instances[0]
   instance.wait_util_running()
   end_time = time.time()
-  duraiton = end_time - start_time
+  duration = end_time - start_time
 
   return {
     "duration": duration,
@@ -410,6 +430,7 @@ def create_instance(params):
     "cost": 0,
     "instance": instance
   }
+
 
 def setup_instance(instance, params):
   ec2_dir = "/home/ec2"
@@ -433,8 +454,9 @@ def setup_instance(instance, params):
     "billed_duration": duration,
     "memory_used": 0,
     "cost": 0,
-    "client", client
+    "client": client
   }
+
 
 def run_analyze(params, client):
   arguments = [
@@ -443,7 +465,8 @@ def run_analyze(params, client):
     "--concat", "T",
   ]
   start_time = time.time()
-  (stdin, stdout, stderr) = client.execute_command("./crux tide-search {0:s} HUMAN.fasta.20170123.index {1:s}".format(params["input_name"], " ".join(arguments)))
+  command = "./crux tide-search {0:s} HUMAN.fasta.20170123.index {1:s}".format(params["input_name"], " ".join(arguments))
+  (stdin, stdout, stderr) = client.execute_command(command)
   print("stdin", stdin)
   print("stdout", stdout)
   print("stderr", stderr)
@@ -457,11 +480,11 @@ def run_analyze(params, client):
     "cost": 0
   }
 
+
 def run_percolator(params, client):
   arguments = [
-    "--subset-max-train", str(max_train),
+    "--subset-max-train", str(params["percolator"]["max_train"]),
     "--quick-validation", "T",
-    "--output-dir", output_dir
   ]
 
   start_time = time.time()
@@ -478,9 +501,12 @@ def run_percolator(params, client):
     "memory_used": 0,
     "cost": 0
   }
-################################
-############ COMMON ############
-################################
+
+
+#############################
+#         COMMON            #
+#############################
+
 
 class Stage(Enum):
   LOAD = 0
@@ -489,6 +515,7 @@ class Stage(Enum):
   COMBINE = 3
   PERCOLATOR = 4
   TOTAL = 5
+
 
 def run(params):
   git_output = subprocess.check_output("git log --oneline | head -n 1", shell=True).decode("utf-8").strip()
@@ -529,12 +556,14 @@ def run(params):
     print("AVERAGE {0:s} RESULTS".format(stage.name))
     print_stats(calculate_average_results(stats[stage.value], iterations))
 
+
 def main():
   parser = argparse.ArgumentParser()
   parser.add_argument('--parameters', type=str, required=True, help="File containing parameters")
   args = parser.parse_args()
   params = json.loads(open(args.parameters).read())
   run(params)
+
 
 if __name__ == "__main__":
   main()
