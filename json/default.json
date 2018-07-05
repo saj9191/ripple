@@ -6,13 +6,15 @@
 	"lambda": false,
   "timeout": 300,
   "ec2": {
+    "ami": "ami-6cbaed14",
     "cost": 0.0464,
+    "default_ami": "ami-0ad99772",
     "key": "maccoss",
-		"security": "sg-4ea90530",
-		"subnet": "subnet-03990a59",
+    "security": "sg-4ea90530",
+    "subnet": "subnet-03990a59",
     "timeout": 20,
     "type": "t2.medium",
-		"user": "ec2-user"
+    "use_ami": true
   },
   "split_spectra": {
     "batch_size": 1000,

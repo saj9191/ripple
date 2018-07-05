@@ -498,10 +498,13 @@ def calculate_results(duration, cost):
 
 def create_instance(params):
   ec2 = setup_connection("ec2", params)
+  ami = params["ec2"]["default_ami"]
+  if params["ec2"]["use_ami"]:
+    ami = params["ec2"]["ami"]
 
   start_time = time.time()
   instances = ec2.create_instances(
-    ImageId="ami-0ad99772",
+    ImageId=ami,
     InstanceType=params["ec2"]["type"],
     KeyName=params["ec2"]["key"],
     MinCount=1,
@@ -515,7 +518,7 @@ def create_instance(params):
       "ResourceType": "instance",
       "Tags": [{
         "Key": "Name",
-        "Value": "maccoss-benchmark-{0:f}".format(time.time())
+        "Value": "ami"
       }]
     }]
   )
@@ -555,31 +558,41 @@ def setup_instance(ec2, instance, params):
   key = paramiko.RSAKey.from_private_key_file(pem)
   client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 
+  user = "ec2-user"
+  if params["ec2"]["use_ami"]:
+    user = "root"
+
   client.connect(
-      instance.public_ip_address,
-      username="ec2-user",
-      pkey=key
+    instance.public_ip_address,
+    username=user,
+    pkey=key
   )
-  cexec(client, "cd /etc/yum.repos.d; sudo wget http://s3tools.org/repo/RHEL_6/s3tools.repo")
-  cexec(client, "sudo yum -y install s3cmd")
-  cexec(client, "sudo update-alternatives --set python /usr/bin/python2.6")
-  [access_key, secret_key] = get_credentials()
-  cexec(client, "echo -e '{0:s}\n{1:s}\n\n\n\n\nY\ny\n' | s3cmd --configure".format(access_key, secret_key))
 
   sftp = client.open_sftp()
-  for item in ["crux", "HUMAN.fasta.20170123", params["input_name"]]:
+  items = [params["input_name"]]
+  if not params["ec2"]["use_ami"]:
+    cexec(client, "cd /etc/yum.repos.d; sudo wget http://s3tools.org/repo/RHEL_6/s3tools.repo")
+    cexec(client, "sudo yum -y install s3cmd")
+    cexec(client, "sudo update-alternatives --set python /usr/bin/python2.6")
+    [access_key, secret_key] = get_credentials()
+    cexec(client, "echo -e '{0:s}\n{1:s}\n\n\n\n\nY\ny\n' | s3cmd --configure".format(access_key, secret_key))
+    items.append("crux")
+    items.append("HUMAN.fasta.20170123")
+
+    index_dir = "HUMAN.fasta.20170123.index"
+    sftp.mkdir(index_dir)
+    for item in os.listdir(index_dir):
+      path = "{0:s}/{1:s}".format(index_dir, item)
+      sftp.put(path, path)
+    cexec(client, "sudo chmod +x crux")
+
+  for item in items:
     sftp.put(item, item)
 
-  index_dir = "HUMAN.fasta.20170123.index"
-  sftp.mkdir(index_dir)
-  for item in os.listdir(index_dir):
-    path = "{0:s}/{1:s}".format(index_dir, item)
-    sftp.put(path, path)
-
   sftp.close()
+  command = "cd aws-scripts-mon; cp awscreds.template awscreds.conf; echo 'AWSAccessKeyId={0:s}\nAWSSecretKey={1:s}' >> awscreds.conf"
+  cexec(client, command)
   end_time = time.time()
-
-  cexec(client, "sudo chmod +x crux")
 
   duration = end_time - start_time
   results = calculate_results(duration, params["ec2"]["cost"])
@@ -630,8 +643,12 @@ def upload_results(client, params):
   return calculate_results(duration, params["ec2"]["cost"])
 
 
-def terminate_instance(instance, params):
+def terminate_instance(instance, client, params):
   start_time = time.time()
+  stdout = cexec(client, "cd aws-scripts-mon; ./mon-put-instance-data.pl --mem-used-incl-cache-buff --mem-util --mem-used --mem-avail")
+  client.close()
+  print("terminate")
+  print(stdout)
   instance.terminate()
   instance.wait_until_terminated()
   end_time = time.time()
@@ -662,7 +679,7 @@ def ec2_benchmark(params):
   upload_stats = upload_results(client, params)
   stats.append(upload_stats)
 
-  terminate_stats = terminate_instance(instance, params)
+  terminate_stats = terminate_instance(instance, client, params)
   stats.append(terminate_stats)
 
   total_stats = calculate_total_stats(stats)
