@@ -649,10 +649,8 @@ def upload_results(client, params):
 
 def terminate_instance(instance, client, params):
   start_time = time.time()
-  stdout = cexec(client, "cd aws-scripts-mon; ./mon-put-instance-data.pl --mem-used-incl-cache-buff --mem-util --mem-used --mem-avail")
+#  cexec(client, "cd aws-scripts-mon; ./mon-put-instance-data.pl --mem-used-incl-cache-buff --mem-util --mem-used --mem-avail")
   client.close()
-  print("terminate")
-  print(stdout)
   instance.terminate()
   instance.wait_until_terminated()
   end_time = time.time()
