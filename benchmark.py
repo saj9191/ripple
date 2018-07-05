@@ -523,7 +523,6 @@ def create_instance(params):
   instance = instances[0]
   print("Waiting for instance to initiate")
   instance.wait_until_running()
-  print("Wait for status checks")
   end_time = time.time()
   duration = end_time - start_time
 
@@ -542,6 +541,7 @@ def cexec(client, command):
 def setup_instance(ec2, instance, params):
   start_time = time.time()
 
+  print("Wait for status checks")
   instance_status = list(ec2.meta.client.describe_instance_status(InstanceIds=[instance.id])["InstanceStatuses"])[0]
   while instance_status["InstanceStatus"]["Details"][0]["Status"] == "initializing":
     instance_status = list(ec2.meta.client.describe_instance_status(InstanceIds=[instance.id])["InstanceStatuses"])[0]
@@ -654,7 +654,7 @@ def ec2_benchmark(params):
 
   client = setup_stats["client"]
   analyze_stats = run_analyze(client, params)
-  stats.append(setup_stats)
+  stats.append(analyze_stats)
 
   percolator_stats = run_percolator(client, params)
   stats.append(percolator_stats)
