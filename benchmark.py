@@ -518,7 +518,7 @@ def create_instance(params):
       "ResourceType": "instance",
       "Tags": [{
         "Key": "Name",
-        "Value": "ami"
+        "Value": "maccoss-benchmark-{0:f}".format(time.time())
       }]
     }]
   )
@@ -559,8 +559,6 @@ def setup_instance(ec2, instance, params):
   client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 
   user = "ec2-user"
-  if params["ec2"]["use_ami"]:
-    user = "root"
 
   client.connect(
     instance.public_ip_address,
