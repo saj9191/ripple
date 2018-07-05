@@ -37,7 +37,8 @@ def run(params):
   if params["sort"]:
     sort_spectra(params["input_name"])
 
-  upload_functions(client, params)
+  if params["lambda"]:
+    upload_functions(client, params)
 
   stats = []
 
@@ -99,8 +100,8 @@ def calculate_average_results(stats, iterations):
 
 def print_stats(stats):
   print("Total Cost", stats["cost"])
-  print("Total Runtime", stats["max_duration"], "milliseconds")
-  print("Total Billed Duration", stats["billed_duration"], "milliseconds")
+  print("Total Runtime", stats["max_duration"] / 1000, "seconds")
+  print("Total Billed Duration", stats["billed_duration"] / 1000, "seconds")
   print("Total Memory Used", stats["memory_used"], "MB")
 
 
@@ -115,8 +116,9 @@ def get_credentials():
 def setup_connection(service, params):
   [access_key, secret_key] = get_credentials()
   session = boto3.Session(
-      aws_access_key_id=access_key,
-      aws_secret_access_key=secret_key
+    aws_access_key_id=access_key,
+    aws_secret_access_key=secret_key,
+    region_name=params["region"]
   )
   return session.resource(service)
 
@@ -483,134 +485,185 @@ class Ec2Stage(Enum):
   TOTAL = 6
 
 
+def calculate_results(duration):
+  milliseconds = duration * 1000
+  return {
+    "billed_duration": milliseconds,
+    "cost": (float(duration) * 0.0464) / 3600,
+    "max_duration": milliseconds,
+    "memory_used": 0
+  }
+
+
 def create_instance(params):
-  ec2 = boto3.resource("ec2")
+  ec2 = setup_connection("ec2", params)
+
   start_time = time.time()
   instances = ec2.create_instances(
     ImageId="ami-0ad99772",
     InstanceType=params["ec2"]["type"],
     KeyName=params["ec2"]["key"],
     MinCount=1,
-    MaxCount=1
+    MaxCount=1,
+    NetworkInterfaces=[{
+      "SubnetId": params["ec2"]["subnet"],
+      "DeviceIndex": 0,
+      "Groups": [params["ec2"]["security"]]
+    }],
+    TagSpecifications=[{
+      "ResourceType": "instance",
+      "Tags": [{
+        "Key": "Name",
+        "Value": "maccoss-benchmark-{0:f}".format(time.time())
+      }]
+    }]
   )
   assert(len(instances) == 1)
   instance = instances[0]
-  instance.wait_util_running()
+  print("Waiting for instance to initiate")
+  instance.wait_until_running()
+  print("Wait for status checks")
+  instance_status = list(ec2.meta.client.describe_instance_status(InstanceIds=[instance.id])["InstanceStatuses"])[0]
+  while instance_status["InstanceStatus"]["Details"][0]["Status"] == "initializing":
+    instance_status = list(ec2.meta.client.describe_instance_status(InstanceIds=[instance.id])["InstanceStatuses"])[0]
+    time.sleep(1)
+  assert(instance_status["InstanceStatus"]["Details"][0]["Status"] == "passed")
+
+  instance.reload()
   end_time = time.time()
   duration = end_time - start_time
 
-  return {
-    "duration": duration,
-    "billed_duration": duration,
-    "memory_used": 0,
-    "cost": 0,
-    "instance": instance
-  }
+  results = calculate_results(duration)
+  results["instance"] = instance
+  return results
+
+
+def cexec(client, command):
+  (stdin, stdout, stderr) = client.exec_command(command)
+  stdout.channel.recv_exit_status()
+  return stdout.read()
 
 
 def setup_instance(instance, params):
-  ec2_dir = "/home/ec2"
   client = paramiko.SSHClient()
-  client.connect(client.public_ip_address, username="ubuntu", key_filename=params["ec2"]["key"], timeout=params["ec2"]["timeout"])
-  client.execute_command("sudo apt-get install s3cmd --yes")
-  sftp = client.open_sftp()
-
+  pem = params["ec2"]["key"] + ".pem"
+  key = paramiko.RSAKey.from_private_key_file(pem)
+  client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
   start_time = time.time()
-  sftp.put("crux", ec2_dir)
-  sftp.put("HUMAN.fasta.20170123", ec2_dir)
+  client.connect(
+      instance.public_ip_address,
+      username="ec2-user",
+      pkey=key
+  )
+  cexec(client, "cd /etc/yum.repos.d; sudo wget http://s3tools.org/repo/RHEL_6/s3tools.repo")
+  cexec(client, "sudo yum -y install s3cmd")
+  cexec(client, "sudo update-alternatives --set python /usr/bin/python2.6")
+  [access_key, secret_key] = get_credentials()
+  cexec(client, "echo -e '{0:s}\n{1:s}\n\n\n\n\nY\ny\n' | s3cmd --configure".format(access_key, secret_key))
 
-  index_dir = "{0:s}/HUMAN.fasta.20170123.index".format(ec2_dir)
+  sftp = client.open_sftp()
+  for item in ["crux", "HUMAN.fasta.20170123", params["input_name"]]:
+    sftp.put(item, item)
+
+  index_dir = "HUMAN.fasta.20170123.index"
   sftp.mkdir(index_dir)
-  for item in os.listdir("HUMAN.fasta.20170123.index"):
-    sftp.put(item, "{0:s}/{1:s}".format(index_dir, item))
-  sftp.put(params["input_name"], ec2_dir)
-  end_time = time.time()
+  for item in os.listdir(index_dir):
+    path = "{0:s}/{1:s}".format(index_dir, item)
+    sftp.put(path, path)
 
   sftp.close()
-  duration = end_time - start_time
+  end_time = time.time()
 
-  return {
-    "duration": duration,
-    "billed_duration": duration,
-    "memory_used": 0,
-    "cost": 0,
-    "client": client
-  }
+  cexec(client, "sudo chmod +x crux")
+
+  duration = end_time - start_time
+  results = calculate_results(duration)
+  results["client"] = client
+  return results
 
 
 def run_analyze(client, params):
+  print("Running Tide")
   arguments = [
     "--num-threads", str(params["analyze_spectra"]["num_threads"]),
     "--txt-output", "T",
     "--concat", "T",
   ]
   start_time = time.time()
-  command = "./crux tide-search {0:s} HUMAN.fasta.20170123.index {1:s}".format(params["input_name"], " ".join(arguments))
-  (stdin, stdout, stderr) = client.execute_command(command)
-  print("stdin", stdin)
-  print("stdout", stdout)
-  print("stderr", stderr)
+  command = "sudo ./crux tide-search {0:s} HUMAN.fasta.20170123.index {1:s}".format(params["input_name"], " ".join(arguments))
+  cexec(client, command)
   end_time = time.time()
   duration = end_time - start_time
 
-  return {
-    "duration": duration,
-    "billed_duration": duration,
-    "memory_used": 0,
-    "cost": 0
-  }
+  return calculate_results(duration)
 
 
 def run_percolator(client, params):
+  print("Running Percolator")
   arguments = [
     "--subset-max-train", str(params["percolator"]["max_train"]),
     "--quick-validation", "T",
   ]
 
   start_time = time.time()
-  (stdin, stdout, stderr) = client.execute_command("./crux percolator {0:s} {1:s}".format("crux-output/tide-search.txt"), " ".join(arguments))
-  print("stdin", stdin)
-  print("stdout", stdout)
-  print("stderr", stderr)
+  cexec(client, "sudo ./crux percolator {0:s} {1:s}".format("crux-output/tide-search.txt", " ".join(arguments)))
   end_time = time.time()
   duration = end_time - start_time
-
-  return {
-    "duration": duration,
-    "billed_duration": duration,
-    "memory_used": 0,
-    "cost": 0
-  }
+  return calculate_results(duration)
 
 
 def upload_results(client, params):
+  print("Uploading files to s3")
   start_time = time.time()
   for pep in ["decoy", "target"]:
     for item in ["peptides", "psms"]:
       file = "percolator.{0:s}.{1:s}.txt".format(pep, item)
-      client.execute_command("s3cmd put crux-output/{0:s} s3://maccoss-human-output-spectra/{0:s}".format(file))
+      cexec(client, "s3cmd put crux-output/{0:s} s3://maccoss-human-output-spectra/{0:s}".format(file))
   end_time = time.time()
   duration = end_time - start_time
 
-  return {
-    "duration": duration,
-    "billed_duration": duration,
-    "memory_used": 0,
-    "cost": 0
-  }
+  return calculate_results(duration)
+
+
+def terminate_instance(instance, params):
+  start_time = time.time()
+  instance.terminate()
+  instance.wait_until_terminated()
+  end_time = time.time()
+  duration = end_time - start_time
+
+  return calculate_results(duration)
 
 
 def ec2_benchmark(params):
   clear_buckets(params)
+  stats = []
+
   create_stats = create_instance(params)
+  stats.append(create_stats)
+
   instance = create_stats["instance"]
   setup_stats = setup_instance(instance, params)
+  stats.append(setup_stats)
+
   client = setup_stats["client"]
   analyze_stats = run_analyze(client, params)
-  percolator_stats = run_percolator(client, params)
-  upload_stats = upload_results(client, params)
+  stats.append(setup_stats)
 
-  return (create_stats, setup_stats, analyze_stats, percolator_stats, upload_stats)
+  percolator_stats = run_percolator(client, params)
+  stats.append(percolator_stats)
+
+  upload_stats = upload_results(client, params)
+  stats.append(upload_stats)
+
+  terminate_stats = terminate_instance(instance, params)
+  stats.append(terminate_stats)
+
+  total_stats = calculate_total_stats(stats)
+  print("END RESULTS")
+  print_stats(total_stats)
+
+  return (create_stats, setup_stats, analyze_stats, percolator_stats, upload_stats, terminate_stats, total_stats)
 
 #############################
 #           MAIN            #
