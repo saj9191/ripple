@@ -33,7 +33,7 @@ def run_percolator(bucket_name, spectra_file, max_train):
   ]
 
   command = "cd /tmp; ./crux percolator {0:s} {1:s}".format(spectra_file, " ".join(arguments))
-  subprocess.call(command, shell=True)
+  subprocess.check_output(command, shell=True)
 
   done = False
   while not done:

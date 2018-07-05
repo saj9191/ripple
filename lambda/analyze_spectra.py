@@ -44,7 +44,7 @@ def analyze_spectra(bucket_name, spectra_file, num_threads):
   ]
 
   command = "cd /tmp; ./crux tide-search {0:s} HUMAN.fasta.20170123.index {1:s}".format(spectra_file, " ".join(arguments))
-  subprocess.call(command, shell=True)
+  subprocess.check_output(command, shell=True)
 
   done = False
   while not done:
