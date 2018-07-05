@@ -490,7 +490,7 @@ def calculate_results(duration, cost):
   milliseconds = duration * 1000
   return {
     "billed_duration": milliseconds,
-    "cost": (float(duration) * cost) / 3600,
+    "cost": (float(duration) * cost) / 60,
     "max_duration": milliseconds,
     "memory_used": 0
   }
