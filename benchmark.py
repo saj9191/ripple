@@ -589,8 +589,8 @@ def setup_instance(ec2, instance, params):
     sftp.put(item, item)
 
   sftp.close()
-  command = "cd aws-scripts-mon; cp awscreds.template awscreds.conf; echo 'AWSAccessKeyId={0:s}\nAWSSecretKey={1:s}' >> awscreds.conf"
-  cexec(client, command)
+#  command = "cd aws-scripts-mon; cp awscreds.template awscreds.conf; echo 'AWSAccessKeyId={0:s}\nAWSSecretKey={1:s}' >> awscreds.conf"
+#  cexec(client, command)
   end_time = time.time()
 
   duration = end_time - start_time
@@ -631,13 +631,18 @@ def run_percolator(client, params):
 
 def upload_results(client, params):
   print("Uploading files to s3")
+  bucket_name = "maccoss-human-output-spectra"
   start_time = time.time()
   for pep in ["decoy", "target"]:
     for item in ["peptides", "psms"]:
       file = "percolator.{0:s}.{1:s}.txt".format(pep, item)
-      cexec(client, "s3cmd put crux-output/{0:s} s3://maccoss-human-output-spectra/{0:s}".format(file))
+      cexec(client, "s3cmd put crux-output/{0:s} s3://{1:s}/{0:s}".format(file, bucket_name))
   end_time = time.time()
   duration = end_time - start_time
+
+  s3 = setup_connection("s3", params)
+  bucket = s3.Bucket(bucket_name)
+  assert(sum(1 for _ in bucket.objects.all()) == 4)
 
   return calculate_results(duration, params["ec2"]["cost"])
 
