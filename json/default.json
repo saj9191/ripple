@@ -6,6 +6,7 @@
 	"lambda": false,
   "timeout": 300,
   "ec2": {
+    "cost": 0.0464,
     "key": "maccoss",
 		"security": "sg-4ea90530",
 		"subnet": "subnet-03990a59",

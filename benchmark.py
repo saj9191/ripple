@@ -470,6 +470,7 @@ def lambda_benchmark(params):
   wait_for_completion(upload_timestamp, params)
   return parse_logs(params, upload_timestamp, upload_duration)
 
+
 #############################
 #           EC2             #
 #############################
@@ -485,11 +486,11 @@ class Ec2Stage(Enum):
   TOTAL = 6
 
 
-def calculate_results(duration):
+def calculate_results(duration, cost):
   milliseconds = duration * 1000
   return {
     "billed_duration": milliseconds,
-    "cost": (float(duration) * 0.0464) / 3600,
+    "cost": (float(duration) * cost) / 3600,
     "max_duration": milliseconds,
     "memory_used": 0
   }
@@ -523,18 +524,12 @@ def create_instance(params):
   print("Waiting for instance to initiate")
   instance.wait_until_running()
   print("Wait for status checks")
-  instance_status = list(ec2.meta.client.describe_instance_status(InstanceIds=[instance.id])["InstanceStatuses"])[0]
-  while instance_status["InstanceStatus"]["Details"][0]["Status"] == "initializing":
-    instance_status = list(ec2.meta.client.describe_instance_status(InstanceIds=[instance.id])["InstanceStatuses"])[0]
-    time.sleep(1)
-  assert(instance_status["InstanceStatus"]["Details"][0]["Status"] == "passed")
-
-  instance.reload()
   end_time = time.time()
   duration = end_time - start_time
 
-  results = calculate_results(duration)
+  results = calculate_results(duration, 0)
   results["instance"] = instance
+  results["ec2"] = ec2
   return results
 
 
@@ -544,12 +539,22 @@ def cexec(client, command):
   return stdout.read()
 
 
-def setup_instance(instance, params):
+def setup_instance(ec2, instance, params):
+  start_time = time.time()
+
+  instance_status = list(ec2.meta.client.describe_instance_status(InstanceIds=[instance.id])["InstanceStatuses"])[0]
+  while instance_status["InstanceStatus"]["Details"][0]["Status"] == "initializing":
+    instance_status = list(ec2.meta.client.describe_instance_status(InstanceIds=[instance.id])["InstanceStatuses"])[0]
+    time.sleep(1)
+  assert(instance_status["InstanceStatus"]["Details"][0]["Status"] == "passed")
+
+  instance.reload()
+
   client = paramiko.SSHClient()
   pem = params["ec2"]["key"] + ".pem"
   key = paramiko.RSAKey.from_private_key_file(pem)
   client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-  start_time = time.time()
+
   client.connect(
       instance.public_ip_address,
       username="ec2-user",
@@ -577,7 +582,7 @@ def setup_instance(instance, params):
   cexec(client, "sudo chmod +x crux")
 
   duration = end_time - start_time
-  results = calculate_results(duration)
+  results = calculate_results(duration, params["ec2"]["cost"])
   results["client"] = client
   return results
 
@@ -595,7 +600,7 @@ def run_analyze(client, params):
   end_time = time.time()
   duration = end_time - start_time
 
-  return calculate_results(duration)
+  return calculate_results(duration, params["ec2"]["cost"])
 
 
 def run_percolator(client, params):
@@ -609,7 +614,7 @@ def run_percolator(client, params):
   cexec(client, "sudo ./crux percolator {0:s} {1:s}".format("crux-output/tide-search.txt", " ".join(arguments)))
   end_time = time.time()
   duration = end_time - start_time
-  return calculate_results(duration)
+  return calculate_results(duration, params["ec2"]["cost"])
 
 
 def upload_results(client, params):
@@ -622,7 +627,7 @@ def upload_results(client, params):
   end_time = time.time()
   duration = end_time - start_time
 
-  return calculate_results(duration)
+  return calculate_results(duration, params["ec2"]["cost"])
 
 
 def terminate_instance(instance, params):
@@ -632,7 +637,7 @@ def terminate_instance(instance, params):
   end_time = time.time()
   duration = end_time - start_time
 
-  return calculate_results(duration)
+  return calculate_results(duration, 0)
 
 
 def ec2_benchmark(params):
@@ -643,7 +648,8 @@ def ec2_benchmark(params):
   stats.append(create_stats)
 
   instance = create_stats["instance"]
-  setup_stats = setup_instance(instance, params)
+  ec2 = create_stats["ec2"]
+  setup_stats = setup_instance(ec2, instance, params)
   stats.append(setup_stats)
 
   client = setup_stats["client"]
