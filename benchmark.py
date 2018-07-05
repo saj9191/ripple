@@ -197,17 +197,18 @@ def sort_spectra(name):
 
   line = f.readline()
   while line:
-    m = SPECTRA.match(line)
-    if m:
-      if mass is not None:
-        spectra.append((mass, "".join(spectrum)))
-        mass = None
-        spectrum = []
+    if not line.startswith("H"):
+      m = SPECTRA.match(line)
+      if m:
+        if mass is not None:
+          spectra.append((mass, "".join(spectrum)))
+          mass = None
+          spectrum = []
 
-    m = MASS.match(line)
-    if m:
-      mass = float(m.group(2))
-    spectrum.append(line)
+      m = MASS.match(line)
+      if m:
+        mass = float(m.group(2))
+      spectrum.append(line)
     line = f.readline()
 
   f.close()
