@@ -29,11 +29,14 @@ class BenchmarkException(Exception):
 def check_output(params):
   bucket_name = "maccoss-human-output-spectra"
   s3 = setup_connection("s3", params)
-  for key in CHECKS:
-    obj = s3.Object(bucket_name, key)
-    content = obj.get()["Body"].read().decode("utf-8")
-    num_lines = len(content.split("\n"))
-    assert(num_lines == key[params["input_name"]]["num_lines"])
+  for pep in ["decoy", "target"]:
+    for item in ["peptides", "psms"]:
+      key = "percolator.{0:s}.{1:s}.txt".format(pep, item)
+      output_file = "percolator.{0:s}.{1:s}.{2:f}.txt".format(pep, item, params["now"])
+      obj = s3.Object(bucket_name, output_file)
+      content = obj.get()["Body"].read().decode("utf-8")
+      num_lines = len(content.split("\n"))
+      assert(num_lines == CHECKS[key][params["input_name"]]["num_lines"])
 
 
 def run(params):
@@ -663,10 +666,6 @@ def upload_results(client, params):
       cexec(client, "s3cmd put crux-output/{0:s} s3://{1:s}/{2:s}".format(input_file, bucket_name, output_file))
   end_time = time.time()
   duration = end_time - start_time
-
-  s3 = setup_connection("s3", params)
-  bucket = s3.Bucket(bucket_name)
-  assert(sum(1 for _ in bucket.objects.all()) == 4)
 
   return calculate_results(duration, MEMORY_PARAMETERS["ec2"][params["ec2"]["type"]])
 
