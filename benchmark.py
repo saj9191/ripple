@@ -568,7 +568,7 @@ def setup_instance(ec2, instance, params):
   )
 
   sftp = client.open_sftp()
-  items = [params["input_name"]]
+  items = ["sorted_{0:s}".format(params["input_name"])]
   if not params["ec2"]["use_ami"]:
     cexec(client, "cd /etc/yum.repos.d; sudo wget http://s3tools.org/repo/RHEL_6/s3tools.repo")
     cexec(client, "sudo yum -y install s3cmd")
@@ -607,7 +607,7 @@ def run_analyze(client, params):
     "--concat", "T",
   ]
   start_time = time.time()
-  command = "sudo ./crux tide-search {0:s} HUMAN.fasta.20170123.index {1:s}".format(params["input_name"], " ".join(arguments))
+  command = "sudo ./crux tide-search sorted_{0:s} HUMAN.fasta.20170123.index {1:s}".format(params["input_name"], " ".join(arguments))
   cexec(client, command)
   end_time = time.time()
   duration = end_time - start_time
@@ -662,6 +662,9 @@ def terminate_instance(instance, client, params):
 def ec2_benchmark(params):
   clear_buckets(params)
   stats = []
+
+  if params["sort"]:
+    sort_spectra(params["input_name"])
 
   create_stats = create_instance(params)
   stats.append(create_stats)
