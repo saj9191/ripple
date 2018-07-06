@@ -62,6 +62,10 @@ def run(params):
 
   for i in range(iterations):
     print("Iteration {0:d}".format(i))
+    now = time.time()
+    key = "{0:f}_{1:s}".format(now, params["input_name"])
+    params["input_key"] = key
+    params["now"] = now
     done = False
     while not done:
       try:
@@ -244,7 +248,7 @@ def upload_input(params):
   key = "sorted_{0:s}".format(params["input_name"])
   s3 = setup_connection("s3", params)
   start = time.time()
-  s3.Object(bucket_name, key).put(Body=open(key, 'rb'))
+  s3.Object(bucket_name, params["input_key"]).put(Body=open(key, 'rb'))
   end = time.time()
   obj = s3.Object(bucket_name, key)
   timestamp = obj.last_modified.timestamp() * 1000
@@ -583,7 +587,7 @@ def setup_instance(ec2, instance, params):
   )
 
   sftp = client.open_sftp()
-  items = ["sorted_{0:s}".format(params["input_name"])]
+  items = []
   if not params["ec2"]["use_ami"]:
     cexec(client, "cd /etc/yum.repos.d; sudo wget http://s3tools.org/repo/RHEL_6/s3tools.repo")
     cexec(client, "sudo yum -y install s3cmd")
@@ -599,6 +603,7 @@ def setup_instance(ec2, instance, params):
       path = "{0:s}/{1:s}".format(index_dir, item)
       sftp.put(path, path)
 
+  sftp.put("sorted_{0:s}".format(params["input_name"]), params["input_key"])
   for item in items:
     sftp.put(item, item)
 
@@ -624,7 +629,7 @@ def run_analyze(client, params):
     "--concat", "T",
   ]
   start_time = time.time()
-  command = "sudo ./crux tide-search sorted_{0:s} HUMAN.fasta.20170123.index {1:s}".format(params["input_name"], " ".join(arguments))
+  command = "sudo ./crux tide-search sorted_{0:s} HUMAN.fasta.20170123.index {1:s}".format(params["input_key"], " ".join(arguments))
   cexec(client, command)
   end_time = time.time()
   duration = end_time - start_time
@@ -653,8 +658,9 @@ def upload_results(client, params):
   start_time = time.time()
   for pep in ["decoy", "target"]:
     for item in ["peptides", "psms"]:
-      file = "percolator.{0:s}.{1:s}.txt".format(pep, item)
-      cexec(client, "s3cmd put crux-output/{0:s} s3://{1:s}/{0:s}".format(file, bucket_name))
+      input_file = "percolator.{0:s}.{1:s}.txt".format(pep, item)
+      output_file = "percolator.{0:s}.{1:s}.{2:f}.txt".format(pep, item, params["now"])
+      cexec(client, "s3cmd put crux-output/{0:s} s3://{1:s}/{2:s}".format(input_file, bucket_name, output_file))
   end_time = time.time()
   duration = end_time - start_time
 

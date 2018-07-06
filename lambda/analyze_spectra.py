@@ -7,6 +7,7 @@ import util
 
 INPUT_FILE = util.spectra_regex("ms2")
 
+
 def analyze_spectra(bucket_name, spectra_file, num_threads):
   util.clear_tmp()
   m = INPUT_FILE.match(spectra_file)
@@ -33,7 +34,8 @@ def analyze_spectra(bucket_name, spectra_file, num_threads):
     with open("/tmp/HUMAN.fasta.20170123.index/{0:s}".format(index_file), "wb") as f:
       database_bucket.download_fileobj(index_file, f)
 
-  output_dir = "/tmp/crux-output-{0:s}".format(m.group(1))
+  ts = m.group(1)
+  output_dir = "/tmp/crux-output-{0:s}".format(ts)
   print(spectra_file, subprocess.check_output("cat /tmp/{0:s} | grep MS1Intensity | wc -l".format(spectra_file), shell=True))
 
   arguments = [
@@ -57,13 +59,12 @@ def analyze_spectra(bucket_name, spectra_file, num_threads):
     print(output_file, subprocess.check_output('cat {0:s} | grep "<spectrum_q" | wc -l'.format(output_file), shell=True))
     output = open(output_file).read()
     output_bucket.put_object(Key=spectra_file.replace(".ms2", ".txt"), Body=str.encode(output))
-    result = True
   else:
-    result = False
+    print("ERROR", output_file, "does not exist")
+
 
 def handler(event, context):
   bucket_name = event["Records"][0]["s3"]["bucket"]["name"]
   spectra_file = event["Records"][0]["s3"]["object"]["key"]
   params = json.loads(open("analyze_spectra.json").read())
   analyze_spectra(bucket_name, spectra_file, params["num_threads"])
-
