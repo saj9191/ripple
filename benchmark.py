@@ -563,7 +563,7 @@ def create_instance(params):
       "ResourceType": "instance",
       "Tags": [{
         "Key": "Name",
-        "Value": "maccoss-benchmark-{0:f}".format(time.time())
+        "Value": "maccoss-benchmark-{0:f}".format(params["now"])
       }]
     }]
   )
