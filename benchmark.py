@@ -236,7 +236,9 @@ def upload_input(params):
   obj = s3.Object(bucket_name, key)
   timestamp = obj.last_modified.timestamp() * 1000
   print(key, "last modified", timestamp)
-  return int(timestamp), end - start
+  seconds = end - start
+  milliseconds = seconds * 1000
+  return int(timestamp), milliseconds
 
 
 def check_objects(client, bucket_name, prefix, count, timeout):
