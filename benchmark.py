@@ -88,6 +88,7 @@ def run(params):
     print("")
 
     check_output(params)
+    clear_buckets(params)
 
   print("END RESULTS ({0:d} ITERATIONS)".format(iterations))
   for stage in stages:
@@ -145,9 +146,31 @@ def setup_connection(service, params):
 
 def clear_buckets(params):
   s3 = setup_connection("s3", params)
-  for bucket_name in ["maccoss-human-input-spectra", "maccoss-human-split-spectra", "maccoss-human-output-spectra"]:
-    bucket = s3.Bucket(bucket_name)
-    bucket.objects.all().delete()
+
+  obj = s3.Object("maccoss-human-input-spectra", params["input_key"])
+  obj.delete()
+
+  bucket = s3.Bucket("maccoss-human-split-spectra")
+  split_regex = re.compile("spectra-{0:f}-.*".format(params["now"]))
+  split_count = 0
+  for obj in bucket.objects.all():
+    if split_regex.match(obj.key):
+      split_count += 1
+      obj.delete()
+
+  print("Deleted", split_count, "split objects")
+
+  bucket = s3.Bucket("maccoss-human-output-spectra")
+  output_count = 0
+  combine_regex = re.compile("combined-spectra-{0:f}-.*".format(params["now"]))
+  percolator_regex = re.compile(".*-{0:f}-.*.txt".format(params["now"]))
+
+  for obj in bucket.objects.all():
+    if combine_regex.match(obj) or percolator_regex.match(obj):
+      output_count += 1
+      obj.delete()
+
+  print("Deleted", output_count, "output objects")
 
 
 #############################
@@ -488,7 +511,6 @@ def parse_logs(params, upload_timestamp, upload_duration):
 
 
 def lambda_benchmark(params):
-  clear_buckets(params)
   [upload_timestamp, upload_duration] = upload_input(params)
   wait_for_completion(upload_timestamp, params)
   return parse_logs(params, upload_timestamp, upload_duration)
@@ -683,7 +705,6 @@ def terminate_instance(instance, client, params):
 
 
 def ec2_benchmark(params):
-  clear_buckets(params)
   stats = []
 
   if params["sort"]:
