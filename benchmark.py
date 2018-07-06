@@ -12,6 +12,7 @@ import time
 
 MASS = re.compile("Z\s+([0-9\.]+)\s+([0-9\.]+)")
 MEMORY_PARAMETERS = json.loads(open("json/memory.json").read())
+CHECKS = json.loads(open("json/checks.json").read())
 REPORT = re.compile(".*Duration:\s([0-9\.]+)\sms.*Billed Duration:\s([0-9\.]+)\sms.*Memory Size:\s([0-9]+)\sMB.*Max Memory Used:\s([0-9]+)\sMB.*")
 SPECTRA = re.compile("S\s+([0-9\.]+)\s+([0-9\.]+)\s+([0-9\.]+)*")
 STAT_FIELDS = ["cost", "max_duration", "billed_duration", "memory_used"]
@@ -23,6 +24,16 @@ STAT_FIELDS = ["cost", "max_duration", "billed_duration", "memory_used"]
 
 class BenchmarkException(Exception):
   pass
+
+
+def check_output(params):
+  bucket_name = "maccoss-human-output-spectra"
+  s3 = setup_connection("s3", params)
+  for key in CHECKS:
+    obj = s3.Object(bucket_name, key)
+    content = obj.get()["Body"].read().decode("utf-8")
+    num_lines = len(content.split("\n"))
+    assert(num_lines == key[params["input_name"]]["num_lines"])
 
 
 def run(params):
@@ -68,6 +79,8 @@ def run(params):
 
     print("--------------------------")
     print("")
+
+    check_output(params)
 
   print("END RESULTS ({0:d} ITERATIONS)".format(iterations))
   for stage in stages:
