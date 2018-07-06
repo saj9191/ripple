@@ -307,8 +307,8 @@ def fetch(client, num_events, log_name, start_time, filter_pattern, extra_args={
 def fetch_events(client, num_events, log_name, start_time, filter_pattern, extra_args={}):
   events = fetch(client, num_events, log_name, start_time, filter_pattern, extra_args)
   if len(events) != num_events:
-    error_events = fetch(client, num_events - len(events), log_name, start_time, "*Task timed out after*", extra_args)
-    raise BenchmarkException(log_name, "has", len(error_events), "timeouts", extra_args)
+    #  error_events = fetch(client, num_events - len(events), log_name, start_time, "*Task timed out after*", extra_args)
+    raise BenchmarkException("sad")  # log_name, "has", len(error_events), "timeouts", extra_args)
   return events
 
 
@@ -583,10 +583,12 @@ def setup_instance(ec2, instance, params):
     for item in os.listdir(index_dir):
       path = "{0:s}/{1:s}".format(index_dir, item)
       sftp.put(path, path)
-    cexec(client, "sudo chmod +x crux")
 
   for item in items:
     sftp.put(item, item)
+
+  if not params["ec2"]["use_ami"]:
+    cexec(client, "sudo chmod +x crux")
 
   sftp.close()
 #  command = "cd aws-scripts-mon; cp awscreds.template awscreds.conf; echo 'AWSAccessKeyId={0:s}\nAWSSecretKey={1:s}' >> awscreds.conf"
