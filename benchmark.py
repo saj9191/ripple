@@ -314,7 +314,7 @@ def fetch_events(client, num_events, log_name, start_time, filter_pattern, extra
 
 def calculate_cost(duration, memory_size):
   # Cost per 100ms
-  millisecond_cost = MEMORY_PARAMETERS[str(memory_size)]
+  millisecond_cost = MEMORY_PARAMETERS["lambda"][str(memory_size)]
   return int(duration / 100) * millisecond_cost
 
 
@@ -594,7 +594,7 @@ def setup_instance(ec2, instance, params):
   end_time = time.time()
 
   duration = end_time - start_time
-  results = calculate_results(duration, params["ec2"]["cost"])
+  results = calculate_results(duration, MEMORY_PARAMETERS["ec2"][params["ec2"]["type"]])
   results["client"] = client
   return results
 
@@ -612,7 +612,7 @@ def run_analyze(client, params):
   end_time = time.time()
   duration = end_time - start_time
 
-  return calculate_results(duration, params["ec2"]["cost"])
+  return calculate_results(duration, MEMORY_PARAMETERS["ec2"][params["ec2"]["type"]])
 
 
 def run_percolator(client, params):
@@ -626,7 +626,8 @@ def run_percolator(client, params):
   cexec(client, "sudo ./crux percolator {0:s} {1:s}".format("crux-output/tide-search.txt", " ".join(arguments)))
   end_time = time.time()
   duration = end_time - start_time
-  return calculate_results(duration, params["ec2"]["cost"])
+
+  return calculate_results(duration, MEMORY_PARAMETERS["ec2"][params["ec2"]["type"]])
 
 
 def upload_results(client, params):
@@ -644,7 +645,7 @@ def upload_results(client, params):
   bucket = s3.Bucket(bucket_name)
   assert(sum(1 for _ in bucket.objects.all()) == 4)
 
-  return calculate_results(duration, params["ec2"]["cost"])
+  return calculate_results(duration, MEMORY_PARAMETERS["ec2"][params["ec2"]["type"]])
 
 
 def terminate_instance(instance, client, params):
