@@ -158,7 +158,7 @@ def setup_connection(service, params):
 def clear_buckets(params):
   s3 = setup_connection("s3", params)
 
-  ts = str(params["now"])
+  ts = "{0:f}".format(params["now"])
   for bn in ["input", "split", "output"]:
     count = 0
     bucket_name = "maccoss-human-{0:s}-spectra".format(bn)
