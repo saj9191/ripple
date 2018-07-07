@@ -38,7 +38,7 @@ def check_output(params):
       content = obj.get()["Body"].read().decode("utf-8")
       num_lines = len(content.split("\n"))
       print(num_lines, CHECKS[key][params["input_name"]]["num_lines"])
-      assert(num_lines > 10)#== CHECKS[key][params["input_name"]]["num_lines"])
+      assert(num_lines > 10)  # == CHECKS[key][params["input_name"]]["num_lines"])
 
   combine_regex = re.compile("combined-spectra-{0:f}-.*".format(params["now"]))
 
@@ -49,6 +49,7 @@ def check_output(params):
       num_lines = len(content.split("\n"))
       print(num_lines, CHECKS["combined"][params["input_name"]]["num_lines"])
       assert(num_lines > 10)
+
 
 def run(params):
   git_output = subprocess.check_output("git log --oneline | head -n 1", shell=True).decode("utf-8").strip()
@@ -318,7 +319,6 @@ def check_objects(client, bucket_name, prefix, count, timeout, params):
 def wait_for_completion(start_time, params):
   client = setup_client("s3", params)
   bucket_name = "maccoss-human-output-spectra"
-  ts = params["now"]
 
   overhead = 3.5  # Give ourselves time as we need to wait for the split and analyze functions to finish.
   check_objects(client, bucket_name, "combined", 1, params["combine_spectra_results"]["timeout"] * overhead, params)
