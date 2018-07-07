@@ -31,12 +31,13 @@ def check_output(params):
   s3 = setup_connection("s3", params)
   for pep in ["decoy", "target"]:
     for item in ["peptides", "psms"]:
-      key = "percolator.{0:s}.{1:s}.txt".format(pep, item)
+      #  key = "percolator.{0:s}.{1:s}.txt".format(pep, item)
       output_file = "percolator.{0:s}.{1:s}.{2:f}.txt".format(pep, item, params["now"])
+      print("looking for", output_file)
       obj = s3.Object(bucket_name, output_file)
       content = obj.get()["Body"].read().decode("utf-8")
       num_lines = len(content.split("\n"))
-      assert(num_lines == CHECKS[key][params["input_name"]]["num_lines"])
+      assert(num_lines > 0)
 
 
 def run(params):
@@ -652,9 +653,10 @@ def run_analyze(client, params):
     "--num-threads", str(params["analyze_spectra"]["num_threads"]),
     "--txt-output", "T",
     "--concat", "T",
+    "--output-dir", "tide-output",
   ]
   start_time = time.time()
-  command = "sudo ./crux tide-search sorted_{0:s} HUMAN.fasta.20170123.index {1:s}".format(params["input_key"], " ".join(arguments))
+  command = "sudo ./crux tide-search {0:s} HUMAN.fasta.20170123.index {1:s}".format(params["input_key"], " ".join(arguments))
   cexec(client, command)
   end_time = time.time()
   duration = end_time - start_time
@@ -670,7 +672,7 @@ def run_percolator(client, params):
   ]
 
   start_time = time.time()
-  cexec(client, "sudo ./crux percolator {0:s} {1:s}".format("crux-output/tide-search.txt", " ".join(arguments)))
+  cexec(client, "sudo ./crux percolator {0:s} {1:s}".format("tide-output/tide-search.txt", " ".join(arguments)))
   end_time = time.time()
   duration = end_time - start_time
 
