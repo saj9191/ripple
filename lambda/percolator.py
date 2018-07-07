@@ -41,8 +41,9 @@ def run_percolator(bucket_name, spectra_file, max_train):
     done = len(process_output.split("\n")) == 1
     time.sleep(1)
 
+  print(subprocess.check_output("ls -l {0:s}".format(output_dir), shell=True))
   for item in ["target.psms", "decoy.psms", "target.peptides", "decoy.peptides"]:
-    s3.Object(bucket_name, "{0:s}-{1:s}-{2:d}.txt".format(item, ts, num_files)).put(Body=open("{0:s}/percolator.{1:s}.txt".format(output_dir, item), 'rb'))
+    s3.Object(bucket_name, "percolator.{0:s}.{1:s}.txt".format(item, ts)).put(Body=open("{0:s}/percolator.{1:s}.txt".format(output_dir, item), 'rb'))
 
 def handler(event, context):
   bucket_name = event["Records"][0]["s3"]["bucket"]["name"]

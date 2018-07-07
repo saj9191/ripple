@@ -6,6 +6,7 @@ RESULT_FILE = util.spectra_regex("txt")
 
 def combine_files(s3, bucket_name, keys, temp_file):
   f = open(temp_file, "w")
+  keys.sort()
 
   for i in range(len(keys)):
     key = keys[i]

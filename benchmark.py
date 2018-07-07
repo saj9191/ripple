@@ -31,14 +31,24 @@ def check_output(params):
   s3 = setup_connection("s3", params)
   for pep in ["decoy", "target"]:
     for item in ["peptides", "psms"]:
-      #  key = "percolator.{0:s}.{1:s}.txt".format(pep, item)
+      key = "percolator.{0:s}.{1:s}.txt".format(pep, item)
       output_file = "percolator.{0:s}.{1:s}.{2:f}.txt".format(pep, item, params["now"])
       print("looking for", output_file)
       obj = s3.Object(bucket_name, output_file)
       content = obj.get()["Body"].read().decode("utf-8")
       num_lines = len(content.split("\n"))
-      assert(num_lines > 0)
+      print(num_lines, CHECKS[key][params["input_name"]]["num_lines"])
+      assert(num_lines > 10)#== CHECKS[key][params["input_name"]]["num_lines"])
 
+  combine_regex = re.compile("combined-spectra-{0:f}-.*".format(params["now"]))
+
+  bucket = s3.Bucket(bucket_name)
+  for obj in bucket.objects.all():
+    if combine_regex.match(obj.key):
+      content = obj.get()["Body"].read().decode("utf-8")
+      num_lines = len(content.split("\n"))
+      print(num_lines, CHECKS["combined"][params["input_name"]]["num_lines"])
+      assert(num_lines > 10)
 
 def run(params):
   git_output = subprocess.check_output("git log --oneline | head -n 1", shell=True).decode("utf-8").strip()
@@ -81,15 +91,15 @@ def run(params):
         for i in range(len(results)):
           stats[i].append(results[i])
         done = True
-      except BenchmarkException:
-        print("Error during iteration {0:d}".format(i))
+      except BenchmarkException as e:
+        print("Error during iteration {0:d}".format(i), e)
         done = False
-
-    print("--------------------------")
-    print("")
+        clear_buckets(params)
 
     check_output(params)
     clear_buckets(params)
+    print("--------------------------")
+    print("")
 
   print("END RESULTS ({0:d} ITERATIONS)".format(iterations))
   for stage in stages:
@@ -148,30 +158,16 @@ def setup_connection(service, params):
 def clear_buckets(params):
   s3 = setup_connection("s3", params)
 
-  obj = s3.Object("maccoss-human-input-spectra", params["input_key"])
-  obj.delete()
-
-  bucket = s3.Bucket("maccoss-human-split-spectra")
-  split_regex = re.compile("spectra-{0:f}-.*".format(params["now"]))
-  split_count = 0
-  for obj in bucket.objects.all():
-    if split_regex.match(obj.key):
-      split_count += 1
-      obj.delete()
-
-  print("Deleted", split_count, "split objects")
-
-  bucket = s3.Bucket("maccoss-human-output-spectra")
-  output_count = 0
-  combine_regex = re.compile("combined-spectra-{0:f}-.*".format(params["now"]))
-  percolator_regex = re.compile(".*-{0:f}-.*.txt".format(params["now"]))
-
-  for obj in bucket.objects.all():
-    if combine_regex.match(obj) or percolator_regex.match(obj):
-      output_count += 1
-      obj.delete()
-
-  print("Deleted", output_count, "output objects")
+  ts = str(params["now"])
+  for bn in ["input", "split", "output"]:
+    count = 0
+    bucket_name = "maccoss-human-{0:s}-spectra".format(bn)
+    bucket = s3.Bucket(bucket_name)
+    for obj in bucket.objects.all():
+      if ts in obj.key:
+        obj.delete()
+        count += 1
+    print("Deleted", count, bn, "objects")
 
 
 #############################
@@ -277,7 +273,7 @@ def upload_input(params):
   start = time.time()
   s3.Object(bucket_name, params["input_key"]).put(Body=open(key, 'rb'))
   end = time.time()
-  obj = s3.Object(bucket_name, key)
+  obj = s3.Object(bucket_name, params["input_key"])
   timestamp = obj.last_modified.timestamp() * 1000
   print(key, "last modified", timestamp)
   seconds = end - start
@@ -285,26 +281,36 @@ def upload_input(params):
   return int(timestamp), milliseconds
 
 
-def check_objects(client, bucket_name, prefix, count, timeout):
+def check_objects(client, bucket_name, prefix, count, timeout, params):
   done = False
   suffix = ""
   if count > 1:
     suffix = "s"
 
+  # There's apparently a stupid bug where str(timestamp) has more significant
+  # digits than "{0:f}:.format(timestmap)
+  # eg. spectra-1530978873.960075-1-0-58670073.txt 1530978873.9600754
+  ts = "{0:f}".format(params["now"])
+
   start = datetime.datetime.now()
+  s3 = setup_connection("s3", params)
+  bucket = s3.Bucket("maccoss-human-output-spectra")
   while not done:
-    response = client.list_objects(
-      Bucket=bucket_name,
-      Prefix=prefix
-    )
-    done = (("Contents" in response) and (len(response["Contents"]) == count))
+    c = 0
+    now = time.time()
+    for obj in bucket.objects.all():
+      # print(obj.key, ts, obj.key.startswith(prefix), ts in obj.key)
+      if obj.key.startswith(prefix) and ts in obj.key:
+        c += 1
+    # print("count", c, count)
+    done = (c == count)
     end = datetime.datetime.now()
     now = end.strftime("%H:%M:%S")
     if not done:
       print("{0:s}: Waiting for {1:s} function{2:s}...".format(now, prefix, suffix))
       if (end - start).total_seconds() > timeout:
         raise BenchmarkException("Could not find bucket {0:s} prefix {1:s}".format(bucket_name, prefix))
-      time.sleep(60)
+      time.sleep(30)
     else:
       print("{0:s}: Found {1:s} function{2:s}".format(now, prefix, suffix))
 
@@ -312,13 +318,14 @@ def check_objects(client, bucket_name, prefix, count, timeout):
 def wait_for_completion(start_time, params):
   client = setup_client("s3", params)
   bucket_name = "maccoss-human-output-spectra"
+  ts = params["now"]
 
   overhead = 3.5  # Give ourselves time as we need to wait for the split and analyze functions to finish.
-  check_objects(client, bucket_name, "combined", 1, params["combine_spectra_results"]["timeout"] * overhead)
-  check_objects(client, bucket_name, "decoy", 2, params["percolator"]["timeout"] * overhead)
+  check_objects(client, bucket_name, "combined", 1, params["combine_spectra_results"]["timeout"] * overhead, params)
+  check_objects(client, bucket_name, "percolator.decoy", 2,  params["percolator"]["timeout"] * overhead, params)
 
   target_timeout = 30  # Target should be created around the same time as decoys
-  check_objects(client, bucket_name, "target", 2, target_timeout)
+  check_objects(client, bucket_name, "percolator.target", 2, target_timeout, params)
   print("")
 
 
@@ -353,6 +360,7 @@ def fetch(client, num_events, log_name, start_time, filter_pattern, extra_args={
 def fetch_events(client, num_events, log_name, start_time, filter_pattern, extra_args={}):
   events = fetch(client, num_events, log_name, start_time, filter_pattern, extra_args)
   if len(events) != num_events:
+    print(log_name, len(events), num_events)
     #  error_events = fetch(client, num_events - len(events), log_name, start_time, "*Task timed out after*", extra_args)
     raise BenchmarkException("sad")  # log_name, "has", len(error_events), "timeouts", extra_args)
   return events
