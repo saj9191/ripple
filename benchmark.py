@@ -106,6 +106,7 @@ def run(params):
   for stage in stages:
     print("AVERAGE {0:s} RESULTS".format(stage.name))
     print_stats(calculate_average_results(stats[stage.value], iterations))
+    print("")
 
 
 def calculate_total_stats(stats):
