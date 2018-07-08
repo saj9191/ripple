@@ -29,16 +29,21 @@ class BenchmarkException(Exception):
 def check_output(params):
   bucket_name = "maccoss-human-output-spectra"
   s3 = setup_connection("s3", params)
-  for pep in ["decoy", "target"]:
-    for item in ["peptides", "psms"]:
-      key = "percolator.{0:s}.{1:s}.txt".format(pep, item)
-      output_file = "percolator.{0:s}.{1:s}.{2:f}.txt".format(pep, item, params["now"])
-      print("looking for", output_file)
-      obj = s3.Object(bucket_name, output_file)
-      content = obj.get()["Body"].read().decode("utf-8")
-      num_lines = len(content.split("\n"))
-      print(num_lines, CHECKS[key][params["input_name"]]["num_lines"])
-      assert(num_lines > 10)  # == CHECKS[key][params["input_name"]]["num_lines"])
+  for item in ["peptides", "psms"]:
+    key = "percolator.target.{0:s}.txt".format(item)
+    output_file = "percolator.target.{0:s}.{1:f}.txt".format(item, params["now"])
+    obj = s3.Object(bucket_name, output_file)
+    content = obj.get()["Body"].read().decode("utf-8")
+
+    lines = content.split("\n")[1:]
+    qvalues = list(map(lambda line: float(line.split("\t")[7]), lines))
+    count = len(list(filter(lambda qvalue: qvalue <= CHECKS["qvalue"], qvalues)))
+
+    checks = CHECKS[key][params["input_name"]]
+    num_qvalues = checks["num_qvalues"]
+    var = checks["var"]
+
+    assert((num_qvalues - var) <= count and count <= (num_qvalues + var))
 
   combine_regex = re.compile("combined-spectra-{0:f}-.*".format(params["now"]))
 

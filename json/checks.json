@@ -1,0 +1,40 @@
+{
+  "qvalue": 0.01,
+  "percolator.target.peptides.txt": {
+    "20170403_HelaQC_01.ms2": {
+      "num_lines": 16873
+    },
+    "ALS.ms2": {
+      "num_lines": 66291
+    },
+    "TN_CSF_062617_03.ms2": {
+      "num_qvalues": 3103,
+      "var": 10
+    }
+  },
+  "percolator.target.psms.txt": {
+    "20170403_HelaQC_01.ms2": {
+      "num_lines": 22037
+    },
+    "ALS.ms2": {
+      "num_lines": 127782
+    },
+    "TN_CSF_062617_03.ms2": {
+      "num_qvalues": 3103,
+      "var": 10
+    }
+  },
+  "tide": {
+    "20170403_HelaQC_01.ms2": {
+      "num_lines": 135041,
+      "var": 10
+    },
+    "ALS.ms2": {
+      "num_lines": 0
+    },
+    "TN_CSF_062617_03.ms2": {
+      "num_lines": 251401,
+      "var": 10
+    }
+  }
+}
