@@ -29,6 +29,8 @@ class BenchmarkException(Exception):
 def check_output(params):
   bucket_name = "maccoss-human-output-spectra"
   s3 = setup_connection("s3", params)
+  var = CHECKS["var"]
+
   for item in ["peptides", "psms"]:
     key = "percolator.target.{0:s}.txt".format(item)
     output_file = "percolator.target.{0:s}.{1:f}.txt".format(item, params["now"])
@@ -42,9 +44,9 @@ def check_output(params):
 
     checks = CHECKS[key][params["input_name"]]
     num_qvalues = checks["num_qvalues"]
-    var = checks["var"]
+    v = num_qvalues * var
 
-    assert((num_qvalues - var) <= count and count <= (num_qvalues + var))
+    assert((num_qvalues - v) <= count and count <= (num_qvalues + v))
 
   tide_file = "tide-search.{0:f}.txt".format(params["now"])
   bucket = s3.Bucket(bucket_name)
@@ -54,8 +56,8 @@ def check_output(params):
       num_lines = len(content.split("\n"))
       checks = CHECKS["tide"][params["input_name"]]
       expected_num_lines = checks["num_lines"]
-      var = checks["var"]
-      assert((expected_num_lines - var) <= num_lines and num_lines <= (expected_num_lines + var))
+      v = expected_num_lines * var
+      assert((expected_num_lines - v) <= num_lines and num_lines <= (expected_num_lines + v))
 
 
 def run(params):
