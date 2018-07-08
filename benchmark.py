@@ -36,6 +36,7 @@ def check_output(params):
     content = obj.get()["Body"].read().decode("utf-8")
 
     lines = content.split("\n")[1:]
+    lines = list(filter(lambda line: len(line.strip()) > 0, lines))
     qvalues = list(map(lambda line: float(line.split("\t")[7]), lines))
     count = len(list(filter(lambda qvalue: qvalue <= CHECKS["qvalue"], qvalues)))
 
