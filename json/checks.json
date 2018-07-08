@@ -2,7 +2,8 @@
   "qvalue": 0.01,
   "percolator.target.peptides.txt": {
     "20170403_HelaQC_01.ms2": {
-      "num_lines": 16873
+      "num_qvalues": 9858,
+      "var": 10
     },
     "ALS.ms2": {
       "num_lines": 66291
@@ -14,7 +15,8 @@
   },
   "percolator.target.psms.txt": {
     "20170403_HelaQC_01.ms2": {
-      "num_lines": 22037
+      "num_qvalues": 13325,
+      "var": 10
     },
     "ALS.ms2": {
       "num_lines": 127782
@@ -30,7 +32,8 @@
       "var": 10
     },
     "ALS.ms2": {
-      "num_lines": 0
+      "num_qvalues": 3103,
+      "var": 10
     },
     "TN_CSF_062617_03.ms2": {
       "num_lines": 251401,
