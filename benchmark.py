@@ -328,6 +328,7 @@ def wait_for_completion(start_time, params):
   target_timeout = 30  # Target should be created around the same time as decoys
   check_objects(client, bucket_name, "percolator.target", 2, target_timeout, params)
   print("")
+  time.sleep(10)  # Wait a little to make sure percolator logs are on the server
 
 
 def fetch(client, num_events, log_name, start_time, filter_pattern, extra_args={}):
