@@ -52,13 +52,16 @@ def check_output(params):
     if obj.key == tide_file:
       content = obj.get()["Body"].read().decode("utf-8")
       num_lines = len(content.split("\n"))
-      print(num_lines, CHECKS["tide"][params["input_name"]]["num_lines"])
-      assert(num_lines > 10)
+      checks = CHECKS["tide"][params["input_name"]]
+      expected_num_lines = checks["num_lines"]
+      var = checks["var"]
+      assert((expected_num_lines - var) <= num_lines and num_lines <= (expected_num_lines + var))
 
 
 def run(params):
   git_output = subprocess.check_output("git log --oneline | head -n 1", shell=True).decode("utf-8").strip()
   print("Current Git commit", git_output)
+  print("")
   iterations = params["iterations"]
   client = setup_client("lambda", params)
   # https://github.com/boto/boto3/issues/1104#issuecomment-305136266
