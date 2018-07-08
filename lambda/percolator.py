@@ -5,13 +5,13 @@ import subprocess
 import time
 import util
 
-INPUT_FILE = re.compile("combined-spectra-([0-9\.]+)-([0-9]+).txt")
+INPUT_FILE = re.compile("tide-search-([0-9\.]+).txt")
+
 
 def run_percolator(bucket_name, spectra_file, max_train):
   util.clear_tmp()
   m = INPUT_FILE.match(spectra_file)
   ts = m.group(1)
-  num_files = int(m.group(2))
   s3 = boto3.resource('s3')
   database_bucket = s3.Bucket("maccoss-human-fasta")
   spectra_bucket = s3.Bucket(bucket_name)
@@ -44,6 +44,7 @@ def run_percolator(bucket_name, spectra_file, max_train):
   print(subprocess.check_output("ls -l {0:s}".format(output_dir), shell=True))
   for item in ["target.psms", "decoy.psms", "target.peptides", "decoy.peptides"]:
     s3.Object(bucket_name, "percolator.{0:s}.{1:s}.txt".format(item, ts)).put(Body=open("{0:s}/percolator.{1:s}.txt".format(output_dir, item), 'rb'))
+
 
 def handler(event, context):
   bucket_name = event["Records"][0]["s3"]["bucket"]["name"]

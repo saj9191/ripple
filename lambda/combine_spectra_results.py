@@ -4,6 +4,7 @@ import util
 
 RESULT_FILE = util.spectra_regex("txt")
 
+
 def combine_files(s3, bucket_name, keys, temp_file):
   f = open(temp_file, "w")
   keys.sort()
@@ -17,6 +18,7 @@ def combine_files(s3, bucket_name, keys, temp_file):
     else:
       results = spectra.split("\n")[1:]
       f.write("\n".join(results))
+
 
 def combine(bucket_name, output_file):
   util.clear_tmp()
@@ -43,13 +45,13 @@ def combine(bucket_name, output_file):
     print(ts, "Combining", len(matching_keys), num_files)
     temp_file = "/tmp/combine.txt"
     combine_files(s3, bucket_name, matching_keys, temp_file)
-    s3.Object(bucket_name, "combined-spectra-{0:s}-{1:d}.txt".format(ts, num_files)).put(Body=open(temp_file, 'rb'))
+    s3.Object(bucket_name, "tide-search-{0:s}.txt".format(ts)).put(Body=open(temp_file, 'rb'))
   else:
     print(ts, "Passing", len(matching_keys), num_files)
     pass
+
 
 def handler(event, context):
   bucket_name = event["Records"][0]["s3"]["bucket"]["name"]
   output_file = event["Records"][0]["s3"]["object"]["key"]
   combine(bucket_name, output_file)
-

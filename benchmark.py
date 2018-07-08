@@ -45,14 +45,13 @@ def check_output(params):
 
     assert((num_qvalues - var) <= count and count <= (num_qvalues + var))
 
-  combine_regex = re.compile("combined-spectra-{0:f}-.*".format(params["now"]))
-
+  tide_file = "tide-search.{0:f}.txt".format(params["now"])
   bucket = s3.Bucket(bucket_name)
   for obj in bucket.objects.all():
-    if combine_regex.match(obj.key):
+    if obj.key == tide_file:
       content = obj.get()["Body"].read().decode("utf-8")
       num_lines = len(content.split("\n"))
-      print(num_lines, CHECKS["combined"][params["input_name"]]["num_lines"])
+      print(num_lines, CHECKS["tide"][params["input_name"]]["num_lines"])
       assert(num_lines > 10)
 
 
@@ -703,6 +702,11 @@ def upload_results(client, params):
       input_file = "percolator.{0:s}.{1:s}.txt".format(pep, item)
       output_file = "percolator.{0:s}.{1:s}.{2:f}.txt".format(pep, item, params["now"])
       cexec(client, "s3cmd put crux-output/{0:s} s3://{1:s}/{2:s}".format(input_file, bucket_name, output_file))
+
+  input_file = "tide-output/tide-search.txt"
+  output_file = "tide-search.{0:f}.txt".format(params["now"])
+  cexec(client, "s3cmd put {0:s} s3://{1:s}/{2:s}".format(input_file, bucket_name, output_file))
+
   end_time = time.time()
   duration = end_time - start_time
 
