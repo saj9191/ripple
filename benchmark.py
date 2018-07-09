@@ -332,7 +332,7 @@ def wait_for_completion(start_time, params):
   bucket_name = "maccoss-human-output-spectra"
 
   overhead = 3.5  # Give ourselves time as we need to wait for the split and analyze functions to finish.
-  check_objects(client, bucket_name, "combined", 1, params["combine_spectra_results"]["timeout"] * overhead, params)
+  check_objects(client, bucket_name, "tide-search", 1, params["combine_spectra_results"]["timeout"] * overhead, params)
   check_objects(client, bucket_name, "percolator.decoy", 2,  params["percolator"]["timeout"] * overhead, params)
 
   target_timeout = 30  # Target should be created around the same time as decoys

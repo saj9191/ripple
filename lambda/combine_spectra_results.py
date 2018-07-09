@@ -27,27 +27,19 @@ def combine(bucket_name, output_file):
   num_bytes = int(m.group(4))
 
   s3 = boto3.resource("s3")
-  bucket = s3.Bucket(bucket_name)
 
   file_format = "spectra-{0:s}-([0-9]+)-([0-9]+)-{1:d}.txt".format(ts, num_bytes)
-  file_regex = re.compile(file_format)
+  key_regex = re.compile(file_format)
 
-  matching_keys = []
-  num_files = None
-  for key in bucket.objects.all():
-    m = file_regex.match(key.key)
-    if m:
-      matching_keys.append(key.key)
-      if int(m.group(2)) == num_bytes:
-        num_files = int(m.group(1)) + 1
+  [have_all_files, matching_keys] = util.have_all_files(bucket_name, num_bytes, key_regex)
 
-  if len(matching_keys) == num_files:
-    print(ts, "Combining", len(matching_keys), num_files)
+  if have_all_files:
+    print(ts, "Combining", len(matching_keys))
     temp_file = "/tmp/combine.txt"
     combine_files(s3, bucket_name, matching_keys, temp_file)
     s3.Object(bucket_name, "tide-search-{0:s}.txt".format(ts)).put(Body=open(temp_file, 'rb'))
   else:
-    print(ts, "Passing", len(matching_keys), num_files)
+    print(ts, "Passing", len(matching_keys))
     pass
 
 

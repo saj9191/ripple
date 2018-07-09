@@ -3,12 +3,12 @@ import json
 import re
 import util
 
-SPECTRA = re.compile("S\s")
+
 INPUT_FILE = re.compile("([0-9\.]+)_.*")
 
 
-def save_spectra(output_bucket, header, spectra, ts, end_bytes, num_bytes, num_files, final):
-  key = "spectra-{0:f}-{1:d}-{2:d}-{3:d}.ms2".format(ts, num_files, end_bytes, num_bytes)
+def save_spectra(output_bucket, header, spectra, ts, start_bytes, num_bytes, num_files, final):
+  key = "spectra-{0:f}-{1:d}-{2:d}-{3:d}.ms2".format(ts, num_files, start_bytes, num_bytes)
   output_bucket.put_object(Key=key, Body=str.encode("{0:s}\n{1:s}".format(header, spectra)))
 
 
@@ -36,7 +36,7 @@ def split_spectra(bucket_name, key, batch_size, chunk_size):
       parts = stream.split("\n")
       header = parts[0]
       stream = "\n".join(parts[1:])
-    parts = SPECTRA.split(stream)
+    parts = util.SPECTRA_START.split(stream)
     parts = list(filter(lambda p: len(p) > 0, parts))
     if len(parts) > 1:
       spectra += parts[:-1]
