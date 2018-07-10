@@ -64,7 +64,7 @@ def check_counts(s3, params):
 
   input_file = util.file_name(params["now"], 1, 1, 1, "ms2")
   obj = s3.Object("maccoss-human-input-spectra", input_file)
-  #check_sort(s3, params)
+  # check_sort(s3, params)
   expected_count = get_count(obj)
 
   for bn in ["split", "sort", "merge"]:
@@ -129,30 +129,32 @@ def check_output(params):
     #  assert((num_qvalues - v) <= count and count <= (num_qvalues + v))
 
 
+def get_stages(params):
+  stages = MergeLambdaStage
+  if not params["lambda"]:
+    stages = Ec2Stage
+  elif not params["merge"]:
+    stages = NonMergeLambdaStage
+  return stages
+
+
 def run(params):
   git_output = subprocess.check_output("git log --oneline | head -n 1", shell=True).decode("utf-8").strip()
-  print("Current Git commit", git_output)
-  print("")
+  print("Current Git commit", git_output, "\n")
   iterations = params["iterations"]
   client = setup_client("lambda", params)
   # https://github.com/boto/boto3/issues/1104#issuecomment-305136266
   # boto3 by default retries even if max timeout is set. This is a workaround.
   client.meta.events._unique_id_handlers['retry-config-lambda']['handler']._checker.__dict__['_max_attempts'] = 0
+  params["sorted_name"] = "sorted_{0:s}".format(params["input_name"])
 
   if params["sort"]:
     sort_spectra(params["input_name"])
-
-  params["sorted_name"] = "sorted_{0:s}".format(params["input_name"])
-
   if params["lambda"]:
     upload_functions(client, params)
 
   stats = []
-
-  stages = LambdaStage
-  if not params["lambda"]:
-    stages = Ec2Stage
-
+  stages = get_stages(params)
   for stage in stages:
     stats.append([])
 
@@ -169,19 +171,15 @@ def run(params):
           results = lambda_benchmark(params)
         else:
           results = ec2_benchmark(params)
-
         for i in range(len(results)):
           stats[i].append(results[i])
         done = True
       except BenchmarkException as e:
         print("Error during iteration {0:d}".format(i), e)
-        done = False
         clear_buckets(params)
-
     check_output(params)
     clear_buckets(params)
-    print("--------------------------")
-    print("")
+    print("--------------------------\n")
 
   print("END RESULTS ({0:d} ITERATIONS)".format(iterations))
   for stage in stages:
@@ -258,19 +256,23 @@ def clear_buckets(params):
 #         LAMBDA            #
 #############################
 
-class LambdaStage(Enum):
+class NonMergeLambdaStage(Enum):
   LOAD = 0
   SPLIT = 1
   ANALYZE = 2
   COMBINE = 3
   PERCOLATOR = 4
   TOTAL = 5
-  # SORT = 2
-  # MERGE = 3
-  # ANALYZE = 4
-  # COMBINE = 5
-  # PERCOLATOR = 6
-  # TOTAL = 7
+
+
+class MergeLambdaStage(Enum):
+  LOAD = 0
+  SORT = 2
+  MERGE = 3
+  ANALYZE = 4
+  COMBINE = 5
+  PERCOLATOR = 6
+  TOTAL = 7
 
 
 def upload_functions(client, params):
@@ -610,8 +612,9 @@ def parse_logs(params, upload_timestamp, upload_duration):
   }
   stats.append(load_stats)
   stats.append(parse_split_logs(client, upload_timestamp, params))
-#  stats.append(parse_sort_logs(client, upload_timestamp, params))
-#  stats.append(parse_merge_logs(client, upload_timestamp, params))
+  if params["merge"]:
+    stats.append(parse_sort_logs(client, upload_timestamp, params))
+    stats.append(parse_merge_logs(client, upload_timestamp, params))
   stats.append(parse_analyze_logs(client, upload_timestamp, params))
   stats.append(parse_combine_logs(client, upload_timestamp, params))
   stats.append(parse_percolator_logs(client, upload_timestamp, params))
