@@ -5,34 +5,33 @@ import subprocess
 import time
 import util
 
-INPUT_FILE = re.compile("tide-search-([0-9\.]+).txt")
 
-
-def run_percolator(bucket_name, spectra_file, max_train):
+def run_percolator(bucket_name, key, params):
   util.clear_tmp()
-  m = INPUT_FILE.match(spectra_file)
-  ts = m.group(1)
+  m = util.parse_file_name(key)
+  ts = m["timestamp"]
+
   s3 = boto3.resource('s3')
   database_bucket = s3.Bucket("maccoss-human-fasta")
   spectra_bucket = s3.Bucket(bucket_name)
 
-  with open("/tmp/{0:s}".format(spectra_file), "wb") as f:
-    spectra_bucket.download_fileobj(spectra_file, f)
+  with open("/tmp/{0:s}".format(key), "wb") as f:
+    spectra_bucket.download_fileobj(key, f)
 
   with open("/tmp/crux", "wb") as f:
     database_bucket.download_fileobj("crux", f)
 
   subprocess.call("chmod 755 /tmp/crux", shell=True)
 
-  output_dir = "/tmp/percolator-crux-output-{0:s}".format(m.group(1))
+  output_dir = "/tmp/percolator-crux-output-{0:f}".format(ts)
 
   arguments = [
-    "--subset-max-train", str(max_train),
+    "--subset-max-train", str(params["max_train"]),
     "--quick-validation", "T",
     "--output-dir", output_dir
   ]
 
-  command = "cd /tmp; ./crux percolator {0:s} {1:s}".format(spectra_file, " ".join(arguments))
+  command = "cd /tmp; ./crux percolator {0:s} {1:s}".format(key, " ".join(arguments))
   subprocess.check_output(command, shell=True)
 
   done = False
@@ -43,11 +42,11 @@ def run_percolator(bucket_name, spectra_file, max_train):
 
   print(subprocess.check_output("ls -l {0:s}".format(output_dir), shell=True))
   for item in ["target.psms", "decoy.psms", "target.peptides", "decoy.peptides"]:
-    s3.Object(bucket_name, "percolator.{0:s}.{1:s}.txt".format(item, ts)).put(Body=open("{0:s}/percolator.{1:s}.txt".format(output_dir, item), 'rb'))
+    s3.Object(params["output_bucket"], "percolator.{0:s}.{1:f}.txt".format(item, ts)).put(Body=open("{0:s}/percolator.{1:s}.txt".format(output_dir, item), 'rb'))
 
 
 def handler(event, context):
   bucket_name = event["Records"][0]["s3"]["bucket"]["name"]
-  spectra_file = event["Records"][0]["s3"]["object"]["key"]
+  key = event["Records"][0]["s3"]["object"]["key"]
   params = json.loads(open("percolator.json").read())
-  run_percolator(bucket_name, spectra_file, params["max_train"])
+  run_percolator(bucket_name, key, params)

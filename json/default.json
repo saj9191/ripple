@@ -3,7 +3,7 @@
   "iterations": 1,
   "region": "us-west-2",
 	"sort": false,
-	"lambda": false,
+	"lambda": true,
   "timeout": 300,
   "ec2": {
     "ami": "ami-6cbaed14",
@@ -21,23 +21,41 @@
     "chunk_size": 100000000,
     "memory_size": 1024,
     "name": "SplitSpectra",
+    "output_bucket": "maccoss-human-split-spectra",
+    "timeout": 300
+  },
+  "sort_spectra": {
+    "memory_size": 1024,
+    "name": "SortSpectra",
+    "output_bucket": "maccoss-human-sort-spectra",
+    "timeout": 300
+  },
+  "merge_spectra": {
+    "batch_size": 1000,
+    "chunk_size": 10000,
+    "memory_size": 1024,
+    "name": "MergeSpectra",
+    "output_bucket": "maccoss-human-merge-spectra",
     "timeout": 300
   },
   "analyze_spectra": {
     "memory_size": 1024,
     "name": "AnalyzeSpectra",
     "num_threads": 1,
+    "output_bucket": "maccoss-human-analyze-spectra",
     "timeout": 300
   },
   "combine_spectra_results": {
     "memory_size": 256,
-    "name": "CombineSpectraResults",
+    "name": "CombineSpectra",
+    "output_bucket": "maccoss-human-combine-spectra",
     "timeout": 300
   },
   "percolator": {
-    "max_train": 100000,
-    "memory_size": 1024,
+    "max_train": 50000,
+    "memory_size": 3008,
     "name": "Percolator",
+    "output_bucket": "maccoss-human-output-spectra",
     "timeout": 300
   }
 }

@@ -9,6 +9,7 @@ import paramiko
 import re
 import subprocess
 import time
+import util
 
 MASS = re.compile("Z\s+([0-9\.]+)\s+([0-9\.]+)")
 MEMORY_PARAMETERS = json.loads(open("json/memory.json").read())
@@ -26,11 +27,89 @@ class BenchmarkException(Exception):
   pass
 
 
+def get_count(obj):
+  content = obj.get()["Body"].read().decode("utf8")
+  return content.count("S\t")
+
+
+def check_sort(s3, params):
+  num_files = 42
+  keys = []
+  bucket_name = "maccoss-human-merge-spectra"
+  bucket = s3.Bucket(bucket_name)
+  now = "{0:f}".format(params["now"])
+  for obj in bucket.objects.all():
+    if now in obj.key:
+      keys.append(obj.key)
+
+  keys.sort(key=lambda k: int(k.split("-")[2]))
+  mass = 0
+  for key in keys:
+    obj = s3.Object(bucket_name, key)
+    content = obj.get()["Body"].read().decode("utf-8")
+    spectra = util.SPECTRA_START.split(content)
+    spectra = list(filter(lambda p: len(p) > 0, spectra))
+    for spectrum in spectra:
+      lines = spectrum.split("\n")
+      m = list(filter(lambda line: util.MASS.match(line), lines))
+      if len(m) == 0:
+        print(spectrum)
+      assert(len(m) > 0)
+      new_mass = float(util.MASS.match(m[0]).group(2))
+      assert(mass <= new_mass)
+      mass = new_mass
+
+def check_counts(s3, params):
+  now = "{0:f}".format(params["now"])
+
+  input_file = util.file_name(params["now"], 1, 1, 1, "ms2")
+  obj = s3.Object("maccoss-human-input-spectra", input_file)
+  check_sort(s3, params)
+  expected_count = get_count(obj)
+
+  for bn in ["split", "sort", "merge"]:
+    actual_count = 0
+    bucket_name = "maccoss-human-{0:s}-spectra".format(bn)
+    bucket = s3.Bucket(bucket_name)
+    for obj in bucket.objects.all():
+      if now in obj.key:
+        actual_count += get_count(obj)
+
+    if expected_count != actual_count:
+      print("bucket", bucket_name, "expected", expected_count, "actual", actual_count)
+
+  bucket_name = "maccoss-human-split-spectra"
+  bucket = s3.Bucket(bucket_name)
+  for obj in bucket.objects.all():
+    if now in obj.key:
+      other_obj = s3.Object("maccoss-human-sort-spectra", obj.key)
+      split_count = get_count(obj)
+      sort_count = get_count(other_obj)
+      if split_count != sort_count:
+        print(obj.key, "split", split_count, "sort", sort_count)
+
+
 def check_output(params):
-  bucket_name = "maccoss-human-output-spectra"
   s3 = setup_connection("s3", params)
   var = CHECKS["var"]
 
+  check_counts(s3, params)
+
+  tide_file = "spectra-{0:f}-1-1-1.txt".format(params["now"])
+  bucket_name = "maccoss-human-combine-spectra"
+  bucket = s3.Bucket(bucket_name)
+  for obj in bucket.objects.all():
+    if obj.key == tide_file:
+      content = obj.get()["Body"].read().decode("utf-8")
+      num_lines = len(content.split("\n"))
+      checks = CHECKS["tide"][params["input_name"]]
+      expected_num_lines = checks["num_lines"]
+      v = expected_num_lines * var
+      print("key", tide_file, "expected", expected_num_lines, "actual", num_lines)
+      #assert((expected_num_lines - v) <= num_lines and num_lines <= (expected_num_lines + v))
+
+  bucket_name = "maccoss-human-output-spectra"
+  bucket = s3.Bucket(bucket_name)
   for item in ["peptides", "psms"]:
     key = "percolator.target.{0:s}.txt".format(item)
     output_file = "percolator.target.{0:s}.{1:f}.txt".format(item, params["now"])
@@ -46,21 +125,19 @@ def check_output(params):
     num_qvalues = checks["num_qvalues"]
     v = num_qvalues * var
 
-    assert((num_qvalues - v) <= count and count <= (num_qvalues + v))
-
-  tide_file = "tide-search.{0:f}.txt".format(params["now"])
-  bucket = s3.Bucket(bucket_name)
-  for obj in bucket.objects.all():
-    if obj.key == tide_file:
-      content = obj.get()["Body"].read().decode("utf-8")
-      num_lines = len(content.split("\n"))
-      checks = CHECKS["tide"][params["input_name"]]
-      expected_num_lines = checks["num_lines"]
-      v = expected_num_lines * var
-      assert((expected_num_lines - v) <= num_lines and num_lines <= (expected_num_lines + v))
+    print("key", key, "expected", num_qvalues, "actual", count)
+    #assert((num_qvalues - v) <= count and count <= (num_qvalues + v))
 
 
 def run(params):
+  s3 = setup_connection("s3", params)
+  for bn in ["input", "split", "sort", "merge", "analyze", "output", "combine"]:
+    count = 0
+    bucket_name = "maccoss-human-{0:s}-spectra".format(bn)
+    bucket = s3.Bucket(bucket_name)
+    for obj in bucket.objects.all():
+      obj.delete()
+
   git_output = subprocess.check_output("git log --oneline | head -n 1", shell=True).decode("utf-8").strip()
   print("Current Git commit", git_output)
   print("")
@@ -150,7 +227,8 @@ def print_stats(stats):
 
 
 def get_credentials():
-  f = open("/home/shannon/.aws/credentials")
+  home = os.path.expanduser("~")
+  f = open("{0:s}/.aws/credentials".format(home))
   lines = f.readlines()
   access_key = lines[1].split("=")[1].strip()
   secret_key = lines[2].split("=")[1].strip()
@@ -189,14 +267,23 @@ def clear_buckets(params):
 class LambdaStage(Enum):
   LOAD = 0
   SPLIT = 1
-  ANALYZE = 2
-  COMBINE = 3
-  PERCOLATOR = 4
-  TOTAL = 5
+  SORT = 2
+  MERGE = 3
+  ANALYZE = 4
+  COMBINE = 5
+  PERCOLATOR = 6
+  TOTAL = 7
 
 
 def upload_functions(client, params):
-  functions = ["split_spectra", "analyze_spectra", "combine_spectra_results", "percolator"]
+  functions = [
+    "split_spectra",
+    "sort_spectra",
+    "merge_spectra",
+    "analyze_spectra",
+    "combine_spectra_results",
+    "percolator"
+  ]
 
   os.chdir("lambda")
   for function in functions:
@@ -206,7 +293,7 @@ def upload_functions(client, params):
     f.write(json.dumps(fparams))
     f.close()
 
-    subprocess.call("zip {0:s}.zip {0:s}.py {0:s}.json util.py".format(function), shell=True)
+    subprocess.call("zip {0:s}.zip {0:s}.py {0:s}.json ../util.py".format(function), shell=True)
 
     with open("{0:s}.zip".format(function), "rb") as f:
       zipped_code = f.read()
@@ -216,7 +303,6 @@ def upload_functions(client, params):
       ZipFile=zipped_code,
     )
     assert(response["ResponseMetadata"]["HTTPStatusCode"] == 200)
-
     response = client.update_function_configuration(
       FunctionName=fparams["name"],
       Timeout=fparams["timeout"],
@@ -225,6 +311,7 @@ def upload_functions(client, params):
     assert(response["ResponseMetadata"]["HTTPStatusCode"] == 200)
 
   os.chdir("..")
+  print("")
 
 
 def setup_client(service, params):
@@ -280,12 +367,12 @@ def sort_spectra(name):
 
 def upload_input(params):
   bucket_name = "maccoss-human-input-spectra"
-  key = "sorted_{0:s}".format(params["input_name"])
+  key = util.file_name(params["now"], 1, 1, 1, "ms2")
   s3 = setup_connection("s3", params)
   start = time.time()
-  s3.Object(bucket_name, params["input_key"]).put(Body=open(key, 'rb'))
+  s3.Object(bucket_name, key).put(Body=open(params["input_name"], 'rb'))
   end = time.time()
-  obj = s3.Object(bucket_name, params["input_key"])
+  obj = s3.Object(bucket_name, key)
   timestamp = obj.last_modified.timestamp() * 1000
   print(key, "last modified", timestamp)
   seconds = end - start
@@ -306,7 +393,7 @@ def check_objects(client, bucket_name, prefix, count, timeout, params):
 
   start = datetime.datetime.now()
   s3 = setup_connection("s3", params)
-  bucket = s3.Bucket("maccoss-human-output-spectra")
+  bucket = s3.Bucket(bucket_name)
   while not done:
     c = 0
     now = time.time()
@@ -329,10 +416,11 @@ def check_objects(client, bucket_name, prefix, count, timeout, params):
 
 def wait_for_completion(start_time, params):
   client = setup_client("s3", params)
-  bucket_name = "maccoss-human-output-spectra"
 
   overhead = 3.5  # Give ourselves time as we need to wait for the split and analyze functions to finish.
-  check_objects(client, bucket_name, "tide-search", 1, params["combine_spectra_results"]["timeout"] * overhead, params)
+  bucket_name = "maccoss-human-combine-spectra"
+  check_objects(client, bucket_name, "spectra", 1, params["combine_spectra_results"]["timeout"] * overhead, params)
+  bucket_name = "maccoss-human-output-spectra"
   check_objects(client, bucket_name, "percolator.decoy", 2,  params["percolator"]["timeout"] * overhead, params)
 
   target_timeout = 30  # Target should be created around the same time as decoys
@@ -407,12 +495,12 @@ def parse_split_logs(client, start_time, params):
   }
 
 
-def parse_analyze_logs(client, start_time, params):
+def parse_mult_logs(client, start_time, params, lambda_name):
   num_spectra = int(subprocess.check_output("cat sorted_{0:s} | grep 'S\s' | wc -l".format(params["input_name"]), shell=True).decode("utf-8").strip())
-  aparams = params["analyze_spectra"]
   batch_size = params["split_spectra"]["batch_size"]
+  lparams = params[lambda_name]
   num_lambdas = int((num_spectra + batch_size - 1) / batch_size)
-  events = fetch_events(client, num_lambdas, aparams["name"], start_time, "REPORT RequestId")
+  events = fetch_events(client, num_lambdas, lparams["name"], start_time, "REPORT RequestId")
   max_billed_duration = 0
   total_billed_duration = 0
   total_memory_used = 0  # TODO: Handle
@@ -429,9 +517,9 @@ def parse_analyze_logs(client, start_time, params):
     total_billed_duration += duration
     total_memory_used += memory_used
 
-  cost = calculate_cost(total_billed_duration, aparams["memory_size"])
+  cost = calculate_cost(total_billed_duration, lparams["memory_size"])
 
-  print("Analyze Spectra")
+  print(lambda_name)
   print("Min Timestamp", min_timestamp)
   print("Max Timestamp", max_timestamp)
   print("Max Billed Duration", max_billed_duration, "milliseconds")
@@ -445,6 +533,18 @@ def parse_analyze_logs(client, start_time, params):
     "memory_used": total_memory_used,
     "cost": cost
   }
+
+
+def parse_sort_logs(client, start_time, params):
+  return parse_mult_logs(client, start_time, params, "sort_spectra")
+
+
+def parse_merge_logs(client, start_time, params):
+  return parse_mult_logs(client, start_time, params, "merge_spectra")
+
+
+def parse_analyze_logs(client, start_time, params):
+  return parse_mult_logs(client, start_time, params, "analyze_spectra")
 
 
 def parse_combine_logs(client, start_time, params):
@@ -511,24 +611,19 @@ def parse_logs(params, upload_timestamp, upload_duration):
     "cost": 0
   }
   stats.append(load_stats)
-
-  split_stats = parse_split_logs(client, upload_timestamp, params)
-  stats.append(split_stats)
-
-  analyze_stats = parse_analyze_logs(client, upload_timestamp, params)
-  stats.append(analyze_stats)
-
-  combine_stats = parse_combine_logs(client, upload_timestamp, params)
-  stats.append(combine_stats)
-
-  percolator_stats = parse_percolator_logs(client, upload_timestamp, params)
-  stats.append(percolator_stats)
+  stats.append(parse_split_logs(client, upload_timestamp, params))
+  stats.append(parse_sort_logs(client, upload_timestamp, params))
+  stats.append(parse_merge_logs(client, upload_timestamp, params))
+  stats.append(parse_analyze_logs(client, upload_timestamp, params))
+  stats.append(parse_combine_logs(client, upload_timestamp, params))
+  stats.append(parse_percolator_logs(client, upload_timestamp, params))
 
   total_stats = calculate_total_stats(stats)
   print("END RESULTS")
   print_stats(total_stats)
+  stats.append(total_stats)
 
-  return (load_stats, split_stats, analyze_stats, combine_stats, percolator_stats, total_stats)
+  return stats
 
 
 def lambda_benchmark(params):

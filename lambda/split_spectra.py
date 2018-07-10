@@ -4,58 +4,66 @@ import re
 import util
 
 
-INPUT_FILE = re.compile("([0-9\.]+)_.*")
+def save_spectra(output_bucket, spectra, ts, file_id, byte_id, num_bytes):
+  key = util.file_name(ts, file_id, byte_id, num_bytes, "ms2")
+  output_bucket.put_object(Key=key, Body=str.encode(spectra))
 
 
-def save_spectra(output_bucket, header, spectra, ts, start_bytes, num_bytes, num_files, final):
-  key = "spectra-{0:f}-{1:d}-{2:d}-{3:d}.ms2".format(ts, num_files, start_bytes, num_bytes)
-  output_bucket.put_object(Key=key, Body=str.encode("{0:s}\n{1:s}".format(header, spectra)))
-
-
-def split_spectra(bucket_name, key, batch_size, chunk_size):
+def split_spectra(bucket_name, key, params):
   util.clear_tmp()
+  batch_size = params["batch_size"]
+  chunk_size = params["chunk_size"]
+
   s3 = boto3.resource("s3")
-  output_bucket = s3.Bucket("maccoss-human-split-spectra")
+  output_bucket = s3.Bucket(params["output_bucket"])
 
   obj = s3.Object(bucket_name, key)
   num_bytes = obj.content_length
   spectra = []
   remainder = ""
   header = None
-  m = INPUT_FILE.match(key)
-  ts = float(m.group(1))
+
+  m = util.parse_file_name(key)
+  ts = m["timestamp"]
 
   start_byte = 0
-  num_files = 0
+  file_id = 1
 
   while start_byte < num_bytes:
     end_byte = min(start_byte + chunk_size, num_bytes)
     stream = obj.get(Range="bytes={0:d}-{1:d}".format(start_byte, end_byte))["Body"].read().decode("utf-8")
     stream = remainder + stream
+
     if start_byte == 0:
       parts = stream.split("\n")
-      header = parts[0]
+      # Remove header
       stream = "\n".join(parts[1:])
-    parts = util.SPECTRA_START.split(stream)
-    parts = list(filter(lambda p: len(p) > 0, parts))
-    if len(parts) > 1:
-      spectra += parts[:-1]
-      while len(spectra) >= batch_size:
-        save_spectra(output_bucket, header, "S ".join(spectra[:batch_size]), ts, start_byte, num_bytes, num_files, False)
-        spectra = spectra[batch_size:]
-        num_files += 1
 
-    remainder = parts[-1]
+    [new_spectra, remainder] = util.parse_spectra(stream)
+
+    if len(new_spectra) > 1:
+      spectra += new_spectra
+      while len(spectra) >= batch_size:
+        if end_byte == num_bytes and len(spectra) <= batch_size and len(remainder.strip()) == 0:
+          start_byte = num_bytes
+        else:
+          if start_byte >= num_bytes:
+            print("ERROR", start_byte, num_bytes)
+          assert(start_byte < num_bytes)
+        save_spectra(output_bucket, "".join(spectra[:batch_size]), ts, file_id, start_byte, num_bytes)
+        spectra = spectra[batch_size:]
+        file_id += 1
+
     start_byte = end_byte + 1
 
-  print("number of files", num_files)
-  if len(spectra) > 0 or len(remainder) > 0:
-    parts = spectra + [remainder]
-    save_spectra(output_bucket, header, "S ".join(spectra), ts, num_bytes, num_bytes, num_files, True)
+  if len(remainder.strip()) > 0:
+    spectra = spectra + [remainder]
+  assert(len(spectra) > 0)
+  save_spectra(output_bucket, "".join(spectra), ts, file_id, num_bytes, num_bytes)
 
 
 def handler(event, context):
   bucket_name = event["Records"][0]["s3"]["bucket"]["name"]
   key = event["Records"][0]["s3"]["object"]["key"]
   params = json.loads(open("split_spectra.json").read())
-  split_spectra(bucket_name, key, params["batch_size"], params["chunk_size"])
+  split_spectra(bucket_name, key, params)

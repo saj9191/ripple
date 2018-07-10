@@ -5,19 +5,19 @@ import subprocess
 import time
 import util
 
-INPUT_FILE = util.spectra_regex("ms2")
 
-
-def analyze_spectra(bucket_name, spectra_file, num_threads):
+def analyze_spectra(bucket_name, key, params):
   util.clear_tmp()
-  m = INPUT_FILE.match(spectra_file)
+  m = util.parse_file_name(key)
   s3 = boto3.resource('s3')
+
   database_bucket = s3.Bucket("maccoss-human-fasta")
   spectra_bucket = s3.Bucket(bucket_name)
-  output_bucket = s3.Bucket("maccoss-human-output-spectra")
+  output_bucket = s3.Bucket(params["output_bucket"])
+  num_threads = params["num_threads"]
 
-  with open("/tmp/{0:s}".format(spectra_file), "wb") as f:
-    spectra_bucket.download_fileobj(spectra_file, f)
+  with open("/tmp/{0:s}".format(key), "wb") as f:
+    spectra_bucket.download_fileobj(key, f)
 
   with open("/tmp/HUMAN.fasta.20170123", "wb") as f:
     database_bucket.download_fileobj("HUMAN.fasta.20170123", f)
@@ -34,9 +34,8 @@ def analyze_spectra(bucket_name, spectra_file, num_threads):
     with open("/tmp/HUMAN.fasta.20170123.index/{0:s}".format(index_file), "wb") as f:
       database_bucket.download_fileobj(index_file, f)
 
-  ts = m.group(1)
-  output_dir = "/tmp/crux-output-{0:s}".format(ts)
-  print(spectra_file, subprocess.check_output("cat /tmp/{0:s} | grep MS1Intensity | wc -l".format(spectra_file), shell=True))
+  ts = m["timestamp"]
+  output_dir = "/tmp/crux-output-{0:f}".format(ts)
 
   arguments = [
     "--num-threads", str(num_threads),
@@ -45,7 +44,7 @@ def analyze_spectra(bucket_name, spectra_file, num_threads):
     "--output-dir", output_dir,
   ]
 
-  command = "cd /tmp; ./crux tide-search {0:s} HUMAN.fasta.20170123.index {1:s}".format(spectra_file, " ".join(arguments))
+  command = "cd /tmp; ./crux tide-search {0:s} HUMAN.fasta.20170123.index {1:s}".format(key, " ".join(arguments))
   subprocess.check_output(command, shell=True)
 
   done = False
@@ -56,15 +55,14 @@ def analyze_spectra(bucket_name, spectra_file, num_threads):
 
   output_file = "{0:s}/tide-search.txt".format(output_dir)
   if os.path.isfile(output_file):
-    print(output_file, subprocess.check_output('cat {0:s} | grep "<spectrum_q" | wc -l'.format(output_file), shell=True))
     output = open(output_file).read()
-    output_bucket.put_object(Key=spectra_file.replace(".ms2", ".txt"), Body=str.encode(output))
+    output_bucket.put_object(Key=key, Body=str.encode(output))
   else:
     print("ERROR", output_file, "does not exist")
 
 
 def handler(event, context):
   bucket_name = event["Records"][0]["s3"]["bucket"]["name"]
-  spectra_file = event["Records"][0]["s3"]["object"]["key"]
+  key = event["Records"][0]["s3"]["object"]["key"]
   params = json.loads(open("analyze_spectra.json").read())
-  analyze_spectra(bucket_name, spectra_file, params["num_threads"])
+  analyze_spectra(bucket_name, key, params)

@@ -1,8 +1,7 @@
 import boto3
+import json
 import re
 import util
-
-RESULT_FILE = util.spectra_regex("txt")
 
 
 def combine_files(s3, bucket_name, keys, temp_file):
@@ -20,24 +19,23 @@ def combine_files(s3, bucket_name, keys, temp_file):
       f.write("\n".join(results))
 
 
-def combine(bucket_name, output_file):
+def combine(bucket_name, key, params):
   util.clear_tmp()
-  m = RESULT_FILE.match(output_file)
-  ts = m.group(1)
-  num_bytes = int(m.group(4))
+  m = util.parse_file_name(key)
+  ts = m["timestamp"]
+  num_bytes = m["max_id"]
 
-  s3 = boto3.resource("s3")
-
-  file_format = "spectra-{0:s}-([0-9]+)-([0-9]+)-{1:d}.txt".format(ts, num_bytes)
-  key_regex = re.compile(file_format)
+  key_regex = util.get_key_regex(ts, num_bytes)
 
   [have_all_files, matching_keys] = util.have_all_files(bucket_name, num_bytes, key_regex)
 
   if have_all_files:
     print(ts, "Combining", len(matching_keys))
     temp_file = "/tmp/combine.txt"
+    s3 = boto3.resource("s3")
     combine_files(s3, bucket_name, matching_keys, temp_file)
-    s3.Object(bucket_name, "tide-search-{0:s}.txt".format(ts)).put(Body=open(temp_file, 'rb'))
+    file_name = util.file_name(ts, 1, 1, 1, "txt")
+    s3.Object(params["output_bucket"], file_name).put(Body=open(temp_file, 'rb'))
   else:
     print(ts, "Passing", len(matching_keys))
     pass
@@ -45,5 +43,6 @@ def combine(bucket_name, output_file):
 
 def handler(event, context):
   bucket_name = event["Records"][0]["s3"]["bucket"]["name"]
-  output_file = event["Records"][0]["s3"]["object"]["key"]
-  combine(bucket_name, output_file)
+  key = event["Records"][0]["s3"]["object"]["key"]
+  params = json.loads(open("combine_spectra_results.json").read())
+  combine(bucket_name, key, params)
