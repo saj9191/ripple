@@ -33,7 +33,6 @@ def get_count(obj):
 
 
 def check_sort(s3, params):
-  num_files = 42
   keys = []
   bucket_name = "maccoss-human-merge-spectra"
   bucket = s3.Bucket(bucket_name)
@@ -59,12 +58,13 @@ def check_sort(s3, params):
       assert(mass <= new_mass)
       mass = new_mass
 
+
 def check_counts(s3, params):
   now = "{0:f}".format(params["now"])
 
   input_file = util.file_name(params["now"], 1, 1, 1, "ms2")
   obj = s3.Object("maccoss-human-input-spectra", input_file)
-  check_sort(s3, params)
+  #check_sort(s3, params)
   expected_count = get_count(obj)
 
   for bn in ["split", "sort", "merge"]:
@@ -106,7 +106,7 @@ def check_output(params):
       expected_num_lines = checks["num_lines"]
       v = expected_num_lines * var
       print("key", tide_file, "expected", expected_num_lines, "actual", num_lines)
-      #assert((expected_num_lines - v) <= num_lines and num_lines <= (expected_num_lines + v))
+      #  assert((expected_num_lines - v) <= num_lines and num_lines <= (expected_num_lines + v))
 
   bucket_name = "maccoss-human-output-spectra"
   bucket = s3.Bucket(bucket_name)
@@ -126,18 +126,10 @@ def check_output(params):
     v = num_qvalues * var
 
     print("key", key, "expected", num_qvalues, "actual", count)
-    #assert((num_qvalues - v) <= count and count <= (num_qvalues + v))
+    #  assert((num_qvalues - v) <= count and count <= (num_qvalues + v))
 
 
 def run(params):
-  s3 = setup_connection("s3", params)
-  for bn in ["input", "split", "sort", "merge", "analyze", "output", "combine"]:
-    count = 0
-    bucket_name = "maccoss-human-{0:s}-spectra".format(bn)
-    bucket = s3.Bucket(bucket_name)
-    for obj in bucket.objects.all():
-      obj.delete()
-
   git_output = subprocess.check_output("git log --oneline | head -n 1", shell=True).decode("utf-8").strip()
   print("Current Git commit", git_output)
   print("")
@@ -149,6 +141,8 @@ def run(params):
 
   if params["sort"]:
     sort_spectra(params["input_name"])
+
+  params["sorted_name"] = "sorted_{0:s}".format(params["input_name"])
 
   if params["lambda"]:
     upload_functions(client, params)
@@ -249,7 +243,7 @@ def clear_buckets(params):
   s3 = setup_connection("s3", params)
 
   ts = "{0:f}".format(params["now"])
-  for bn in ["input", "split", "output"]:
+  for bn in ["input", "split", "sort", "merge", "analyze", "combine", "output"]:
     count = 0
     bucket_name = "maccoss-human-{0:s}-spectra".format(bn)
     bucket = s3.Bucket(bucket_name)
@@ -267,12 +261,16 @@ def clear_buckets(params):
 class LambdaStage(Enum):
   LOAD = 0
   SPLIT = 1
-  SORT = 2
-  MERGE = 3
-  ANALYZE = 4
-  COMBINE = 5
-  PERCOLATOR = 6
-  TOTAL = 7
+  ANALYZE = 2
+  COMBINE = 3
+  PERCOLATOR = 4
+  TOTAL = 5
+  # SORT = 2
+  # MERGE = 3
+  # ANALYZE = 4
+  # COMBINE = 5
+  # PERCOLATOR = 6
+  # TOTAL = 7
 
 
 def upload_functions(client, params):
@@ -370,7 +368,7 @@ def upload_input(params):
   key = util.file_name(params["now"], 1, 1, 1, "ms2")
   s3 = setup_connection("s3", params)
   start = time.time()
-  s3.Object(bucket_name, key).put(Body=open(params["input_name"], 'rb'))
+  s3.Object(bucket_name, key).put(Body=open(params["sorted_name"], 'rb'))
   end = time.time()
   obj = s3.Object(bucket_name, key)
   timestamp = obj.last_modified.timestamp() * 1000
@@ -612,8 +610,8 @@ def parse_logs(params, upload_timestamp, upload_duration):
   }
   stats.append(load_stats)
   stats.append(parse_split_logs(client, upload_timestamp, params))
-  stats.append(parse_sort_logs(client, upload_timestamp, params))
-  stats.append(parse_merge_logs(client, upload_timestamp, params))
+#  stats.append(parse_sort_logs(client, upload_timestamp, params))
+#  stats.append(parse_merge_logs(client, upload_timestamp, params))
   stats.append(parse_analyze_logs(client, upload_timestamp, params))
   stats.append(parse_combine_logs(client, upload_timestamp, params))
   stats.append(parse_percolator_logs(client, upload_timestamp, params))
