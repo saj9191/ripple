@@ -56,7 +56,11 @@ def get_next_spectra(lines, start_index):
   spectra = "S\t" + split[1]
 
   temp_lines = spectra.strip().split("\n")
+
   m = list(filter(lambda s: MASS.match(s), temp_lines))
+  if len(m) == 0:
+    print("ERROR", temp_lines, m)
+    return (-1, "", -1)
   assert(len(m) > 0)
   mass = float(MASS.match(m[0]).group(2))
 

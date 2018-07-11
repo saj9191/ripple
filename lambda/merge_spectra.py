@@ -1,8 +1,8 @@
 import boto3
 import json
-import re
 import time
 import util
+
 
 class Spectra:
   def __init__(self, obj, start_byte, num_bytes, spectra, remainder):
@@ -16,28 +16,32 @@ class Spectra:
 def extractMass(spectrum):
   lines = spectrum.split("\n")
   m = list(filter(lambda line: util.MASS.match(line), lines))
-  # assert(len(m) == 1) # TODO: Handle multiple later
-  first = m[0]
+  #  assert(len(m) == 1) # TODO: Handle multiple later
   mass = util.MASS.match(m[0]).group(2)
   return (float(mass), spectrum)
 
 
 def get_spectra(obj, start_byte, end_byte, num_bytes, remainder):
-  if start_byte >= num_bytes:
+  if len(remainder.strip()) == 0 and start_byte >= num_bytes:
     return ([], "")
 
-  end_byte = min(num_bytes, end_byte)
-  stream = obj.get(Range="bytes={0:d}-{1:d}".format(start_byte, end_byte))["Body"].read().decode("utf-8")
+  if start_byte < num_bytes:
+    end_byte = min(num_bytes, end_byte)
+    stream = obj.get(Range="bytes={0:d}-{1:d}".format(start_byte, end_byte))["Body"].read().decode("utf-8")
+  else:
+    stream = ""
+
   if len(remainder.strip()) > 0:
     stream = remainder + stream
 
   parts = util.SPECTRA_START.split(stream)
+  if len(parts) <= 1:
+    print(parts)
 
   # If the stream is "S\t123....", then parts will become ["", "123..."]
   if len(parts[0]) == 0:
     parts = parts[1:]
   parts = list(map(lambda p: "S\t" + p, parts))
-  s = "".join(parts)
 
   if end_byte < num_bytes:
     remainder = parts[-1]
@@ -47,7 +51,6 @@ def get_spectra(obj, start_byte, end_byte, num_bytes, remainder):
 
   spectra = list(map(lambda p: extractMass(p), parts))
   spectra.sort(key=util.getMass)
-
   return (spectra, remainder)
 
 
@@ -64,10 +67,16 @@ def createFileObjects(s3, bucket_name, matching_keys, chunk_size):
     num_bytes = obj.content_length
 
     start_byte = 0
-    end_byte = chunk_size
-    [spectra, remainder] = get_spectra(obj, start_byte, end_byte, num_bytes, "")
+    end_byte = 0
+    remainder = ""
+    spectra = []
+    while len(spectra) == 0:
+      end_byte = start_byte + chunk_size
+      [spectra, remainder] = get_spectra(obj, start_byte, end_byte, num_bytes, remainder)
+      start_byte = end_byte + 1
 
     files.append(Spectra(obj, end_byte, num_bytes, spectra, remainder))
+    print(matching_key, len(spectra))
 
   files.sort(key=lambda p: util.getMass(p.spectra[0]))
   return files
@@ -82,18 +91,17 @@ def merge_spectra(bucket_name, key, params):
 
   m = util.parse_file_name(key)
   ts = m["timestamp"]
-  num_bytes = m["max_id"]
+  max_bytes = m["max_id"]
 
-  print("MERGE", key)
-  if m["id"] != num_bytes:
+  if m["id"] != max_bytes:
     print(ts, "Passing")
     return
 
-  key_regex = util.get_key_regex(ts, num_bytes)
+  key_regex = util.get_key_regex(ts, max_bytes)
   have_all_files = False
   matching_keys = []
   while not have_all_files:
-    [have_all_files, matching_keys] = util.have_all_files(bucket_name, num_bytes, key_regex)
+    [have_all_files, matching_keys] = util.have_all_files(bucket_name, max_bytes, key_regex)
     time.sleep(1)
 
   print("Combining", len(matching_keys), "files", key)
@@ -118,7 +126,7 @@ def merge_spectra(bucket_name, key, params):
     f.spectra = f.spectra[1:]
     files = files[1:]
 
-    if len(f.spectra) == 0:
+    while len(f.spectra) == 0 and f.start_byte <= f.num_bytes:
       start_byte = f.start_byte
       end_byte = start_byte + chunk_size
       [fspectra, remainder] = get_spectra(f.obj, start_byte, end_byte, f.num_bytes, f.remainder)
@@ -137,12 +145,16 @@ def merge_spectra(bucket_name, key, params):
         after_files = files[index:]
       files = before_files + [f] + after_files
 
-  print("HELLO COUNT", count)
-  if len(spectra) > 0:
-    assert(file_id == len(matching_keys))
-    save_spectra(output_bucket, spectra, ts, file_id, num_files)
-  else:
-    assert(file_id > len(matching_keys))
+  while len(spectra) > 0:
+    length = min(batch_size, len(spectra))
+    s = spectra[:length]
+
+    save_spectra(output_bucket, s, ts, file_id, num_files)
+    spectra = spectra[length:]
+    if len(spectra) > 0:
+      file_id += 1
+
+  assert(file_id == len(matching_keys))
 
 
 def handler(event, context):
