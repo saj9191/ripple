@@ -2,9 +2,10 @@
   "input_name": "20170403_HelaQC_01.ms2",
   "iterations": 1,
   "region": "us-west-2",
-	"sort": false,
-	"lambda": true,
+  "sort": "yes",
+  "lambda": false,
   "timeout": 300,
+  "check_output": false,
   "ec2": {
     "ami": "ami-6cbaed14",
     "cost": 0.0464,
@@ -14,6 +15,7 @@
     "subnet": "subnet-03990a59",
     "timeout": 20,
     "type": "t2.medium",
+    "wait_for_tests": false,
     "use_ami": true
   },
   "split_spectra": {

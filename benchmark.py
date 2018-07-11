@@ -93,7 +93,7 @@ def check_output(params):
   s3 = setup_connection("s3", params)
   var = CHECKS["var"]
 
-  check_counts(s3, params)
+  # check_counts(s3, params)
 
   tide_file = "spectra-{0:f}-1-1-1.txt".format(params["now"])
   bucket_name = "maccoss-human-combine-spectra"
@@ -106,7 +106,7 @@ def check_output(params):
       expected_num_lines = checks["num_lines"]
       v = expected_num_lines * var
       print("key", tide_file, "expected", expected_num_lines, "actual", num_lines)
-      #  assert((expected_num_lines - v) <= num_lines and num_lines <= (expected_num_lines + v))
+      assert((expected_num_lines - v) <= num_lines and num_lines <= (expected_num_lines + v))
 
   bucket_name = "maccoss-human-output-spectra"
   bucket = s3.Bucket(bucket_name)
@@ -126,30 +126,97 @@ def check_output(params):
     v = num_qvalues * var
 
     print("key", key, "expected", num_qvalues, "actual", count)
-    #  assert((num_qvalues - v) <= count and count <= (num_qvalues + v))
+    assert((num_qvalues - v) <= count and count <= (num_qvalues + v))
 
 
 def get_stages(params):
   stages = MergeLambdaStage
   if not params["lambda"]:
     stages = Ec2Stage
-  elif not params["merge"]:
+  elif params["sort"] != "yes":
     stages = NonMergeLambdaStage
   return stages
 
 
-def run(params):
+def print_run_information():
   git_output = subprocess.check_output("git log --oneline | head -n 1", shell=True).decode("utf-8").strip()
   print("Current Git commit", git_output, "\n")
-  iterations = params["iterations"]
+
+
+def create_client(params):
   client = setup_client("lambda", params)
   # https://github.com/boto/boto3/issues/1104#issuecomment-305136266
   # boto3 by default retries even if max timeout is set. This is a workaround.
   client.meta.events._unique_id_handlers['retry-config-lambda']['handler']._checker.__dict__['_max_attempts'] = 0
-  params["sorted_name"] = "sorted_{0:s}".format(params["input_name"])
+  return client
 
-  if params["sort"]:
+
+def process_params(params):
+  params["output_bucket"] = params["percolator"]["output_bucket"]
+  if params["lambda"]:
+    params["input_bucket"] = "maccoss-human-input-spectra"
+  else:
+    params["input_bucket"] = "maccoss-human-output-spectra"
+    params["sort"] = "no"
+
+  if params["sort"] == "pre":
+    params["input"] = "sort_{0:s}".format(params["input_name"])
+  else:
+    params["input"] = params["input_name"]
+
+  if params["sort"] != "yes":
+    params["split_spectra"]["output_bucket"] = params["merge_spectra"]["output_bucket"]
+    if params["lambda"]:
+      params["buckets"] = ["input", "split", "analyze", "combine", "output"]
+    else:
+      params["buckets"] = ["output"]
+  else:
+    params["buckets"] = ["input", "split", "sort", "merge", "analyze", "combine", "output"]
+
+
+def process_iteration_params(params, iteration):
+  now = time.time()
+  params["now"] = now
+  params["key"] = util.file_name(params["now"], 1, 1, 1, "ms2")
+
+
+def upload_input(params):
+  bucket_name = params["input_bucket"]
+  key = util.file_name(params["now"], 1, 1, 1, "ms2")
+  s3 = setup_connection("s3", params)
+
+  start = time.time()
+  s3.Object(bucket_name, key).put(Body=open(params["input"], 'rb'))
+  end = time.time()
+
+  obj = s3.Object(bucket_name, key)
+  timestamp = obj.last_modified.timestamp() * 1000
+  print(key, "last modified", timestamp)
+  seconds = end - start
+  milliseconds = seconds * 1000
+
+  return int(timestamp), milliseconds
+
+
+def load_stats(upload_duration):
+  return {
+    "billed_duration": 0,
+    "max_duration": upload_duration,
+    "memory_used": 0,
+    "cost": 0
+  }
+
+
+def run(params):
+  print_run_information()
+  process_params(params)
+  client = create_client(params)
+
+  iterations = params["iterations"]
+
+  if params["sort"] == "pre":
     sort_spectra(params["input_name"])
+
   if params["lambda"]:
     upload_functions(client, params)
 
@@ -160,10 +227,7 @@ def run(params):
 
   for i in range(iterations):
     print("Iteration {0:d}".format(i))
-    now = time.time()
-    key = "{0:f}_{1:s}".format(now, params["input_name"])
-    params["input_key"] = key
-    params["now"] = now
+    process_iteration_params(params, i)
     done = False
     while not done:
       try:
@@ -171,13 +235,19 @@ def run(params):
           results = lambda_benchmark(params)
         else:
           results = ec2_benchmark(params)
+
+        assert(len(results) == len(stages))
         for i in range(len(results)):
           stats[i].append(results[i])
+
         done = True
       except BenchmarkException as e:
         print("Error during iteration {0:d}".format(i), e)
         clear_buckets(params)
-    check_output(params)
+
+    if params["check_output"]:
+      check_output(params)
+
     clear_buckets(params)
     print("--------------------------\n")
 
@@ -241,7 +311,7 @@ def clear_buckets(params):
   s3 = setup_connection("s3", params)
 
   ts = "{0:f}".format(params["now"])
-  for bn in ["input", "split", "sort", "merge", "analyze", "combine", "output"]:
+  for bn in params["buckets"]:
     count = 0
     bucket_name = "maccoss-human-{0:s}-spectra".format(bn)
     bucket = s3.Bucket(bucket_name)
@@ -364,21 +434,6 @@ def sort_spectra(name):
   for spectrum in spectra:
     for line in spectrum[1]:
       f.write(line)
-
-
-def upload_input(params):
-  bucket_name = "maccoss-human-input-spectra"
-  key = util.file_name(params["now"], 1, 1, 1, "ms2")
-  s3 = setup_connection("s3", params)
-  start = time.time()
-  s3.Object(bucket_name, key).put(Body=open(params["sorted_name"], 'rb'))
-  end = time.time()
-  obj = s3.Object(bucket_name, key)
-  timestamp = obj.last_modified.timestamp() * 1000
-  print(key, "last modified", timestamp)
-  seconds = end - start
-  milliseconds = seconds * 1000
-  return int(timestamp), milliseconds
 
 
 def check_objects(client, bucket_name, prefix, count, timeout, params):
@@ -603,19 +658,15 @@ def parse_percolator_logs(client, start_time, params):
 
 def parse_logs(params, upload_timestamp, upload_duration):
   client = setup_client("logs", params)
-  stats = []
 
-  load_stats = {
-    "billed_duration": 0,
-    "max_duration": upload_duration,
-    "memory_used": 0,
-    "cost": 0
-  }
-  stats.append(load_stats)
+  stats = []
+  stats.append(load_stats(upload_duration))
   stats.append(parse_split_logs(client, upload_timestamp, params))
-  if params["merge"]:
+
+  if params["sort"] == "yes":
     stats.append(parse_sort_logs(client, upload_timestamp, params))
     stats.append(parse_merge_logs(client, upload_timestamp, params))
+
   stats.append(parse_analyze_logs(client, upload_timestamp, params))
   stats.append(parse_combine_logs(client, upload_timestamp, params))
   stats.append(parse_percolator_logs(client, upload_timestamp, params))
@@ -640,13 +691,16 @@ def lambda_benchmark(params):
 
 
 class Ec2Stage(Enum):
-  CREATE = 0
-  LOAD = 1
-  TIDE = 2
-  PERCOLATOR = 3
-  UPLOAD = 4
-  TERMINATE = 5
-  TOTAL = 6
+  LOAD = 0
+  CREATE = 1
+  INITIATE = 2
+  SETUP = 3
+  DOWNLOAD = 4
+  TIDE = 5
+  PERCOLATOR = 6
+  UPLOAD = 7
+  TERMINATE = 8
+  TOTAL = 9
 
 
 def calculate_results(duration, cost):
@@ -687,7 +741,7 @@ def create_instance(params):
   )
   assert(len(instances) == 1)
   instance = instances[0]
-  print("Waiting for instance to initiate")
+  print("Waiting for instance to initiate.")
   instance.wait_until_running()
   end_time = time.time()
   duration = end_time - start_time
@@ -704,32 +758,51 @@ def cexec(client, command):
   return stdout.read()
 
 
-def setup_instance(ec2, instance, params):
-  start_time = time.time()
-
-  print("Wait for status checks")
-  instance_status = list(ec2.meta.client.describe_instance_status(InstanceIds=[instance.id])["InstanceStatuses"])[0]
-  while instance_status["InstanceStatus"]["Details"][0]["Status"] == "initializing":
-    instance_status = list(ec2.meta.client.describe_instance_status(InstanceIds=[instance.id])["InstanceStatuses"])[0]
-    time.sleep(1)
-  assert(instance_status["InstanceStatus"]["Details"][0]["Status"] == "passed")
-
-  instance.reload()
-
+def connect(instance, params):
   client = paramiko.SSHClient()
   pem = params["ec2"]["key"] + ".pem"
   key = paramiko.RSAKey.from_private_key_file(pem)
   client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 
-  user = "ec2-user"
+  connected = False
+  while not connected:
+    try:
+      client.connect(
+        instance.public_ip_address,
+        username="ec2-user",
+        pkey=key
+      )
+      connected = True
+    except paramiko.ssh_exception.NoValidConnectionsError:
+      time.sleep(1)
+  return client
 
-  client.connect(
-    instance.public_ip_address,
-    username=user,
-    pkey=key
-  )
 
+def initiate_instance(ec2, instance, params):
+  start_time = time.time()
+
+  if params["ec2"]["wait_for_tests"]:
+    print("Wait for status checks.")
+    instance_status = list(ec2.meta.client.describe_instance_status(InstanceIds=[instance.id])["InstanceStatuses"])[0]
+    while instance_status["InstanceStatus"]["Details"][0]["Status"] == "initializing":
+      instance_status = list(ec2.meta.client.describe_instance_status(InstanceIds=[instance.id])["InstanceStatuses"])[0]
+      time.sleep(1)
+    assert(instance_status["InstanceStatus"]["Details"][0]["Status"] == "passed")
+
+  instance.reload()
+  client = connect(instance, params)
+  end_time = time.time()
+
+  duration = end_time - start_time
+  results = calculate_results(duration, MEMORY_PARAMETERS["ec2"][params["ec2"]["type"]])
+  results["client"] = client
+  return results
+
+
+def setup_instance(client, params):
+  start_time = time.time()
   sftp = client.open_sftp()
+
   items = []
   if not params["ec2"]["use_ami"]:
     cexec(client, "cd /etc/yum.repos.d; sudo wget http://s3tools.org/repo/RHEL_6/s3tools.repo")
@@ -746,7 +819,6 @@ def setup_instance(ec2, instance, params):
       path = "{0:s}/{1:s}".format(index_dir, item)
       sftp.put(path, path)
 
-  sftp.put("sorted_{0:s}".format(params["input_name"]), params["input_key"])
   for item in items:
     sftp.put(item, item)
 
@@ -754,13 +826,20 @@ def setup_instance(ec2, instance, params):
     cexec(client, "sudo chmod +x crux")
 
   sftp.close()
-#  command = "cd aws-scripts-mon; cp awscreds.template awscreds.conf; echo 'AWSAccessKeyId={0:s}\nAWSSecretKey={1:s}' >> awscreds.conf"
-#  cexec(client, command)
   end_time = time.time()
 
   duration = end_time - start_time
   results = calculate_results(duration, MEMORY_PARAMETERS["ec2"][params["ec2"]["type"]])
   results["client"] = client
+  return results
+
+
+def download_results(client, params):
+  start_time = time.time()
+  cexec(client, "s3cmd get s3://{0:s}/{1:s} {1:s}".format(params["input_bucket"], params["key"]))
+  end_time = time.time()
+  duration = end_time - start_time
+  results = calculate_results(duration, MEMORY_PARAMETERS["ec2"][params["ec2"]["type"]])
   return results
 
 
@@ -773,7 +852,7 @@ def run_analyze(client, params):
     "--output-dir", "tide-output",
   ]
   start_time = time.time()
-  command = "sudo ./crux tide-search {0:s} HUMAN.fasta.20170123.index {1:s}".format(params["input_key"], " ".join(arguments))
+  command = "sudo ./crux tide-search {0:s} HUMAN.fasta.20170123.index {1:s}".format(params["key"], " ".join(arguments))
   cexec(client, command)
   end_time = time.time()
   duration = end_time - start_time
@@ -798,16 +877,15 @@ def run_percolator(client, params):
 
 def upload_results(client, params):
   print("Uploading files to s3")
-  bucket_name = "maccoss-human-output-spectra"
+  bucket_name = params["output_bucket"]
   start_time = time.time()
-  for pep in ["decoy", "target"]:
-    for item in ["peptides", "psms"]:
-      input_file = "percolator.{0:s}.{1:s}.txt".format(pep, item)
-      output_file = "percolator.{0:s}.{1:s}.{2:f}.txt".format(pep, item, params["now"])
-      cexec(client, "s3cmd put crux-output/{0:s} s3://{1:s}/{2:s}".format(input_file, bucket_name, output_file))
+  for item in ["peptides", "psms"]:
+    input_file = "percolator.target.{0:s}.txt".format(item)
+    output_file = "percolator.target.{0:s}.{1:f}.txt".format(item, params["now"])
+    cexec(client, "s3cmd put crux-output/{0:s} s3://{1:s}/{2:s}".format(input_file, bucket_name, output_file))
 
   input_file = "tide-output/tide-search.txt"
-  output_file = "tide-search.{0:f}.txt".format(params["now"])
+  output_file = "spectra-{0:f}-1-1-1.txt".format(params["now"])
   cexec(client, "s3cmd put {0:s} s3://{1:s}/{2:s}".format(input_file, bucket_name, output_file))
 
   end_time = time.time()
@@ -829,37 +907,34 @@ def terminate_instance(instance, client, params):
 
 
 def ec2_benchmark(params):
-  stats = []
+  [upload_timestamp, upload_duration] = upload_input(params)
 
-  if params["sort"]:
-    sort_spectra(params["input_name"])
+  stats = []
+  stats.append(load_stats(upload_duration))
 
   create_stats = create_instance(params)
   stats.append(create_stats)
 
   instance = create_stats["instance"]
   ec2 = create_stats["ec2"]
-  setup_stats = setup_instance(ec2, instance, params)
-  stats.append(setup_stats)
+  initiate_stats = initiate_instance(ec2, instance, params)
+  stats.append(initiate_stats)
 
-  client = setup_stats["client"]
-  analyze_stats = run_analyze(client, params)
-  stats.append(analyze_stats)
+  client = initiate_stats["client"]
+  stats.append(setup_instance(client, params))
+  stats.append(download_results(client, params))
+  stats.append(run_analyze(client, params))
+  stats.append(run_percolator(client, params))
+  stats.append(upload_results(client, params))
 
-  percolator_stats = run_percolator(client, params)
-  stats.append(percolator_stats)
-
-  upload_stats = upload_results(client, params)
-  stats.append(upload_stats)
-
-  terminate_stats = terminate_instance(instance, client, params)
-  stats.append(terminate_stats)
+  stats.append(terminate_instance(instance, client, params))
 
   total_stats = calculate_total_stats(stats)
   print("END RESULTS")
   print_stats(total_stats)
+  stats.append(total_stats)
 
-  return (create_stats, setup_stats, analyze_stats, percolator_stats, upload_stats, terminate_stats, total_stats)
+  return stats
 
 #############################
 #           MAIN            #
