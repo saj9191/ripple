@@ -1,12 +1,14 @@
 import argparse
 import boto3
 from botocore.client import Config
+import constants
 import datetime
 from enum import Enum
 import json
 import os
 import paramiko
 import re
+import sort
 import subprocess
 import time
 import util
@@ -46,15 +48,15 @@ def check_sort(s3, params):
   for key in keys:
     obj = s3.Object(bucket_name, key)
     content = obj.get()["Body"].read().decode("utf-8")
-    spectra = util.SPECTRA_START.split(content)
+    spectra = constants.SPECTRA_START.split(content)
     spectra = list(filter(lambda p: len(p) > 0, spectra))
     for spectrum in spectra:
       lines = spectrum.split("\n")
-      m = list(filter(lambda line: util.MASS.match(line), lines))
+      m = list(filter(lambda line: constants.MASS.match(line), lines))
       if len(m) == 0:
         print(spectrum)
       assert(len(m) > 0)
-      new_mass = float(util.MASS.match(m[0]).group(2))
+      new_mass = float(constants.MASS.match(m[0]).group(2))
       assert(mass <= new_mass)
       mass = new_mass
 
@@ -132,7 +134,10 @@ def check_output(params):
 def get_stages(params):
   stages = MergeLambdaStage
   if not params["lambda"]:
-    stages = Ec2Stage
+    if params["sort"] == "yes":
+      stages = SortEc2Stage
+    else:
+      stages = NoSortEc2Stage
   elif params["sort"] != "yes":
     stages = NonMergeLambdaStage
   return stages
@@ -157,7 +162,8 @@ def process_params(params):
     params["input_bucket"] = "maccoss-human-input-spectra"
   else:
     params["input_bucket"] = "maccoss-human-output-spectra"
-    params["sort"] = "no"
+    if params["sort"] == "pre":
+      params["sort"] = "no"
 
   if params["sort"] == "pre":
     params["input"] = "sort_{0:s}".format(params["input_name"])
@@ -186,6 +192,7 @@ def upload_input(params):
   s3 = setup_connection("s3", params)
 
   start = time.time()
+  print("Uploading {0:s} to S3".format(params["input"]))
   s3.Object(bucket_name, key).put(Body=open(params["input"], 'rb'))
   end = time.time()
 
@@ -215,7 +222,9 @@ def run(params):
   iterations = params["iterations"]
 
   if params["sort"] == "pre":
-    sort_spectra(params["input_name"])
+    args = argparse.Namespace()
+    args.file = params["input_name"]
+    sort.run(args)
 
   if params["lambda"]:
     upload_functions(client, params)
@@ -364,7 +373,7 @@ def upload_functions(client, params):
     f.write(json.dumps(fparams))
     f.close()
 
-    subprocess.call("zip {0:s}.zip {0:s}.py {0:s}.json ../util.py".format(function), shell=True)
+    subprocess.call("zip {0:s}.zip {0:s}.py {0:s}.json ../util.py ../constants.py".format(function), shell=True)
 
     with open("{0:s}.zip".format(function), "rb") as f:
       zipped_code = f.read()
@@ -396,44 +405,6 @@ def setup_client(service, params):
                         config=config
                         )
   return client
-
-
-def sort_spectra(name):
-  f = open(name)
-
-  spectrum = []
-  mass = None
-  spectra = []
-
-  line = f.readline()
-  while line:
-    if not line.startswith("H"):
-      m = SPECTRA.match(line)
-      if m:
-        if mass is not None:
-          spectra.append((mass, "".join(spectrum)))
-          mass = None
-          spectrum = []
-
-      m = MASS.match(line)
-      if m:
-        mass = float(m.group(2))
-      spectrum.append(line)
-    line = f.readline()
-
-  f.close()
-
-  def getMass(spectrum):
-    return spectrum[0]
-
-  spectra.sort(key=getMass)
-
-  sorted_name = "sorted_{0:s}".format(name)
-  f = open(sorted_name, "w+")
-  f.write("H Extractor MzXML2Search\n")
-  for spectrum in spectra:
-    for line in spectrum[1]:
-      f.write(line)
 
 
 def check_objects(client, bucket_name, prefix, count, timeout, params):
@@ -690,7 +661,7 @@ def lambda_benchmark(params):
 #############################
 
 
-class Ec2Stage(Enum):
+class NoSortEc2Stage(Enum):
   LOAD = 0
   CREATE = 1
   INITIATE = 2
@@ -701,6 +672,20 @@ class Ec2Stage(Enum):
   UPLOAD = 7
   TERMINATE = 8
   TOTAL = 9
+
+
+class SortEc2Stage(Enum):
+  LOAD = 0
+  CREATE = 1
+  INITIATE = 2
+  SETUP = 3
+  DOWNLOAD = 4
+  SORT = 5
+  TIDE = 6
+  PERCOLATOR = 7
+  UPLOAD = 8
+  TERMINATE = 9
+  TOTAL = 10
 
 
 def calculate_results(duration, cost):
@@ -779,6 +764,7 @@ def connect(instance, params):
 
 
 def initiate_instance(ec2, instance, params):
+  print("Connecting to EC2 instance.")
   start_time = time.time()
 
   if params["ec2"]["wait_for_tests"]:
@@ -800,18 +786,24 @@ def initiate_instance(ec2, instance, params):
 
 
 def setup_instance(client, params):
+  print("Setting up EC2 instance.")
   start_time = time.time()
   sftp = client.open_sftp()
 
   items = []
   if not params["ec2"]["use_ami"]:
+    cexec(client, "sudo yum update -y")
     cexec(client, "cd /etc/yum.repos.d; sudo wget http://s3tools.org/repo/RHEL_6/s3tools.repo")
     cexec(client, "sudo yum -y install s3cmd")
     cexec(client, "sudo update-alternatives --set python /usr/bin/python2.6")
+    cexec(client, "sudo yum -y install python-pip")
+    cexec(client, "sudo pip install argparse")
     [access_key, secret_key] = get_credentials()
     cexec(client, "echo -e '{0:s}\n{1:s}\n\n\n\n\nY\ny\n' | s3cmd --configure".format(access_key, secret_key))
     items.append("crux")
     items.append("HUMAN.fasta.20170123")
+    items.append("sort.py")
+    items.append("constants.py")
 
     index_dir = "HUMAN.fasta.20170123.index"
     sftp.mkdir(index_dir)
@@ -841,6 +833,16 @@ def download_results(client, params):
   duration = end_time - start_time
   results = calculate_results(duration, MEMORY_PARAMETERS["ec2"][params["ec2"]["type"]])
   return results
+
+
+def sort_spectra(client, params):
+  start_time = time.time()
+  cexec(client, "python sort.py --file {0:s}".format(params["key"]))
+  params["key"] = "sorted_{0:s}".format(params["key"])
+  end_time = time.time()
+  duration = end_time - start_time
+
+  return calculate_results(duration, MEMORY_PARAMETERS["ec2"][params["ec2"]["type"]])
 
 
 def run_analyze(client, params):
@@ -896,7 +898,6 @@ def upload_results(client, params):
 
 def terminate_instance(instance, client, params):
   start_time = time.time()
-#  cexec(client, "cd aws-scripts-mon; ./mon-put-instance-data.pl --mem-used-incl-cache-buff --mem-util --mem-used --mem-avail")
   client.close()
   instance.terminate()
   instance.wait_until_terminated()
@@ -923,6 +924,10 @@ def ec2_benchmark(params):
   client = initiate_stats["client"]
   stats.append(setup_instance(client, params))
   stats.append(download_results(client, params))
+  if params["sort"] == "yes":
+    print("sorting")
+    stats.append(sort_spectra(client, params))
+
   stats.append(run_analyze(client, params))
   stats.append(run_percolator(client, params))
   stats.append(upload_results(client, params))

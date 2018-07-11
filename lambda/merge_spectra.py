@@ -1,4 +1,5 @@
 import boto3
+import constants
 import json
 import time
 import util
@@ -15,9 +16,9 @@ class Spectra:
 
 def extractMass(spectrum):
   lines = spectrum.split("\n")
-  m = list(filter(lambda line: util.MASS.match(line), lines))
+  m = list(filter(lambda line: constants.MASS.match(line), lines))
   #  assert(len(m) == 1) # TODO: Handle multiple later
-  mass = util.MASS.match(m[0]).group(2)
+  mass = constants.MASS.match(m[0]).group(2)
   return (float(mass), spectrum)
 
 
@@ -34,7 +35,7 @@ def get_spectra(obj, start_byte, end_byte, num_bytes, remainder):
   if len(remainder.strip()) > 0:
     stream = remainder + stream
 
-  parts = util.SPECTRA_START.split(stream)
+  parts = constants.SPECTRA_START.split(stream)
   if len(parts) <= 1:
     print(parts)
 
