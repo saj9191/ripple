@@ -267,6 +267,7 @@ class NonMergeLambdaStage(Enum):
 
 class MergeLambdaStage(Enum):
   LOAD = 0
+  SPLIT = 1
   SORT = 2
   MERGE = 3
   ANALYZE = 4
