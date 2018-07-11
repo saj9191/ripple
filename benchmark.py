@@ -61,41 +61,8 @@ def check_sort(s3, params):
       mass = new_mass
 
 
-def check_counts(s3, params):
-  now = "{0:f}".format(params["now"])
-
-  input_file = util.file_name(params["now"], 1, 1, 1, "ms2")
-  obj = s3.Object("maccoss-human-input-spectra", input_file)
-  # check_sort(s3, params)
-  expected_count = get_count(obj)
-
-  for bn in ["split", "sort", "merge"]:
-    actual_count = 0
-    bucket_name = "maccoss-human-{0:s}-spectra".format(bn)
-    bucket = s3.Bucket(bucket_name)
-    for obj in bucket.objects.all():
-      if now in obj.key:
-        actual_count += get_count(obj)
-
-    if expected_count != actual_count:
-      print("bucket", bucket_name, "expected", expected_count, "actual", actual_count)
-
-  bucket_name = "maccoss-human-split-spectra"
-  bucket = s3.Bucket(bucket_name)
-  for obj in bucket.objects.all():
-    if now in obj.key:
-      other_obj = s3.Object("maccoss-human-sort-spectra", obj.key)
-      split_count = get_count(obj)
-      sort_count = get_count(other_obj)
-      if split_count != sort_count:
-        print(obj.key, "split", split_count, "sort", sort_count)
-
-
 def check_output(params):
   s3 = setup_connection("s3", params)
-  var = CHECKS["var"]
-
-  # check_counts(s3, params)
 
   tide_file = "spectra-{0:f}-1-1-1.txt".format(params["now"])
   bucket_name = "maccoss-human-combine-spectra"
@@ -104,11 +71,7 @@ def check_output(params):
     if obj.key == tide_file:
       content = obj.get()["Body"].read().decode("utf-8")
       num_lines = len(content.split("\n"))
-      checks = CHECKS["tide"][params["input_name"]]
-      expected_num_lines = checks["num_lines"]
-      v = expected_num_lines * var
-      print("key", tide_file, "expected", expected_num_lines, "actual", num_lines)
-      assert((expected_num_lines - v) <= num_lines and num_lines <= (expected_num_lines + v))
+      print("key", tide_file, "num_lines", num_lines)
 
   bucket_name = "maccoss-human-output-spectra"
   bucket = s3.Bucket(bucket_name)
@@ -122,13 +85,7 @@ def check_output(params):
     lines = list(filter(lambda line: len(line.strip()) > 0, lines))
     qvalues = list(map(lambda line: float(line.split("\t")[7]), lines))
     count = len(list(filter(lambda qvalue: qvalue <= CHECKS["qvalue"], qvalues)))
-
-    checks = CHECKS[key][params["input_name"]]
-    num_qvalues = checks["num_qvalues"]
-    v = num_qvalues * var
-
-    print("key", key, "expected", num_qvalues, "actual", count)
-    assert((num_qvalues - v) <= count and count <= (num_qvalues + v))
+    print("key", key, "qvalues", count)
 
 
 def get_stages(params):
