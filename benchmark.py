@@ -65,8 +65,7 @@ def check_output(params):
   s3 = setup_connection("s3", params)
 
   tide_file = "spectra-{0:f}-1-1-1.txt".format(params["now"])
-  bucket_name = "maccoss-human-combine-spectra"
-  bucket = s3.Bucket(bucket_name)
+  bucket = s3.Bucket(params["tide_bucket"])
   for obj in bucket.objects.all():
     if obj.key == tide_file:
       content = obj.get()["Body"].read().decode("utf-8")
@@ -117,8 +116,10 @@ def process_params(params):
   params["output_bucket"] = params["percolator"]["output_bucket"]
   if params["lambda"]:
     params["input_bucket"] = "maccoss-human-input-spectra"
+    params["tide_bucket"] = "maccoss-human-combine-spectra"
   else:
     params["input_bucket"] = "maccoss-human-output-spectra"
+    params["tide_bucket"] = "maccoss-human-output-spectra"
     if params["sort"] == "pre":
       params["sort"] = "no"
 
