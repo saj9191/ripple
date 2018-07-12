@@ -120,22 +120,20 @@ def process_params(params):
   else:
     params["input_bucket"] = "maccoss-human-output-spectra"
     params["tide_bucket"] = "maccoss-human-output-spectra"
-    if params["sort"] == "pre":
-      params["sort"] = "no"
 
   if params["sort"] == "pre":
-    params["input"] = "sort_{0:s}".format(params["input_name"])
+    params["input"] = "sorted_{0:s}".format(params["input_name"])
   else:
     params["input"] = params["input_name"]
 
-  if params["sort"] != "yes":
-    params["split_spectra"]["output_bucket"] = params["merge_spectra"]["output_bucket"]
-    if params["lambda"]:
-      params["buckets"] = ["input", "split", "analyze", "combine", "output"]
+  if params["lambda"]:
+    if params["sort"] == "yes":
+      params["buckets"] = ["input", "split", "sort", "merge", "analyze", "combine", "output"]
     else:
-      params["buckets"] = ["output"]
+      params["split_spectra"]["output_bucket"] = params["merge_spectra"]["output_bucket"]
+      params["buckets"] = ["input", "split", "analyze", "combine", "output"]
   else:
-    params["buckets"] = ["input", "split", "sort", "merge", "analyze", "combine", "output"]
+    params["buckets"] = ["output"]
 
 
 def process_iteration_params(params, iteration):
