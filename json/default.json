@@ -7,7 +7,7 @@
   "timeout": 300,
   "check_output": false,
   "ec2": {
-    "ami": "ami-1a144762",
+    "ami": "ami-f391c28b",
     "cost": 0.0464,
     "default_ami": "ami-0ad99772",
     "key": "maccoss",
