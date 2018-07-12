@@ -881,7 +881,6 @@ def ec2_benchmark(params):
   stats.append(setup_instance(client, params))
   stats.append(download_results(client, params))
   if params["sort"] == "yes":
-    print("sorting")
     stats.append(sort_spectra(client, params))
 
   stats.append(run_analyze(client, params))
