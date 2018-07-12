@@ -808,6 +808,7 @@ def run_analyze(client, params):
     "--txt-output", "T",
     "--concat", "T",
     "--output-dir", "tide-output",
+    "--overwrite", "T",
   ]
   start_time = time.time()
   command = "sudo ./crux tide-search {0:s} HUMAN.fasta.20170123.index {1:s}".format(params["key"], " ".join(arguments))
@@ -823,6 +824,7 @@ def run_percolator(client, params):
   arguments = [
     "--subset-max-train", str(params["percolator"]["max_train"]),
     "--quick-validation", "T",
+    "--overwrite", "T",
   ]
 
   start_time = time.time()
@@ -886,7 +888,6 @@ def ec2_benchmark(params):
   stats.append(run_analyze(client, params))
   stats.append(run_percolator(client, params))
   stats.append(upload_results(client, params))
-
   stats.append(terminate_instance(instance, client, params))
 
   total_stats = calculate_total_stats(stats)
