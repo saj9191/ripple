@@ -106,7 +106,10 @@ def get_spectra(obj, start_byte, end_byte, num_bytes, remainder):
 
   stream = remainder + stream
   spectra_regex = list(constants.SPECTRA.finditer(stream))
-  spectra_end_byte = spectra_regex[-1].span(0)[1]
-  remainder = stream[spectra_end_byte:]
+  if len(spectra_regex) > 0:
+    spectra_end_byte = spectra_regex[-1].span(0)[1]
+    remainder = stream[spectra_end_byte:]
+  else:
+    remainder = stream.strip()
 
   return (spectra_regex, remainder)

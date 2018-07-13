@@ -1,4 +1,5 @@
 import boto3
+import heapq
 import json
 import time
 import util
@@ -12,9 +13,13 @@ class Spectra:
     self.spectra = spectra
     self.remainder = remainder
 
+  # If the masses of the spectra are equal, heapq tries to use the second element, which is a spectra to compare.
+  def __lt__(self, other):
+    return True
+
 
 def save_spectra(output_bucket, spectra, ts, file_id, num_files):
-  s = "".join(spectra)
+  s = "\n".join(spectra)
   key = util.file_name(ts, file_id, file_id, num_files, "ms2")
   output_bucket.put_object(Key=key, Body=str.encode(s))
 
@@ -41,9 +46,9 @@ def createFileObjects(s3, bucket_name, matching_keys, chunk_size):
       spectra_regex += new_spectra_regex
       start_byte = end_byte + 1
 
-    files.append(Spectra(obj, end_byte, num_bytes, spectra_regex, remainder))
+    s = Spectra(obj, end_byte, num_bytes, spectra_regex, remainder)
+    heapq.heappush(files, (spectra_regex[0][0], s))
 
-  files.sort(key=lambda p: p.spectra[0][0])
   return files
 
 
@@ -76,7 +81,7 @@ def merge_spectra(bucket_name, key, params):
   file_id = 1
 
   while len(files) > 0:
-    f = files.pop()
+    [_, f] = heapq.heappop(files)
     next_spectrum = f.spectra.pop()
     spectra.append(next_spectrum[1])
 
@@ -94,10 +99,7 @@ def merge_spectra(bucket_name, key, params):
       f.start_byte = end_byte + 1
 
     if len(f.spectra) > 0:
-      index = 0
-      while index < len(files) and files[index].spectra[0][0] < f.spectra[0][0]:
-        index += 1
-      files = files[:index] + [f] + files[index:]
+      heapq.heappush(files, (f.spectra[0][0], f))
 
   while len(spectra) > 0:
     length = min(batch_size, len(spectra))
