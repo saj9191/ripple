@@ -43,7 +43,7 @@ def createFileObjects(s3, bucket_name, matching_keys, chunk_size):
 
     files.append(Spectra(obj, end_byte, num_bytes, spectra_regex, remainder))
 
-  files.sort(key=lambda p: util.getMass(p.spectra[0][0]))
+  files.sort(key=lambda p: p.spectra[0][0])
   return files
 
 
