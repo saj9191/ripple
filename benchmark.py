@@ -131,7 +131,7 @@ def process_params(params):
       params["buckets"] = ["input", "split", "sort", "merge", "analyze", "combine", "output"]
     else:
       params["split_spectra"]["output_bucket"] = params["merge_spectra"]["output_bucket"]
-      params["buckets"] = ["input", "split", "analyze", "combine", "output"]
+      params["buckets"] = ["input", "merge", "analyze", "combine", "output"]
   else:
     params["buckets"] = ["output"]
 

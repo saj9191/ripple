@@ -92,3 +92,21 @@ def have_all_files(bucket_name, num_bytes, key_regex):
 
 def getMass(spectrum):
   return spectrum[0]
+
+
+def get_spectra(obj, start_byte, end_byte, num_bytes, remainder):
+  if len(remainder.strip()) == 0 and start_byte >= num_bytes:
+    return ([], "")
+
+  if start_byte < num_bytes:
+    end_byte = min(num_bytes, end_byte)
+    stream = obj.get(Range="bytes={0:d}-{1:d}".format(start_byte, end_byte))["Body"].read().decode("utf-8")
+  else:
+    stream = ""
+
+  stream = remainder + stream
+  spectra_regex = list(constants.SPECTRA.finditer(stream))
+  spectra_end_byte = spectra_regex[-1].span(0)[1]
+  remainder = stream[spectra_end_byte:]
+
+  return (spectra_regex, remainder)

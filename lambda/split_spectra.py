@@ -1,12 +1,12 @@
 import boto3
 import json
-import re
 import util
 
 
 def save_spectra(output_bucket, spectra, ts, file_id, byte_id, num_bytes):
+  s = list(map(lambda spectrum: spectrum.group(0), spectra))
   key = util.file_name(ts, file_id, byte_id, num_bytes, "ms2")
-  output_bucket.put_object(Key=key, Body=str.encode(spectra))
+  output_bucket.put_object(Key=key, Body=str.encode("".join(s)))
 
 
 def split_spectra(bucket_name, key, params):
@@ -19,9 +19,8 @@ def split_spectra(bucket_name, key, params):
 
   obj = s3.Object(bucket_name, key)
   num_bytes = obj.content_length
-  spectra = []
+  spectra_regex = []
   remainder = ""
-  header = None
 
   m = util.parse_file_name(key)
   ts = m["timestamp"]
@@ -31,35 +30,21 @@ def split_spectra(bucket_name, key, params):
 
   while start_byte < num_bytes:
     end_byte = min(start_byte + chunk_size, num_bytes)
-    stream = obj.get(Range="bytes={0:d}-{1:d}".format(start_byte, end_byte))["Body"].read().decode("utf-8")
-    stream = remainder + stream
+    [new_spectra_regex, remainder] = util.get_spectra(obj, start_byte, end_byte, num_bytes, remainder)
+    spectra_regex += new_spectra_regex
 
-    if start_byte == 0:
-      parts = stream.split("\n")
-      # Remove header
-      stream = "\n".join(parts[1:])
+    while len(spectra_regex) >= batch_size:
+      batch = spectra_regex[:batch_size]
+      byte_id = batch[0].span(0)[0]
 
-    [new_spectra, remainder] = util.parse_spectra(stream)
-
-    if len(new_spectra) > 1:
-      spectra += new_spectra
-      while len(spectra) >= batch_size:
-        if end_byte == num_bytes and len(spectra) <= batch_size and len(remainder.strip()) == 0:
-          start_byte = num_bytes
-        else:
-          if start_byte >= num_bytes:
-            print("ERROR", start_byte, num_bytes)
-          assert(start_byte < num_bytes)
-        save_spectra(output_bucket, "".join(spectra[:batch_size]), ts, file_id, start_byte, num_bytes)
-        spectra = spectra[batch_size:]
-        file_id += 1
+      save_spectra(output_bucket, batch, ts, file_id, byte_id, num_bytes)
+      spectra_regex = spectra_regex[batch_size:]
+      file_id += 1
 
     start_byte = end_byte + 1
 
-  if len(remainder.strip()) > 0:
-    spectra = spectra + [remainder]
-  assert(len(spectra) > 0)
-  save_spectra(output_bucket, "".join(spectra), ts, file_id, num_bytes, num_bytes)
+  assert(len(remainder.strip()) == 0)
+  save_spectra(output_bucket, spectra_regex, ts, file_id, num_bytes, num_bytes)
 
 
 def handler(event, context):

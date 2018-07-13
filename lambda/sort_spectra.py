@@ -1,6 +1,6 @@
 import boto3
 import json
-import re
+import sort
 import util
 
 
@@ -10,29 +10,16 @@ def sort_spectra(bucket_name, key, params):
 
   obj = s3.Object(bucket_name, key)
   content = obj.get()["Body"].read().decode("utf-8")
-  lines = content.split("\n")
 
-  spectra = []
-  start_index = 0
-
-  while start_index != -1:
-    [mass, spectrum, start_index] = util.get_next_spectra(lines, start_index)
-    if mass != -1:
-      spectra.append((mass, spectrum))
-
-  spectra.sort(key=util.getMass)
+  spectra = sort.sort(content)
 
   sorted_name = "sorted-{0:s}".format(key)
   f = open("/tmp/{0:s}".format(sorted_name), "w+")
   for spectrum in spectra:
-    f.write(spectrum[1] + "\n")
+    f.write(spectrum[1])
   f.close()
 
   s3.Object(params["output_bucket"], key).put(Body=open("/tmp/{0:s}".format(sorted_name), 'rb'))
-  obj = s3.Object(params["output_bucket"], key)
-  content = obj.get()["Body"].read().decode("utf-8")
-  after = content.split("\n")
-  print(len(lines), len(after))
 
 
 def handler(event, context):

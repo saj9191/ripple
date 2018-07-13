@@ -1,5 +1,4 @@
 import boto3
-import constants
 import json
 import time
 import util
@@ -14,51 +13,16 @@ class Spectra:
     self.remainder = remainder
 
 
-def extractMass(spectrum):
-  lines = spectrum.split("\n")
-  m = list(filter(lambda line: constants.MASS.match(line), lines))
-  #  assert(len(m) == 1) # TODO: Handle multiple later
-  mass = constants.MASS.match(m[0]).group(2)
-  return (float(mass), spectrum)
-
-
-def get_spectra(obj, start_byte, end_byte, num_bytes, remainder):
-  if len(remainder.strip()) == 0 and start_byte >= num_bytes:
-    return ([], "")
-
-  if start_byte < num_bytes:
-    end_byte = min(num_bytes, end_byte)
-    stream = obj.get(Range="bytes={0:d}-{1:d}".format(start_byte, end_byte))["Body"].read().decode("utf-8")
-  else:
-    stream = ""
-
-  if len(remainder.strip()) > 0:
-    stream = remainder + stream
-
-  parts = constants.SPECTRA_START.split(stream)
-  if len(parts) <= 1:
-    print(parts)
-
-  # If the stream is "S\t123....", then parts will become ["", "123..."]
-  if len(parts[0]) == 0:
-    parts = parts[1:]
-  parts = list(map(lambda p: "S\t" + p, parts))
-
-  if end_byte < num_bytes:
-    remainder = parts[-1]
-    parts = parts[:-1]
-  else:
-    remainder = ""
-
-  spectra = list(map(lambda p: extractMass(p), parts))
-  spectra.sort(key=util.getMass)
-  return (spectra, remainder)
-
-
 def save_spectra(output_bucket, spectra, ts, file_id, num_files):
   s = "".join(spectra)
   key = util.file_name(ts, file_id, file_id, num_files, "ms2")
   output_bucket.put_object(Key=key, Body=str.encode(s))
+
+
+def get_spectra(obj, start_byte, end_byte, num_bytes, remainder):
+  [spectra_regex, remainder] = util.get_spectra(obj, start_byte, end_byte, num_bytes, remainder)
+  spectra_regex = list(map(lambda spectrum: (float(spectrum.group(1)), spectrum.group(0)), spectra_regex))
+  return spectra_regex
 
 
 def createFileObjects(s3, bucket_name, matching_keys, chunk_size):
@@ -70,16 +34,16 @@ def createFileObjects(s3, bucket_name, matching_keys, chunk_size):
     start_byte = 0
     end_byte = 0
     remainder = ""
-    spectra = []
-    while len(spectra) == 0:
+    spectra_regex = []
+    while len(spectra_regex) == 0:
       end_byte = start_byte + chunk_size
-      [spectra, remainder] = get_spectra(obj, start_byte, end_byte, num_bytes, remainder)
+      [new_spectra_regex, remainder] = get_spectra(obj, start_byte, end_byte, num_bytes, remainder)
+      spectra_regex += new_spectra_regex
       start_byte = end_byte + 1
 
-    files.append(Spectra(obj, end_byte, num_bytes, spectra, remainder))
-    print(matching_key, len(spectra))
+    files.append(Spectra(obj, end_byte, num_bytes, spectra_regex, remainder))
 
-  files.sort(key=lambda p: util.getMass(p.spectra[0]))
+  files.sort(key=lambda p: util.getMass(p.spectra[0][0]))
   return files
 
 
@@ -110,41 +74,30 @@ def merge_spectra(bucket_name, key, params):
   files = createFileObjects(s3, bucket_name, matching_keys, chunk_size)
   spectra = []
   file_id = 1
-  count = 0
-  while len(files) > 0:
-    f = files[0]
-    next_spectrum = f.spectra[0]
 
+  while len(files) > 0:
+    f = files.pop()
+    next_spectrum = f.spectra.pop()
     spectra.append(next_spectrum[1])
-    count += 1
+
     if len(spectra) == batch_size:
-      if file_id > num_files:
-        print("ERROR", file_id, num_files)
       save_spectra(output_bucket, spectra, ts, file_id, num_files)
       file_id += 1
       spectra = []
 
-    f.spectra = f.spectra[1:]
-    files = files[1:]
-
     while len(f.spectra) == 0 and f.start_byte <= f.num_bytes:
       start_byte = f.start_byte
       end_byte = start_byte + chunk_size
-      [fspectra, remainder] = get_spectra(f.obj, start_byte, end_byte, f.num_bytes, f.remainder)
-      f.spectra = fspectra
+      [new_spectra_regex, remainder] = get_spectra(f.obj, start_byte, end_byte, f.num_bytes, f.remainder)
+      f.spectra = new_spectra_regex
       f.remainder = remainder
       f.start_byte = end_byte + 1
 
     if len(f.spectra) > 0:
       index = 0
-      while index < len(files) and util.getMass(files[index].spectra[0]) < util.getMass(f.spectra[0]):
+      while index < len(files) and files[index].spectra[0][0] < f.spectra[0][0]:
         index += 1
-
-      before_files = files[:index]
-      after_files = []
-      if index != len(files):
-        after_files = files[index:]
-      files = before_files + [f] + after_files
+      files = files[:index] + [f] + files[index:]
 
   while len(spectra) > 0:
     length = min(batch_size, len(spectra))
