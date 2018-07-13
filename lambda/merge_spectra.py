@@ -22,7 +22,7 @@ def save_spectra(output_bucket, spectra, ts, file_id, num_files):
 def get_spectra(obj, start_byte, end_byte, num_bytes, remainder):
   [spectra_regex, remainder] = util.get_spectra(obj, start_byte, end_byte, num_bytes, remainder)
   spectra_regex = list(map(lambda spectrum: (float(spectrum.group(1)), spectrum.group(0)), spectra_regex))
-  return spectra_regex
+  return (spectra_regex, remainder)
 
 
 def createFileObjects(s3, bucket_name, matching_keys, chunk_size):
