@@ -329,7 +329,7 @@ def upload_functions(client, params):
     f.write(json.dumps(fparams))
     f.close()
 
-    subprocess.call("zip {0:s}.zip {0:s}.py {0:s}.json ../util.py ../constants.py".format(function), shell=True)
+    subprocess.call("zip {0:s}.zip {0:s}.py {0:s}.json ../sort.py ../util.py ../constants.py".format(function), shell=True)
 
     with open("{0:s}.zip".format(function), "rb") as f:
       zipped_code = f.read()
