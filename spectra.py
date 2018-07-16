@@ -1,0 +1,109 @@
+import hashlib
+import re
+import xml.etree.ElementTree as ET
+
+
+class SpectraIterator:
+  def __init__(self, obj, batch_size):
+    self.batch_size = batch_size
+    self.obj = obj
+
+  def getBytes(self, start_byte, end_byte):
+    return self.obj.get(Range="bytes={0:d}-{1:d}".format(start_byte, end_byte))["Body"].read().decode("utf-8")
+
+  def nextFile(self):
+    pass
+
+
+class mzMLSpectraIterator(SpectraIterator):
+  INDEX_LIST_REGEX = re.compile("[\s\S]*<indexListOffset>(\d+)</indexListOffset>")
+  OFFSET_REGEX = re.compile("<offset[^>]*>(\d+)</offset>")
+
+  def __init__(self, obj, batch_size):
+    SpectraIterator.__init__(self, obj, batch_size)
+    self.footer_offset = 235
+    self.load_size = 100*1000
+    self.obj = obj
+    self.content_length = obj.content_length
+    self.findOffsets()
+    self.remainder = ""
+    self.offset_regex = []
+    self.header = self.getHeader()
+
+  def getHeader(self):
+    header = self.getBytes(0, self.spectra_list_offset)
+    index = header.index("<spectrum index")
+    return header[:index]
+
+  def findOffsets(self):
+    end_byte = self.content_length
+    start_byte = end_byte - self.footer_offset
+    stream = self.getBytes(start_byte, end_byte)
+    index_list_match = self.INDEX_LIST_REGEX.match(stream)
+    assert(index_list_match is not None)
+
+    self.spectra_list_offset = int(index_list_match.group(1))
+
+    start_byte = self.spectra_list_offset
+    end_byte = start_byte + self.load_size
+    stream = self.getBytes(start_byte, end_byte)
+    self.current_spectra_offset = self.spectra_list_offset + stream.find("<offset")
+
+  def next(self):
+    start_byte = self.current_spectra_offset
+    end_byte = min(self.content_length, start_byte + self.load_size * self.batch_size)
+    if start_byte >= end_byte:
+      return ""
+    # TODO: Could make fancier and say start_byte < footer_start_index
+    # Plus one is so we get the final index
+    while len(self.offset_regex) < (self.batch_size + 1) and start_byte < self.content_length:
+      start_byte = self.current_spectra_offset
+      end_byte = min(self.content_length, start_byte + self.load_size)
+
+      stream = self.getBytes(start_byte, end_byte)
+      stream = self.remainder + stream
+      self.offset_regex += list(self.OFFSET_REGEX.finditer(stream))
+      regex_offset = self.offset_regex[-1].span(0)[1]
+      self.current_spectra_offset += regex_offset
+      self.remainder = stream[regex_offset:]
+    if len(self.offset_regex) == 0:
+      return ""
+
+    start_byte = int(self.offset_regex[0].group(1))
+    if len(self.offset_regex) > self.batch_size:
+      end_byte = int(self.offset_regex[self.batch_size].group(1)) - 1
+    else:
+      end_byte = self.spectra_list_offset - 1
+    self.offset_regex = self.offset_regex[self.batch_size:]
+    content = self.getBytes(start_byte, end_byte)
+    root = ET.fromstring("<data>" + content.strip() + "</data>")
+    spectra = list(root.iter("spectrum"))
+    return spectra
+
+  def nextFile(self):
+    content = self.header
+    offset = len(content)
+    offsets = []
+    spectra = self.next()
+    count = 0
+    for xml in spectra:
+      offsets.append(offset)
+      spectrum = ET.tostring(xml).decode()
+      offset += len(spectrum)
+      content += spectrum
+      count += 1
+
+    content += "</spectrumList>\n"
+    list_offset = len(content)
+    content += '<indexList count="{0:d}">\n'.format(len(spectra))
+    content += '<index name="spectrum">\n'
+    for i in range(len(offsets)):
+      content += '<offset idRef="controllerType=0 controllerNumber=1 scan={0:d}">{1:d}</offset>\n'.format(i + 1, offsets[i])
+    content += "</index>\n"
+    content += "</indexList>\n"
+    content += "<indexListOffset>{0:d}</indexListOffset>\n".format(list_offset)
+    content += "<fileChecksum>"
+
+    content += str(hashlib.sha1(content.encode("utf-8")).hexdigest())
+    content += "</fileChecksum>\n</indexedmzML>"
+    return content
