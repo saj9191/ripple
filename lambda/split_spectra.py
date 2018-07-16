@@ -25,16 +25,16 @@ def split_spectra(bucket_name, key, params):
   elif ext == ".ms2":
     iterator = spectra.ms2SpectraIterator(obj, batch_size, chunk_size)
 
-  [s, more] = iterator.nextFile()
+  more = True
   file_id = 1
-  while len(s) > 0:
+  while more:
+    [s, more] = iterator.nextFile()
     if more:
       byte_id = file_id
     else:
       byte_id = num_bytes
     key = util.file_name(ts, file_id, byte_id, num_bytes, ext[1:])
     output_bucket.put_object(Key=key, Body=str.encode(s))
-    [s, more] = iterator.nextFile()
     file_id += 1
 
 
