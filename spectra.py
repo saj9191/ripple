@@ -94,7 +94,7 @@ class mzMLSpectraIterator(SpectraIterator):
       self.remainder = stream[regex_offset:]
 
     if len(self.offset_regex) == 0:
-      return ""
+      return ["", False]
 
     start_byte = int(self.offset_regex[0].group(1))
     if len(self.offset_regex) > self.batch_size:
@@ -118,8 +118,11 @@ class mzMLSpectraIterator(SpectraIterator):
     offsets = []
     [spectra, more] = self.next()
     count = 0
-    for xml in spectra:
-      offsets.append(offset)
+    for i in range(len(spectra)):
+      xml = spectra[i]
+      xml.set("index", str(i))
+      offsets.append((xml.get("id"), offset))
+
       spectrum = ET.tostring(xml).decode()
       offset += len(spectrum)
       content += spectrum
@@ -129,8 +132,8 @@ class mzMLSpectraIterator(SpectraIterator):
     list_offset = len(content)
     content += '<indexList count="{0:d}">\n'.format(len(spectra))
     content += '<index name="spectrum">\n'
-    for i in range(len(offsets)):
-      content += '<offset idRef="controllerType=0 controllerNumber=1 scan={0:d}">{1:d}</offset>\n'.format(i + 1, offsets[i])
+    for offset in offsets:
+      content += '<offset idRef="controllerType=0 controllerNumber=1 scan={0:s}">{1:d}</offset>\n'.format(offset[0], offset[1])
     content += "</index>\n"
     content += "</indexList>\n"
     content += "<indexListOffset>{0:d}</indexListOffset>\n".format(list_offset)
