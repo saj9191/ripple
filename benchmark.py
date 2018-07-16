@@ -114,6 +114,8 @@ def create_client(params):
 
 def process_params(params):
   params["output_bucket"] = params["percolator"]["output_bucket"]
+  _, ext = os.path.splitext(params["input_name"])
+  params["ext"] = ext[1:]
   if params["lambda"]:
     params["input_bucket"] = "maccoss-human-input-spectra"
     params["tide_bucket"] = "maccoss-human-combine-spectra"
@@ -139,12 +141,12 @@ def process_params(params):
 def process_iteration_params(params, iteration):
   now = time.time()
   params["now"] = now
-  params["key"] = util.file_name(params["now"], 1, 1, 1, "ms2")
+  params["key"] = util.file_name(params["now"], 1, 1, 1, params["ext"])
 
 
 def upload_input(params):
   bucket_name = params["input_bucket"]
-  key = util.file_name(params["now"], 1, 1, 1, "ms2")
+  key = util.file_name(params["now"], 1, 1, 1, params["ext"])
   s3 = setup_connection("s3", params)
 
   start = time.time()
@@ -792,6 +794,8 @@ def download_results(client, params):
 
 
 def sort_spectra(client, params):
+  if params["ext"] != "ms2":
+    raise Exception("sort_spectra: Not implemented for ext", params["ext"])
   start_time = time.time()
   cexec(client, "python sort.py --file {0:s}".format(params["key"]))
   params["key"] = "sorted_{0:s}".format(params["key"])
