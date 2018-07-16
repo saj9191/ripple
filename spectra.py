@@ -18,7 +18,8 @@ class SpectraIterator:
 
 
 class ms2SpectraIterator(SpectraIterator):
-  def __init__(self, obj, batch_size, chunk):
+  def __init__(self, obj, batch_size, chunk_size):
+    SpectraIterator.__init__(self, obj, batch_size, chunk_size)
     self.start_byte = 0
     self.num_bytes = obj.content_length
     self.remainder = ""
