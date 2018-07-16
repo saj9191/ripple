@@ -1,12 +1,8 @@
 import boto3
 import json
+import os
+import spectra
 import util
-
-
-def save_spectra(output_bucket, spectra, ts, file_id, byte_id, num_bytes):
-  s = list(map(lambda spectrum: spectrum.group(0), spectra))
-  key = util.file_name(ts, file_id, byte_id, num_bytes, "ms2")
-  output_bucket.put_object(Key=key, Body=str.encode("".join(s)))
 
 
 def split_spectra(bucket_name, key, params):
@@ -19,32 +15,27 @@ def split_spectra(bucket_name, key, params):
 
   obj = s3.Object(bucket_name, key)
   num_bytes = obj.content_length
-  spectra_regex = []
-  remainder = ""
 
   m = util.parse_file_name(key)
   ts = m["timestamp"]
+  _, ext = os.path.splitext(key)
 
-  start_byte = 0
+  if ext == ".mzML":
+    iterator = spectra.mzMLSpectraIterator(obj, batch_size, chunk_size)
+  elif ext == ".ms2":
+    iterator = spectra.ms2SpectraIterator(obj, batch_size, chunk_size)
+
+  [s, more] = iterator.nextFile()
   file_id = 1
-
-  while start_byte < num_bytes:
-    end_byte = min(start_byte + chunk_size, num_bytes)
-    [new_spectra_regex, remainder] = util.get_spectra(obj, start_byte, end_byte, num_bytes, remainder)
-    spectra_regex += new_spectra_regex
-
-    while len(spectra_regex) >= batch_size:
-      batch = spectra_regex[:batch_size]
-      byte_id = batch[0].span(0)[0]
-
-      save_spectra(output_bucket, batch, ts, file_id, byte_id, num_bytes)
-      spectra_regex = spectra_regex[batch_size:]
-      file_id += 1
-
-    start_byte = end_byte + 1
-
-  assert(len(remainder.strip()) == 0)
-  save_spectra(output_bucket, spectra_regex, ts, file_id, num_bytes, num_bytes)
+  while len(s) > 0:
+    if more:
+      byte_id = file_id
+    else:
+      byte_id = num_bytes
+    key = util.file_name(ts, file_id, byte_id, num_bytes, ext[1:])
+    output_bucket.put_object(Key=key, Body=str.encode(s))
+    [s, more] = iterator.nextFile()
+    file_id += 1
 
 
 def handler(event, context):
