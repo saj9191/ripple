@@ -53,10 +53,12 @@ def analyze_spectra(bucket_name, key, params):
     done = len(process_output.split("\n")) == 1
     time.sleep(1)
 
+  _, ext = os.path.splitext(key)
+  new_key = key.replace(ext, ".txt")
   output_file = "{0:s}/tide-search.txt".format(output_dir)
   if os.path.isfile(output_file):
     output = open(output_file).read()
-    output_bucket.put_object(Key=key, Body=str.encode(output))
+    output_bucket.put_object(Key=new_key, Body=str.encode(output))
   else:
     print("ERROR", output_file, "does not exist")
 

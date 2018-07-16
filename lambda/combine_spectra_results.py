@@ -1,6 +1,6 @@
 import boto3
 import json
-import re
+import os
 import util
 
 
@@ -25,7 +25,8 @@ def combine(bucket_name, key, params):
   ts = m["timestamp"]
   num_bytes = m["max_id"]
 
-  key_regex = util.get_key_regex(ts, num_bytes)
+  _, ext = os.path.splitext(key)
+  key_regex = util.get_key_regex(ts, num_bytes, "txt")
 
   [have_all_files, matching_keys] = util.have_all_files(bucket_name, num_bytes, key_regex)
 

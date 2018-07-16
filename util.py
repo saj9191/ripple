@@ -24,9 +24,9 @@ def parse_file_name(file_name):
   }
 
 
-def get_key_regex(ts, num_bytes):
+def get_key_regex(ts, num_bytes, ext="ms2"):
   regex = constants.FILE_FORMAT.replace("{1:d}", "([0-9]+)").replace("{2:d}", "([0-9]+)")
-  regex = regex.replace("{3:d}", "{1:d}").replace("{4:s}", "ms2")
+  regex = regex.replace("{3:d}", "{1:d}").replace("{4:s}", ext)
   return re.compile(regex.format(ts, num_bytes))
 
 
