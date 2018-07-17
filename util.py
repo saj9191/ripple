@@ -4,20 +4,22 @@ import re
 import subprocess
 
 
-def file_name(timestamp, file_id, id, max_id, ext):
-  return constants.FILE_FORMAT.format(timestamp, file_id, id, max_id, ext)
+def file_name(timestamp, file_id, id, max_id, ext, split=0):
+  return constants.FILE_FORMAT.format(timestamp, file_id, split, id, max_id, ext)
 
 
 def parse_file_name(file_name):
   m = constants.FILE_REGEX.match(file_name)
   timestamp = float(m.group(1))
   file_id = int(m.group(2))
-  id = int(m.group(3))
-  max_id = int(m.group(4))
-  ext = m.group(5)
+  split = int(m.group(3))
+  id = int(m.group(4))
+  max_id = int(m.group(5))
+  ext = m.group(6)
   return {
     "timestamp": timestamp,
     "file_id": file_id,
+    "split": split,
     "id": id,
     "max_id": max_id,
     "ext": ext
@@ -25,8 +27,10 @@ def parse_file_name(file_name):
 
 
 def get_key_regex(ts, num_bytes, ext="ms2"):
-  regex = constants.FILE_FORMAT.replace("{1:d}", "([0-9]+)").replace("{2:d}", "([0-9]+)")
-  regex = regex.replace("{3:d}", "{1:d}").replace("{4:s}", ext)
+  regex = constants.FILE_FORMAT
+  for i in range(1, 4):
+    regex = regex.replace("{" + str(i) + ":d}", "([0-9]+)")
+  regex = regex.replace("{4:d}", "{1:d}").replace("{5:s}", ext)
   return re.compile(regex.format(ts, num_bytes))
 
 
@@ -80,13 +84,20 @@ def have_all_files(bucket_name, num_bytes, key_regex):
 
   matching_keys = []
   num_files = None
+  splits = set()
   for key in bucket.objects.all():
-    m = key_regex.match(key.key)
-    if m:
+    if key_regex.match(key.key):
+      m = parse_file_name(key.key)
       matching_keys.append(key.key)
-      if int(m.group(2)) == num_bytes:
-        num_files = int(m.group(1))
+      print(m)
+      if m["split"] != 0:
+        splits.add(m["file_id"])
+      if m["id"] == num_bytes:
+        num_files = m["file_id"]
 
+  if num_files != None:
+    num_files += len(splits)
+  print(len(matching_keys), num_files, splits)
   return (len(matching_keys) == num_files, matching_keys)
 
 

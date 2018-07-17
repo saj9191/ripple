@@ -1,8 +1,8 @@
+import constants
 import hashlib
 import re
 import util
 import xml.etree.ElementTree as ET
-
 
 class SpectraIterator:
   def __init__(self, obj, batch_size, chunk_size):
@@ -50,6 +50,7 @@ class mzMLSpectraIterator(SpectraIterator):
 
   def __init__(self, obj, batch_size, chunk_size):
     SpectraIterator.__init__(self, obj, batch_size, chunk_size)
+    ET.register_namespace("", constants.XML_NAMESPACE)
     self.footer_offset = 235
     self.obj = obj
     self.content_length = obj.content_length
@@ -96,6 +97,7 @@ class mzMLSpectraIterator(SpectraIterator):
     else:
       end_byte = self.content_length
     self.offset_regex = self.offset_regex[self.batch_size:]
+    print("start", start_byte, "end", end_byte, "length", self.content_length)
     content = self.getBytes(start_byte, end_byte)
     index = content.rfind(self.SPECTRUM_LIST_CLOSE)
     if index != -1:
@@ -105,11 +107,10 @@ class mzMLSpectraIterator(SpectraIterator):
     spectra = list(root.iter("spectrum"))
     return [spectra, len(self.offset_regex) > 0 or self.current_spectra_offset < self.content_length]
 
-  def nextFile(self):
-    content = self.HEADER
+  def create(spectra):
+    content = mzMLSpectraIterator.HEADER
     offset = len(content)
     offsets = []
-    [spectra, more] = self.next()
     count = 0
     for i in range(len(spectra)):
       xml = spectra[i]
@@ -121,7 +122,7 @@ class mzMLSpectraIterator(SpectraIterator):
       content += spectrum
       count += 1
 
-    content += "</spectrumList>\n"
+    content += "</spectrumList></run></mzML>\n"
     list_offset = len(content)
     content += '<indexList count="{0:d}">\n'.format(len(spectra))
     content += '<index name="spectrum">\n'
@@ -134,4 +135,9 @@ class mzMLSpectraIterator(SpectraIterator):
 
     content += str(hashlib.sha1(content.encode("utf-8")).hexdigest())
     content += "</fileChecksum>\n</indexedmzML>"
+    return content
+
+  def nextFile(self):
+    [spectra, more] = self.next()
+    content = mzMLSpectraIterator.create(spectra)
     return [content, more]

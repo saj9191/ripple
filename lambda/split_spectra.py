@@ -1,6 +1,5 @@
 import boto3
 import json
-import os
 import spectra
 import util
 
@@ -18,11 +17,12 @@ def split_spectra(bucket_name, key, params):
 
   m = util.parse_file_name(key)
   ts = m["timestamp"]
-  _, ext = os.path.splitext(key)
+  ext = m["ext"]
+  print("ext", m["ext"])
 
-  if ext == ".mzML":
+  if ext == "mzML":
     iterator = spectra.mzMLSpectraIterator(obj, batch_size, chunk_size)
-  elif ext == ".ms2":
+  elif ext == "ms2":
     iterator = spectra.ms2SpectraIterator(obj, batch_size, chunk_size)
 
   more = True
@@ -33,7 +33,7 @@ def split_spectra(bucket_name, key, params):
       byte_id = file_id
     else:
       byte_id = num_bytes
-    key = util.file_name(ts, file_id, byte_id, num_bytes, ext[1:])
+    key = util.file_name(ts, file_id, byte_id, num_bytes, ext)
     output_bucket.put_object(Key=key, Body=str.encode(s))
     file_id += 1
 

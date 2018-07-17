@@ -338,10 +338,8 @@ def upload_functions(client, params):
       "../sort.py",
       "../util.py",
       "../constants.py",
+      "../header.mzML"
     ]
-
-    if function == "split_spectra":
-      files.append("../header.mzML")
 
     subprocess.call("zip {0:s}.zip {1:s}".format(function, " ".join(files)), shell=True)
 
