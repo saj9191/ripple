@@ -331,7 +331,19 @@ def upload_functions(client, params):
     f.write(json.dumps(fparams))
     f.close()
 
-    subprocess.call("zip {0:s}.zip {0:s}.py {0:s}.json ../spectra.py ../sort.py ../util.py ../constants.py".format(function), shell=True)
+    files = [
+      "{0:s}.py".format(function),
+      "{0:s}.json".format(function),
+      "../spectra.py",
+      "../sort.py",
+      "../util.py",
+      "../constants.py",
+    ]
+
+    if function == "split_spectra":
+      files.append("../header.mzML")
+
+    subprocess.call("zip {0:s}.zip {1:s}".format(function, " ".join(files)), shell=True)
 
     with open("{0:s}.zip".format(function), "rb") as f:
       zipped_code = f.read()
@@ -481,6 +493,7 @@ def parse_split_logs(client, start_time, params):
     "cost": cost
   }
 
+
 def file_count(bucket_name, params):
   s3 = setup_connection("s3", params)
   bucket = s3.Bucket(bucket_name)
@@ -491,9 +504,8 @@ def file_count(bucket_name, params):
       count += 1
   return count
 
+
 def parse_mult_logs(client, start_time, params, lambda_name):
-  num_spectra = int(subprocess.check_output("cat sorted_{0:s} | grep 'S\s' | wc -l".format(params["input_name"]), shell=True).decode("utf-8").strip())
-  batch_size = params["split_spectra"]["batch_size"]
   lparams = params[lambda_name]
   num_lambdas = file_count(lparams["output_bucket"], params)
 
