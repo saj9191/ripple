@@ -391,7 +391,9 @@ def check_objects(client, bucket_name, prefix, count, timeout, params):
     end = datetime.datetime.now()
     now = end.strftime("%H:%M:%S")
     if not done:
-      print("{0:s}: Waiting for {1:s} function{2:s}...".format(now, prefix, suffix))
+      num_split = file_count(params["split_spectra"]["output_bucket"], params)
+      num_analyze = file_count(params["analyze_spectra"]["output_bucket"], params)
+      print("{0:s}: Waiting for {1:s} function{2:s}. Split {3:d} Analyze {4:d}.".format(now, prefix, suffix, num_split, num_analyze))
       if (end - start).total_seconds() > timeout:
         raise BenchmarkException("Could not find bucket {0:s} prefix {1:s}".format(bucket_name, prefix))
       time.sleep(30)
@@ -479,12 +481,22 @@ def parse_split_logs(client, start_time, params):
     "cost": cost
   }
 
+def file_count(bucket_name, params):
+  s3 = setup_connection("s3", params)
+  bucket = s3.Bucket(bucket_name)
+  now = "{0:f}".format(params["now"])
+  count = 0
+  for obj in bucket.objects.all():
+    if now in obj.key:
+      count += 1
+  return count
 
 def parse_mult_logs(client, start_time, params, lambda_name):
   num_spectra = int(subprocess.check_output("cat sorted_{0:s} | grep 'S\s' | wc -l".format(params["input_name"]), shell=True).decode("utf-8").strip())
   batch_size = params["split_spectra"]["batch_size"]
   lparams = params[lambda_name]
-  num_lambdas = int((num_spectra + batch_size - 1) / batch_size)
+  num_lambdas = file_count(lparams["output_bucket"], params)
+
   events = fetch_events(client, num_lambdas, lparams["name"], start_time, "REPORT RequestId")
   max_billed_duration = 0
   total_billed_duration = 0
