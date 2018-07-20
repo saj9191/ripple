@@ -113,7 +113,7 @@ def create_client(params):
 
 
 def process_params(params):
-  params["output_bucket"] = params["percolator"]["output_bucket"]
+  params["output_bucket"] = params["lambda"]["percolator"]["output_bucket"]
   _, ext = os.path.splitext(params["input_name"])
   params["ext"] = ext[1:]
   if params["model"] == "lambda":
@@ -128,12 +128,14 @@ def process_params(params):
   else:
     params["input"] = params["input_name"]
 
-  if params["lambda"]:
+  if params["model"] == "lambda":
     if params["sort"] == "yes":
       params["buckets"] = ["input", "split", "sort", "merge", "analyze", "combine", "output"]
     else:
-      params["split_spectra"]["output_bucket"] = params["merge_spectra"]["output_bucket"]
+      params["lambda"]["split_spectra"]["output_bucket"] = params["lambda"]["merge_spectra"]["output_bucket"]
       params["buckets"] = ["input", "merge", "analyze", "combine", "output"]
+  elif params["model"] == "coordinator":
+    params["buckets"] = ["input", "analyze"]
   else:
     params["buckets"] = ["output"]
 
@@ -164,6 +166,7 @@ def setup_triggers(params):
           }]
         }
       )
+      assert(response["ResponseMetadata"]["HTTPStatusCode"] == 200)
 
 
 def process_iteration_params(params, iteration):
