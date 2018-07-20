@@ -7,3 +7,5 @@ paper/*.out
 paper/*.pdf
 paper/*.log
 paper/*.thm
+*.mzML
+*.ms2
