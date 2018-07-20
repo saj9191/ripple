@@ -4,6 +4,7 @@ import re
 import util
 import xml.etree.ElementTree as ET
 
+
 class SpectraIterator:
   def __init__(self, obj, batch_size, chunk_size):
     self.batch_size = batch_size
@@ -58,17 +59,11 @@ class mzMLSpectraIterator(SpectraIterator):
     self.content_length = obj.content_length
     self.remainder = ""
     self.offsets = []
-    self.header = self.getHeader()
     self.seen_count = 0
     self.findOffsets()
 
   def getSpectraCount(self):
     return self.total_count
-
-  def getHeader(self):
-    header = self.getBytes(0, self.spectra_list_offset)
-    index = header.index("<spectrum index")
-    return header[:index]
 
   def findOffsets(self):
     end_byte = self.content_length
@@ -82,19 +77,18 @@ class mzMLSpectraIterator(SpectraIterator):
     start_byte = self.spectra_list_offset
     end_byte = start_byte + self.INDEX_CHUNK_SIZE
     stream = self.getBytes(start_byte, end_byte)
-    m = INDEX_LIST_REGEX.match(stream)
+    m = self.INDEX_LIST_REGEX.match(stream)
     self.total_count = int(m.group(1))
     self.current_spectra_offset = self.spectra_list_offset + stream.find("<offset")
 
   def nextOffsets(self):
     # Plus one is so we get end byte of spectra
-    while len(self.offsets) < (self.batch_size + 1) and self.current_spectra_offset < self.spectra_list_offset:
+    while len(self.offsets) < (self.batch_size + 1) and self.current_spectra_offset < self.content_length:
       start_byte = self.current_spectra_offset
-      end_byte = min(self.spectra_list_offset, start_byte + self.chunk_size)
-
+      end_byte = min(self.content_length, start_byte + self.chunk_size)
       stream = self.getBytes(start_byte, end_byte)
       stream = self.remainder + stream
-      offset_regex = self.OFFSET_REGEX.finditer(stream))
+      offset_regex = list(self.OFFSET_REGEX.finditer(stream))
       self.offsets += list(map(lambda r: int(r.group(1)), offset_regex))
       regex_offset = offset_regex[-1].span(0)[1]
       self.remainder = stream[regex_offset:]
@@ -102,15 +96,14 @@ class mzMLSpectraIterator(SpectraIterator):
 
     start_offset = self.offsets[0]
     if len(self.offsets) > self.batch_size:
-      end_offset = self.offsets[self.batch_size]
+      end_offset = self.offsets[self.batch_size] - 1
     else:
       end_offset = self.spectra_list_offset
 
-    self.seen_count += min(self.offsets, self.batch_size)
+    self.seen_count += min(len(self.offsets), self.batch_size)
 
     self.offsets = self.offsets[self.batch_size:]
     return (start_offset, end_offset, self.seen_count < self.total_count)
-
 
   def getSpectra(self, start_byte, end_byte):
     content = self.getBytes(start_byte, end_byte)
@@ -122,17 +115,14 @@ class mzMLSpectraIterator(SpectraIterator):
     spectra = list(root.iter("spectrum"))
     return spectra
 
-
   def next(self):
     [start_byte, end_byte, more] = self.nextOffsets()
     return [self.getSpectra(start_byte, end_byte), more]
-
 
   def create(spectra):
     content = mzMLSpectraIterator.HEADER
     offset = len(content)
     offsets = []
-    count = 0
     for i in range(len(spectra)):
       xml = spectra[i]
       xml.set("index", str(i))

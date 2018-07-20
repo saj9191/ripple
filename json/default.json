@@ -1,5 +1,5 @@
 {
-  "input_name": "20170403_HelaQC_01.ms2",
+  "input_name": "ASH_20170314_HELA_90MIN_20170320042659.mzML",
   "iterations": 1,
   "model": "lambda",
   "region": "us-west-2",
@@ -23,6 +23,7 @@
       "arn": "arn:aws:lambda:us-west-2:999145429263:function:SplitSpectra",
       "batch_size": 1000,
       "chunk_size": 100000000,
+      "dependencies": ["constants.py", "header.mzML", "spectra.py", "split.py", "util.py"],
       "memory_size": 1024,
       "name": "SplitSpectra",
       "input_bucket": "maccoss-human-input-spectra",
@@ -31,6 +32,7 @@
     },
     "sort_spectra": {
       "arn": "arn:aws:lambda:us-west-2:999145429263:function:SortSpectra",
+      "dependencies": [],
       "memory_size": 1024,
       "name": "SortSpectra",
       "input_bucket": "maccoss-human-split-spectra",
@@ -41,6 +43,7 @@
       "arn": "arn:aws:lambda:us-west-2:999145429263:function:MergeSpectra",
       "batch_size": 1000,
       "chunk_size": 10000,
+      "dependencies": [],
       "memory_size": 1024,
       "name": "MergeSpectra",
       "input_bucket": "maccoss-human-sort-spectra",
@@ -49,6 +52,7 @@
     },
     "analyze_spectra": {
       "arn": "arn:aws:lambda:us-west-2:999145429263:function:AnalyzeSpectra",
+      "dependencies": ["constants.py", "header.mzML", "spectra.py", "util.py"],
       "memory_size": 1024,
       "name": "AnalyzeSpectra",
       "num_threads": 1,
@@ -58,6 +62,7 @@
     },
     "combine_spectra_results": {
       "arn": "arn:aws:lambda:us-west-2:999145429263:function:CombineSpectra",
+      "dependencies": ["constants.py", "util.py"],
       "memory_size": 256,
       "name": "CombineSpectra",
       "input_bucket": "maccoss-human-analyze-spectra",
@@ -66,6 +71,7 @@
     },
     "percolator": {
       "arn": "arn:aws:lambda:us-west-2:999145429263:function:Percolator",
+      "dependencies": ["util.py"],
       "max_train": 50000,
       "memory_size": 3008,
       "name": "Percolator",

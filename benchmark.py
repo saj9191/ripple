@@ -158,11 +158,11 @@ def setup_triggers(params):
   for function in params["triggers"]:
     if len(params["triggers"][function]) > 0:
       response = client.put_bucket_notification_configuration(
-        Bucket=params[function]["input_bucket"],
+        Bucket=params["lambda"][function]["input_bucket"],
         NotificationConfiguration={
-          "LambdaFunctionConfiguration": [{
+          "LambdaFunctionConfigurations": [{
             "LambdaFunctionArn": params["lambda"][function]["arn"],
-            "Events": params["trigger"][function]
+            "Events": params["triggers"][function]
           }]
         }
       )
@@ -181,8 +181,8 @@ def upload_input(params):
   s3 = setup_connection("s3", params)
 
   start = time.time()
-  print("Uploading {0:s} to S3".format(params["input"]))
-  s3.Object(bucket_name, key).put(Body=open(params["input"], 'rb'))
+  print("Uploading {0:s} to s3://{1:s}".format(params["input"], bucket_name))
+  s3.Object(bucket_name, key).put(Body=open("data/{0:s}".format(params["input"]), 'rb'))
   end = time.time()
 
   obj = s3.Object(bucket_name, key)
@@ -230,7 +230,7 @@ def run(params):
     done = False
     while not done:
       try:
-        if params["lambda"]:
+        if params["model"] == "lambda":
           results = lambda_benchmark(params)
         else:
           results = ec2_benchmark(params)
@@ -400,7 +400,7 @@ def upload_functions(client, params):
 
   os.chdir("lambda")
   for function in functions:
-    fparams = params[function]
+    fparams = params["lambda"][function]
 
     f = open("{0:s}.json".format(function), "w")
     f.write(json.dumps(fparams))
@@ -408,14 +408,14 @@ def upload_functions(client, params):
 
     files = [
       "{0:s}.py".format(function),
-      "{0:s}.json".format(function),
-      "../spectra.py",
-      "../sort.py",
-      "../util.py",
-      "../constants.py",
-      "../header.mzML"
+      "{0:s}.json".format(function)
     ]
 
+    for dependency in fparams["dependencies"]:
+      subprocess.call("cp ../{0:s} .".format(dependency), shell=True)
+
+    files += fparams["dependencies"]
+    print(fparams["name"], files)
     subprocess.call("zip {0:s}.zip {1:s}".format(function, " ".join(files)), shell=True)
 
     with open("{0:s}.zip".format(function), "rb") as f:
