@@ -417,6 +417,7 @@ def wait_for_completion(start_time, params):
   overhead = 3.5  # Give ourselves time as we need to wait for the split and analyze functions to finish.
   bucket_name = "maccoss-human-combine-spectra"
   check_objects(client, bucket_name, "spectra", 1, params["combine_spectra_results"]["timeout"] * overhead, params)
+  overhead = 1.5
   bucket_name = "maccoss-human-output-spectra"
   check_objects(client, bucket_name, "percolator.decoy", 2,  params["percolator"]["timeout"] * overhead, params)
 
@@ -513,6 +514,8 @@ def parse_mult_logs(client, start_time, params, lambda_name):
   total_memory_used = 0  # TODO: Handle
   min_timestamp = events[0]["timestamp"]
   max_timestamp = events[0]["timestamp"]
+  min_memory = 4000
+  max_memory = 0
 
   for event in events:
     min_timestamp = min(min_timestamp, event["timestamp"])
@@ -520,6 +523,8 @@ def parse_mult_logs(client, start_time, params, lambda_name):
     m = REPORT.match(event["message"])
     duration = int(m.group(2))
     memory_used = int(m.group(4))
+    min_memory = min(memory_used, min_memory)
+    max_memory = max(memory_used, max_memory)
     max_billed_duration = max(max_billed_duration, duration)
     total_billed_duration += duration
     total_memory_used += memory_used
@@ -529,6 +534,8 @@ def parse_mult_logs(client, start_time, params, lambda_name):
   print(lambda_name)
   print("Min Timestamp", min_timestamp)
   print("Max Timestamp", max_timestamp)
+  print("Min Memory", min_memory)
+  print("Max Memory", max_memory)
   print("Max Billed Duration", max_billed_duration, "milliseconds")
   print("Total Billed Duration", total_billed_duration, "milliseconds")
   print("Cost", cost)
