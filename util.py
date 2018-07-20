@@ -92,12 +92,11 @@ def have_all_files(bucket_name, num_bytes, key_regex):
       print(m)
       if m["split"] != 0:
         splits.add(m["file_id"])
-      if m["id"] == num_bytes:
+      if m["id"] == m["max_id"]:
         num_files = m["file_id"]
 
   if num_files != None:
     num_files += len(splits)
-  print(len(matching_keys), num_files, splits)
   return (len(matching_keys) == num_files, matching_keys)
 
 

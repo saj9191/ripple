@@ -139,6 +139,8 @@ def process_params(params):
   else:
     params["buckets"] = ["output"]
 
+  params["bucket_prefix"] = params["lambda"]["percolator"]["output_bucket"].spit("-")[0]
+
   params["triggers"] = {}
   active_functions = set()
   if params["model"] == "lambda":
@@ -313,7 +315,7 @@ def clear_buckets(params):
   ts = "{0:f}".format(params["now"])
   for bn in params["buckets"]:
     count = 0
-    bucket_name = "maccoss-human-{0:s}-spectra".format(bn)
+    bucket_name = "{0:s}-human-{1:s}-spectra".format(params["bucket_prefix"], bn)
     bucket = s3.Bucket(bucket_name)
     for obj in bucket.objects.all():
       if ts in obj.key:
@@ -477,9 +479,8 @@ def check_objects(client, bucket_name, prefix, count, timeout, params):
     end = datetime.datetime.now()
     now = end.strftime("%H:%M:%S")
     if not done:
-      num_split = file_count(params["lambda"]["split_spectra"]["output_bucket"], params)
       num_analyze = file_count(params["lambda"]["analyze_spectra"]["output_bucket"], params)
-      print("{0:s}: Waiting for {1:s} function{2:s}. Split {3:d} Analyze {4:d}.".format(now, prefix, suffix, num_split, num_analyze))
+      print("{0:s}: Waiting for {1:s} function{2:s}. Analyze {3:d}.".format(now, prefix, suffix, num_analyze))
       if (end - start).total_seconds() > timeout:
         raise BenchmarkException("Could not find bucket {0:s} prefix {1:s}".format(bucket_name, prefix))
       time.sleep(30)
@@ -547,7 +548,7 @@ def calculate_cost(duration, memory_size):
 
 
 def parse_split_logs(client, start_time, params):
-  sparams = params["split_spectra"]
+  sparams = params["lambda"]["split_spectra"]
   events = fetch_events(client, 1, sparams["name"], start_time, "REPORT RequestId")
   m = REPORT.match(events[0]["message"])
   duration = int(m.group(2))
@@ -581,7 +582,7 @@ def file_count(bucket_name, params):
 
 
 def parse_mult_logs(client, start_time, params, lambda_name):
-  lparams = params[lambda_name]
+  lparams = params["lambda"][lambda_name]
   num_lambdas = file_count(lparams["output_bucket"], params)
 
   events = fetch_events(client, num_lambdas, lparams["name"], start_time, "REPORT RequestId")
@@ -638,7 +639,7 @@ def parse_analyze_logs(client, start_time, params):
 
 
 def parse_combine_logs(client, start_time, params):
-  cparams = params["combine_spectra_results"]
+  cparams = params["lambda"]["combine_spectra_results"]
   name = cparams["name"]
   combine_events = fetch_events(client, 1, name, start_time, "Combining")
 
@@ -668,7 +669,7 @@ def parse_combine_logs(client, start_time, params):
 
 
 def parse_percolator_logs(client, start_time, params):
-  pparams = params["percolator"]
+  pparams = params["lambda"]["percolator"]
   events = fetch_events(client, 1, pparams["name"], start_time, "REPORT RequestId")
   m = REPORT.match(events[0]["message"])
   duration = int(m.group(2))

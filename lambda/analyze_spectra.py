@@ -9,12 +9,11 @@ import util
 import xml.etree.ElementTree as ET
 
 ET.register_namespace("", constants.XML_NAMESPACE)
-
+CLOSING_TAG = "</spectrum>"
 
 def split_spectra(s3, bucket_name, key):
   root = ET.parse("/tmp/{0:s}".format(key)).getroot()
   s = root[0][4][0]
-  print("Splitting", len(s), "spectra")
   half = int(len(s) / 2)
 
   m = util.parse_file_name(key)
@@ -48,8 +47,10 @@ def analyze_spectra(bucket_name, key, start_byte, end_byte, file_id, more, param
   obj = s3.Object(bucket_name, key)
 
   with open("/tmp/{0:s}".format(subset_key), "wb") as f:
-    content = obj.get(Range="bytes={0:d}-{1:d}".format(start_byte, end_byte))["Body"].read()
-    root = ET.fromstring("<data>" + content.decode("utf-8").strip() + "</data>")
+    content = obj.get(Range="bytes={0:d}-{1:d}".format(start_byte, end_byte))["Body"].read().decode("utf-8").strip()
+    index = content.rindex(CLOSING_TAG)
+    content = content[:index + len(CLOSING_TAG)]
+    root = ET.fromstring("<data>" + content + "</data>")
     f.write(str.encode(spectra.mzMLSpectraIterator.create(list(root.iter("spectrum")))))
 
   subprocess.call("chmod 755 /tmp/crux", shell=True)
@@ -76,10 +77,11 @@ def analyze_spectra(bucket_name, key, start_byte, end_byte, file_id, more, param
   try:
     subprocess.check_output(command, stderr=subprocess.STDOUT, shell=True)
     if more:
-      new_key = util.file_name(ts, file_id, file_id, end_byte, m["ext"])
+      byte_id = start_byte
     else:
-      new_key = util.file_name(ts, file_id, file_id, file_id, m["ext"])
+      byte_id = obj.content_length
 
+    new_key = util.file_name(ts, file_id, byte_id, obj.content_length, "txt")
     output_file = "{0:s}/tide-search.txt".format(output_dir)
     if os.path.isfile(output_file):
       output = open(output_file).read()

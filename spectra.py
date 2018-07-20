@@ -101,7 +101,6 @@ class mzMLSpectraIterator(SpectraIterator):
       end_offset = self.spectra_list_offset
 
     self.seen_count += min(len(self.offsets), self.batch_size)
-
     self.offsets = self.offsets[self.batch_size:]
     return (start_offset, end_offset, self.seen_count < self.total_count)
 

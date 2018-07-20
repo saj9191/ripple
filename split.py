@@ -34,16 +34,16 @@ def split_spectra(key, bucket_name, batch_size, chunk_size):
             "file_id": file_id,
             "start_byte": start_byte,
             "end_byte": end_byte,
-            "more": False
+            "more": more
           }
         }
       }]
     }
-    file_id += 1
 
-    # TODO: Check responses?
-    client.invoke(
+    response = client.invoke(
       FunctionName="AnalyzeSpectra",
       InvocationType="Event",
       Payload=json.JSONEncoder().encode(payload)
     )
+    assert(response["ResponseMetadata"]["HTTPStatusCode"] == 202)
+    file_id += 1
