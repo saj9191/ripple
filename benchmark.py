@@ -138,7 +138,7 @@ def process_params(params):
     params["buckets"] = ["output"]
 
   params["triggers"] = {}
-  active_funtions = set()
+  active_functions = set()
   if params["model"] == "lambda":
     active_functions = set(params["lambda"].keys())
   elif params["model"] == "coordinator":
@@ -156,14 +156,14 @@ def setup_triggers(params):
   for function in params["triggers"]:
     if len(params["triggers"][function]) > 0:
       response = client.put_bucket_notification_configuration(
-      Bucket=params[function]["input_bucket"],
-      NotificationConfiguration = {
-        "LambdaFunctionConfiguration": [{
-          "LambdaFunctionArn": params["lambda"][function]["arn"],
-          "Events": params["trigger"][function]
-        }]
-      }
-    )
+        Bucket=params[function]["input_bucket"],
+        NotificationConfiguration={
+          "LambdaFunctionConfiguration": [{
+            "LambdaFunctionArn": params["lambda"][function]["arn"],
+            "Events": params["trigger"][function]
+          }]
+        }
+      )
 
 
 def process_iteration_params(params, iteration):
@@ -321,6 +321,7 @@ def clear_buckets(params):
 #       COORDINATOR         #
 #############################
 
+
 def run_coordinator(client, params):
   start_time = time.time()
   batch_size = params["split_spectra"]["batch_size"]
@@ -343,10 +344,12 @@ def coordinator_benchmark(params):
 
   instance = create_stats["instance"]
   ec2 = create_stats["ec2"]
-  client = initiate_stats["client"]
+  initiate_stats = initiate_instance(ec2, instance, params)
+  stats.append(initiate_stats)
 
+  client = initiate_stats["client"]
   stats.append(setup_instance(client, params))
-  stats.append(initiate_instance(ec2, instance, params))
+  stats.append(initiate_stats)
   stats.append(run_coordinator(client, params))
   stats.append(terminate_instance(instance, client, params))
 
