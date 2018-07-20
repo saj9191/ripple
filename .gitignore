@@ -9,3 +9,4 @@ paper/*.log
 paper/*.thm
 *.mzML
 *.ms2
+*.pem
