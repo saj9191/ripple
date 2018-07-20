@@ -72,7 +72,7 @@ def check_output(params):
       num_lines = len(content.split("\n"))
       print("key", tide_file, "num_lines", num_lines)
 
-  bucket_name = "maccoss-human-output-spectra"
+  bucket_name = params["output_bucket"]
   bucket = s3.Bucket(bucket_name)
   for item in ["peptides", "psms"]:
     key = "percolator.target.{0:s}.txt".format(item)
@@ -117,11 +117,11 @@ def process_params(params):
   _, ext = os.path.splitext(params["input_name"])
   params["ext"] = ext[1:]
   if params["model"] == "lambda":
-    params["input_bucket"] = "maccoss-human-input-spectra"
-    params["tide_bucket"] = "maccoss-human-combine-spectra"
+    params["input_bucket"] = params["lambda"]["split_spectra"]["input_bucket"]
+    params["tide_bucket"] = params["lambda"]["combine_spectra_results"]["output_bucket"]
   else:
-    params["input_bucket"] = "maccoss-human-output-spectra"
-    params["tide_bucket"] = "maccoss-human-output-spectra"
+    params["input_bucket"] = params["lambda"]["percolator"]["output_bucket"]
+    params["tide_bucket"] = params["input_bucket"]
 
   if params["sort"] == "pre":
     params["input"] = "sorted_{0:s}".format(params["input_name"])
@@ -156,17 +156,18 @@ def process_params(params):
 def setup_triggers(params):
   client = setup_client("s3", params)
   for function in params["triggers"]:
-    if len(params["triggers"][function]) > 0:
-      response = client.put_bucket_notification_configuration(
-        Bucket=params["lambda"][function]["input_bucket"],
-        NotificationConfiguration={
-          "LambdaFunctionConfigurations": [{
-            "LambdaFunctionArn": params["lambda"][function]["arn"],
-            "Events": params["triggers"][function]
-          }]
-        }
-      )
-      assert(response["ResponseMetadata"]["HTTPStatusCode"] == 200)
+    print(function, params["lambda"][function]["input_bucket"])
+    print("triggers", params["triggers"][function])
+    response = client.put_bucket_notification_configuration(
+      Bucket=params["lambda"][function]["input_bucket"],
+      NotificationConfiguration={
+        "LambdaFunctionConfigurations": [{
+          "LambdaFunctionArn": params["lambda"][function]["arn"],
+          "Events": params["triggers"][function]
+        }]
+      }
+    )
+    assert(response["ResponseMetadata"]["HTTPStatusCode"] == 200)
 
 
 def process_iteration_params(params, iteration):
@@ -218,7 +219,7 @@ def run(params):
   if params["model"] != "ec2":
     upload_functions(client, params)
 
-  setup_triggers(params)
+  # setup_triggers(params)
   stats = []
   stages = get_stages(params)
   for stage in stages:
@@ -476,8 +477,8 @@ def check_objects(client, bucket_name, prefix, count, timeout, params):
     end = datetime.datetime.now()
     now = end.strftime("%H:%M:%S")
     if not done:
-      num_split = file_count(params["split_spectra"]["output_bucket"], params)
-      num_analyze = file_count(params["analyze_spectra"]["output_bucket"], params)
+      num_split = file_count(params["lambda"]["split_spectra"]["output_bucket"], params)
+      num_analyze = file_count(params["lambda"]["analyze_spectra"]["output_bucket"], params)
       print("{0:s}: Waiting for {1:s} function{2:s}. Split {3:d} Analyze {4:d}.".format(now, prefix, suffix, num_split, num_analyze))
       if (end - start).total_seconds() > timeout:
         raise BenchmarkException("Could not find bucket {0:s} prefix {1:s}".format(bucket_name, prefix))
@@ -490,10 +491,10 @@ def wait_for_completion(start_time, params):
   client = setup_client("s3", params)
 
   overhead = 3.5  # Give ourselves time as we need to wait for the split and analyze functions to finish.
-  bucket_name = "maccoss-human-combine-spectra"
+  bucket_name = params["lambda"]["combine_spectra_results"]["output_bucket"]
   check_objects(client, bucket_name, "spectra", 1, params["lambda"]["combine_spectra_results"]["timeout"] * overhead, params)
   overhead = 1.5
-  bucket_name = "maccoss-human-output-spectra"
+  bucket_name = params["lambda"]["percolator"]["output_bucket"]
   check_objects(client, bucket_name, "percolator.decoy", 2,  params["lambda"]["percolator"]["timeout"] * overhead, params)
 
   target_timeout = 30  # Target should be created around the same time as decoys
