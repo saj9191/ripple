@@ -116,7 +116,7 @@ def process_params(params):
   params["output_bucket"] = params["percolator"]["output_bucket"]
   _, ext = os.path.splitext(params["input_name"])
   params["ext"] = ext[1:]
-  if params["lambda"]:
+  if params["model"] == "lambda":
     params["input_bucket"] = "maccoss-human-input-spectra"
     params["tide_bucket"] = "maccoss-human-combine-spectra"
   else:
@@ -136,6 +136,34 @@ def process_params(params):
       params["buckets"] = ["input", "merge", "analyze", "combine", "output"]
   else:
     params["buckets"] = ["output"]
+
+  params["triggers"] = {}
+  active_funtions = set()
+  if params["model"] == "lambda":
+    active_functions = set(params["lambda"].keys())
+  elif params["model"] == "coordinator":
+    active_functions = set(["analyze_spectra"])
+
+  for function in params["lambda"]:
+    if function in active_functions:
+      params["triggers"][function] = ["s3:ObjectCreated:*"]
+    else:
+      params["triggers"][function] = []
+
+
+def setup_triggers(params):
+  client = setup_client("s3", params)
+  for function in params["triggers"]:
+    if len(params["triggers"][function]) > 0:
+      response = client.put_bucket_notification_configuration(
+      Bucket=params[function]["input_bucket"],
+      NotificationConfiguration = {
+        "LambdaFunctionConfiguration": [{
+          "LambdaFunctionArn": params["lambda"][function]["arn"],
+          "Events": params["trigger"][function]
+        }]
+      }
+    )
 
 
 def process_iteration_params(params, iteration):
@@ -184,9 +212,10 @@ def run(params):
     args.file = params["input_name"]
     sort.run(args)
 
-  if params["lambda"]:
+  if params["model"] != "ec2":
     upload_functions(client, params)
 
+  setup_triggers(params)
   stats = []
   stages = get_stages(params)
   for stage in stages:
@@ -287,6 +316,46 @@ def clear_buckets(params):
         obj.delete()
         count += 1
     print("Deleted", count, bn, "objects")
+
+#############################
+#       COORDINATOR         #
+#############################
+
+def run_coordinator(client, params):
+  start_time = time.time()
+  batch_size = params["split_spectra"]["batch_size"]
+  chunk_size = params["split_spectra"]["chunk_size"]
+  cexec(client, "python coordinator.py --file {0:s} --batch_size {1:d} --chunk_size {2:d}".format(params["key"], batch_size, chunk_size))
+  end_time = time.time()
+  duration = end_time - start_time
+
+  return calculate_results(duration, MEMORY_PARAMETERS["ec2"][params["ec2"]["type"]])
+
+
+def coordinator_benchmark(params):
+  stats = []
+
+  [upload_timestamp, upload_duration] = upload_input(params)
+  stats.append(load_stats(upload_duration))
+
+  create_stats = create_instance(params)
+  stats.append(create_stats)
+
+  instance = create_stats["instance"]
+  ec2 = create_stats["ec2"]
+  client = initiate_stats["client"]
+
+  stats.append(setup_instance(client, params))
+  stats.append(initiate_instance(ec2, instance, params))
+  stats.append(run_coordinator(client, params))
+  stats.append(terminate_instance(instance, client, params))
+
+  total_stats = calculate_total_stats(stats)
+  print("END RESULTS")
+  print_stats(total_stats)
+  stats.append(total_stats)
+
+  return stats
 
 
 #############################

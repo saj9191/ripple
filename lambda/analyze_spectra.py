@@ -29,8 +29,7 @@ def split_spectra(s3, bucket_name, key):
   bucket.put_object(Key=new_key, Body=str.encode(spectra.mzMLSpectraIterator.create(second_half)))
 
 
-def analyze_spectra(bucket_name, key, params):
-  print("key", key)
+def analyze_spectra(bucket_name, key, start_byte, end_byte, params):
   util.clear_tmp()
   m = util.parse_file_name(key)
   s3 = boto3.resource('s3')
@@ -40,14 +39,21 @@ def analyze_spectra(bucket_name, key, params):
   output_bucket = s3.Bucket(params["output_bucket"])
   num_threads = params["num_threads"]
 
-  with open("/tmp/{0:s}".format(key), "wb") as f:
-    spectra_bucket.download_fileobj(key, f)
-
   with open("/tmp/HUMAN.fasta.20170123", "wb") as f:
     database_bucket.download_fileobj("HUMAN.fasta.20170123", f)
 
   with open("/tmp/crux", "wb") as f:
     database_bucket.download_fileobj("crux", f)
+
+  subset_key = "{0:f}-{1:d}-{2:d}.{3:s}".format(m["timestmap"], start_byte, end_byte, m["ext"])
+  obj = s3.Object(bucket_name, key)
+
+  with open("/tmp/{0:s}".format(subset_key), "wb") as f:
+    content = obj.get(Range="bytes={0:d}-{1:d}".format(start_byte, end_byte))["Body"].read()
+
+    root = ET.fromstring("<data>" + content.strip() + "</data>")
+    spectra = list(root.iter("spectrum"))
+    f.write(mzMLSpectraIterator.create(spectra))
 
   subprocess.call("chmod 755 /tmp/crux", shell=True)
   index_files = ["auxlocs", "pepix", "protix"]
@@ -68,7 +74,7 @@ def analyze_spectra(bucket_name, key, params):
     "--output-dir", output_dir
   ]
 
-  command = "cd /tmp; ./crux tide-search {0:s} HUMAN.fasta.20170123.index {1:s}".format(key, " ".join(arguments))
+  command = "cd /tmp; ./crux tide-search {0:s} HUMAN.fasta.20170123.index {1:s}".format(subset_key, " ".join(arguments))
   try:
     subprocess.check_output(command, stderr=subprocess.STDOUT, shell=True)
     new_key = key.replace(m["ext"], "txt")
@@ -91,5 +97,8 @@ def analyze_spectra(bucket_name, key, params):
 def handler(event, context):
   bucket_name = event["Records"][0]["s3"]["bucket"]["name"]
   key = event["Records"][0]["s3"]["object"]["key"]
+  start_byte = events["Records"][0]["s3"]["range"]["start_byte"]
+  end_byte = events["Records"][0]["s3"]["range"]["end_byte"]
+
   params = json.loads(open("analyze_spectra.json").read())
-  analyze_spectra(bucket_name, key, params)
+  analyze_spectra(bucket_name, key, start_byte, end_byte, params)
