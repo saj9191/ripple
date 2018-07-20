@@ -40,5 +40,5 @@ def split_spectra(key, bucket_name, batch_size, chunk_size):
     client.invoke(
       FunctionName="AnalyzeSpectra",
       InvocationType="Event",
-      Payload=str.encode(payload)
+      Payload=str.encode(str(payload))
     )
