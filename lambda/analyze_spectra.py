@@ -29,7 +29,7 @@ def split_spectra(s3, bucket_name, key):
   bucket.put_object(Key=new_key, Body=str.encode(spectra.mzMLSpectraIterator.create(second_half)))
 
 
-def analyze_spectra(bucket_name, key, start_byte, end_byte, params):
+def analyze_spectra(bucket_name, key, start_byte, end_byte, file_id, more, params):
   util.clear_tmp()
   m = util.parse_file_name(key)
   s3 = boto3.resource('s3')
@@ -75,7 +75,11 @@ def analyze_spectra(bucket_name, key, start_byte, end_byte, params):
   command = "cd /tmp; ./crux tide-search {0:s} HUMAN.fasta.20170123.index {1:s}".format(subset_key, " ".join(arguments))
   try:
     subprocess.check_output(command, stderr=subprocess.STDOUT, shell=True)
-    new_key = key.replace(m["ext"], "txt")
+    if more:
+      new_key = util.file_name(ts, file_id, file_id, end_byte, m["ext"])
+    else:
+      new_key = util.file_name(ts, file_id, file_id, file_id, m["ext"])
+
     output_file = "{0:s}/tide-search.txt".format(output_dir)
     if os.path.isfile(output_file):
       output = open(output_file).read()
@@ -97,6 +101,8 @@ def handler(event, context):
   key = event["Records"][0]["s3"]["object"]["key"]
   start_byte = event["Records"][0]["s3"]["range"]["start_byte"]
   end_byte = event["Records"][0]["s3"]["range"]["end_byte"]
+  file_id = event["Records"][0]["s3"]["range"]["file_id"]
+  more = event["Records"][0]["s3"]["range"]["more"]
 
   params = json.loads(open("analyze_spectra.json").read())
-  analyze_spectra(bucket_name, key, start_byte, end_byte, params)
+  analyze_spectra(bucket_name, key, start_byte, end_byte, file_id, more, params)
