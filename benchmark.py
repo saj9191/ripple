@@ -345,6 +345,7 @@ def run_coordinator(client, params):
   batch_size = params["lambda"]["split_spectra"]["batch_size"]
   chunk_size = params["lambda"]["split_spectra"]["chunk_size"]
   prefix = params["bucket_prefix"]
+  print("Running coordinator")
   cmd = "python3 coordinator.py --file {0:s} --batch_size {1:d} --chunk_size {2:d} --bucket_prefix {3:s}".format(key, batch_size, chunk_size, prefix)
   print(cexec(client, cmd))
   end_time = time.time()
@@ -417,8 +418,8 @@ def coordinator_benchmark(params):
   stats.append(download_input(client, params))
   stats.append(run_coordinator(client, params))
 
-  client = setup_client("logs", params)
-  stats.append(parse_analyze_logs(client, upload_timestamp, params))
+  lclient = setup_client("logs", params)
+  stats.append(parse_analyze_logs(lclient, upload_timestamp, params))
   stats.append(upload_results(client, params))
   stats.append(terminate_instance(instance, client, params))
 
