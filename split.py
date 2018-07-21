@@ -18,8 +18,9 @@ def split_spectra(key, bucket_name, batch_size, chunk_size):
 
   client = boto3.client("lambda")
   more = True
-  file_id = 1
+  file_id = 0
   while more:
+    file_id += 1
     [start_byte, end_byte, more] = iterator.nextOffsets()
     payload = {
       "Records": [{
@@ -39,11 +40,11 @@ def split_spectra(key, bucket_name, batch_size, chunk_size):
         }
       }]
     }
-
     response = client.invoke(
       FunctionName="AnalyzeSpectra",
       InvocationType="Event",
       Payload=json.JSONEncoder().encode(payload)
     )
     assert(response["ResponseMetadata"]["HTTPStatusCode"] == 202)
-    file_id += 1
+
+  return file_id

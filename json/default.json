@@ -1,6 +1,6 @@
 {
   "input_name": "ASH_20170314_HELA_90MIN_20170320042659.mzML",
-  "iterations": 1,
+  "iterations": 10,
   "model": "lambda",
   "region": "us-east-1",
   "sort": "no",
@@ -9,14 +9,14 @@
   "ec2": {
     "ami": "ami-fd9bc885",
     "cost": 0.0464,
-    "default_ami": "ami-0ad99772",
-    "key": "maccoss",
-    "security": "sg-4ea90530",
-    "subnet": "subnet-03990a59",
+    "default_ami": "ami-cfe4b2b0",
+    "key": "shjoyner",
+    "security": "sg-0784f353c6234b5a7",
+    "subnet": "subnet-0a3c3757",
     "timeout": 20,
     "type": "t2.medium",
     "wait_for_tests": false,
-    "use_ami": true
+    "use_ami": false
   },
   "lambda": {
     "split_spectra": {

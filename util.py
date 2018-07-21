@@ -1,7 +1,17 @@
 import boto3
 import constants
+import os
 import re
 import subprocess
+
+
+def get_credentials():
+  home = os.path.expanduser("~")
+  f = open("{0:s}/.aws/credentials".format(home))
+  lines = f.readlines()
+  access_key = lines[1].split("=")[1].strip()
+  secret_key = lines[2].split("=")[1].strip()
+  return access_key, secret_key
 
 
 def file_name(timestamp, file_id, id, max_id, ext, split=0):
@@ -89,7 +99,6 @@ def have_all_files(bucket_name, num_bytes, key_regex):
     if key_regex.match(key.key):
       m = parse_file_name(key.key)
       matching_keys.append(key.key)
-      print(m)
       if m["split"] != 0:
         splits.add(m["file_id"])
       if m["id"] == m["max_id"]:

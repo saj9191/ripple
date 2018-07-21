@@ -89,7 +89,9 @@ def check_output(params):
 
 def get_stages(params):
   stages = MergeLambdaStage
-  if not params["lambda"]:
+  if params["model"] == "coordinator":
+    stages = CoordinatorStage
+  elif params["model"] == "ec2":
     if params["sort"] == "yes":
       stages = SortEc2Stage
     else:
@@ -122,6 +124,7 @@ def process_params(params):
   else:
     params["input_bucket"] = params["lambda"]["percolator"]["output_bucket"]
     params["tide_bucket"] = params["input_bucket"]
+  params["input_bucket"] = params["lambda"]["split_spectra"]["input_bucket"]
 
   if params["sort"] == "pre":
     params["input"] = "sorted_{0:s}".format(params["input_name"])
@@ -139,7 +142,7 @@ def process_params(params):
   else:
     params["buckets"] = ["output"]
 
-  params["bucket_prefix"] = params["lambda"]["percolator"]["output_bucket"].spit("-")[0]
+  params["bucket_prefix"] = params["lambda"]["percolator"]["output_bucket"].split("-")[0]
 
   params["triggers"] = {}
   active_functions = set()
@@ -206,11 +209,29 @@ def load_stats(upload_duration):
   }
 
 
+def benchmark(i, params):
+  done = False
+  while not done:
+    try:
+      if params["model"] == "lambda":
+        results = lambda_benchmark(params)
+      elif params["model"] == "ec2":
+        results = ec2_benchmark(params)
+      elif params["model"] == "coordinator":
+        results = coordinator_benchmark(params)
+
+      done = True
+    except BenchmarkException as e:
+      print("Error during iteration {0:d}".format(i), e)
+      clear_buckets(params)
+
+  return results
+
+
 def run(params):
   print_run_information()
   process_params(params)
   client = create_client(params)
-
   iterations = params["iterations"]
 
   if params["sort"] == "pre":
@@ -221,31 +242,17 @@ def run(params):
   if params["model"] != "ec2":
     upload_functions(client, params)
 
-  # setup_triggers(params)
-  stats = []
   stages = get_stages(params)
-  for stage in stages:
-    stats.append([])
+  stats = list(map(lambda s: [], stages))
 
   for i in range(iterations):
     print("Iteration {0:d}".format(i))
     process_iteration_params(params, i)
-    done = False
-    while not done:
-      try:
-        if params["model"] == "lambda":
-          results = lambda_benchmark(params)
-        else:
-          results = ec2_benchmark(params)
-
-        assert(len(results) == len(stages))
-        for i in range(len(results)):
-          stats[i].append(results[i])
-
-        done = True
-      except BenchmarkException as e:
-        print("Error during iteration {0:d}".format(i), e)
-        clear_buckets(params)
+    results = benchmark(i, params)
+    print(len(results), len(stages))
+    assert(len(results) == len(stages))
+    for i in range(len(results)):
+      stats[i].append(results[i])
 
     if params["check_output"]:
       check_output(params)
@@ -290,17 +297,8 @@ def print_stats(stats):
   print("Total Memory Used", stats["memory_used"], "MB")
 
 
-def get_credentials():
-  home = os.path.expanduser("~")
-  f = open("{0:s}/.aws/credentials".format(home))
-  lines = f.readlines()
-  access_key = lines[1].split("=")[1].strip()
-  secret_key = lines[2].split("=")[1].strip()
-  return access_key, secret_key
-
-
 def setup_connection(service, params):
-  [access_key, secret_key] = get_credentials()
+  [access_key, secret_key] = util.get_credentials()
   session = boto3.Session(
     aws_access_key_id=access_key,
     aws_secret_access_key=secret_key,
@@ -328,15 +326,76 @@ def clear_buckets(params):
 #############################
 
 
+class CoordinatorStage(Enum):
+  LOAD = 0
+  CREATE = 1
+  INITIATE = 2
+  SETUP = 3
+  DOWNLOAD = 4
+  COORDINATOR = 5
+  ANALYZE = 6
+  UPLOAD = 7
+  TERMINATE = 8
+  TOTAL = 9
+
+
 def run_coordinator(client, params):
   start_time = time.time()
-  batch_size = params["split_spectra"]["batch_size"]
-  chunk_size = params["split_spectra"]["chunk_size"]
-  cexec(client, "python coordinator.py --file {0:s} --batch_size {1:d} --chunk_size {2:d}".format(params["key"], batch_size, chunk_size))
+  key = params["key"]
+  batch_size = params["lambda"]["split_spectra"]["batch_size"]
+  chunk_size = params["lambda"]["split_spectra"]["chunk_size"]
+  prefix = params["bucket_prefix"]
+  cmd = "python3 coordinator.py --file {0:s} --batch_size {1:d} --chunk_size {2:d} --bucket_prefix".format(key, batch_size, chunk_size, prefix)
+  cexec(client, cmd)
   end_time = time.time()
   duration = end_time - start_time
 
   return calculate_results(duration, MEMORY_PARAMETERS["ec2"][params["ec2"]["type"]])
+
+
+def setup_coordinator_instance(client, params):
+  print("Setting up EC2 Coordinator instance.")
+  start_time = time.time()
+  sftp = client.open_sftp()
+
+  items = []
+  if not params["ec2"]["use_ami"]:
+    cexec(client, "sudo yum update -y")
+    cexec(client, "cd /etc/yum.repos.d; sudo wget http://s3tools.org/repo/RHEL_6/s3tools.repo")
+    cexec(client, "sudo yum -y install s3cmd")
+    cexec(client, "sudo yum -y install python34")
+    cexec(client, "curl -O https://bootstrap.pypa.io/get-pip.py")
+    cexec(client, "sudo python3 get-pip.py --user")
+    cexec(client, "echo 'export PATH=/home/ec2-user/.local/bin:$PATH' >> ~/.bashrc")
+    cexec(client, "source ~/.bashrc")
+    cexec(client, "pip install awsebcli --upgrade --user")
+    cexec(client, "sudo python3 -m pip install argparse")
+    cexec(client, "sudo python3 -m pip install boto3")
+    [access_key, secret_key] = util.get_credentials()
+    cexec(client, "sudo update-alternatives --set python /usr/bin/python2.6")
+    cexec(client, "echo -e '{0:s}\n{1:s}\n{2:s}\n\n' | aws configure".format(access_key, secret_key, params["region"]))
+    cexec(client, "echo -e '{0:s}\n{1:s}\n\n\n\n\nY\ny\n' | s3cmd --configure".format(access_key, secret_key))
+    items.append("crux")
+    items.append("coordinator.py")
+    items.append("constants.py")
+    items.append("spectra.py")
+    items.append("split.py")
+    items.append("util.py")
+    items.append("header.mzML")
+
+  for item in items:
+    sftp.put(item, item)
+
+  if not params["ec2"]["use_ami"]:
+    cexec(client, "sudo chmod +x crux")
+
+  sftp.close()
+  end_time = time.time()
+
+  duration = end_time - start_time
+  results = calculate_results(duration, MEMORY_PARAMETERS["ec2"][params["ec2"]["type"]])
+  results["client"] = client
+  return results
 
 
 def coordinator_benchmark(params):
@@ -354,9 +413,13 @@ def coordinator_benchmark(params):
   stats.append(initiate_stats)
 
   client = initiate_stats["client"]
-  stats.append(setup_instance(client, params))
-  stats.append(initiate_stats)
+  stats.append(setup_coordinator_instance(client, params))
+  stats.append(download_input(client, params))
   stats.append(run_coordinator(client, params))
+
+  client = setup_client("logs", params)
+  stats.append(parse_analyze_logs(client, upload_timestamp, params))
+  stats.append(upload_results(client, params))
   stats.append(terminate_instance(instance, client, params))
 
   total_stats = calculate_total_stats(stats)
@@ -442,7 +505,7 @@ def upload_functions(client, params):
 
 def setup_client(service, params):
   extra_time = 20
-  [access_key, secret_key] = get_credentials()
+  [access_key, secret_key] = util.get_credentials()
   config = Config(read_timeout=params["timeout"] + extra_time)
   client = boto3.client(service,
                         aws_access_key_id=access_key,
@@ -862,7 +925,7 @@ def setup_instance(client, params):
     cexec(client, "sudo update-alternatives --set python /usr/bin/python2.6")
     cexec(client, "sudo yum -y install python-pip")
     cexec(client, "sudo pip install argparse")
-    [access_key, secret_key] = get_credentials()
+    [access_key, secret_key] = util.get_credentials()
     cexec(client, "echo -e '{0:s}\n{1:s}\n\n\n\n\nY\ny\n' | s3cmd --configure".format(access_key, secret_key))
     items.append("crux")
     items.append("HUMAN.fasta.20170123")
@@ -890,7 +953,7 @@ def setup_instance(client, params):
   return results
 
 
-def download_results(client, params):
+def download_input(client, params):
   start_time = time.time()
   cexec(client, "s3cmd get s3://{0:s}/{1:s} {1:s}".format(params["input_bucket"], params["key"]))
   end_time = time.time()
@@ -991,7 +1054,7 @@ def ec2_benchmark(params):
 
   client = initiate_stats["client"]
   stats.append(setup_instance(client, params))
-  stats.append(download_results(client, params))
+  stats.append(download_input(client, params))
   if params["sort"] == "yes":
     stats.append(sort_spectra(client, params))
 
