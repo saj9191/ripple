@@ -345,8 +345,8 @@ def run_coordinator(client, params):
   batch_size = params["lambda"]["split_spectra"]["batch_size"]
   chunk_size = params["lambda"]["split_spectra"]["chunk_size"]
   prefix = params["bucket_prefix"]
-  cmd = "python3 coordinator.py --file {0:s} --batch_size {1:d} --chunk_size {2:d} --bucket_prefix".format(key, batch_size, chunk_size, prefix)
-  cexec(client, cmd)
+  cmd = "python3 coordinator.py --file {0:s} --batch_size {1:d} --chunk_size {2:d} --bucket_prefix {3:s}".format(key, batch_size, chunk_size, prefix)
+  print(cexec(client, cmd))
   end_time = time.time()
   duration = end_time - start_time
 
