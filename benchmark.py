@@ -161,8 +161,6 @@ def process_params(params):
 def setup_triggers(params):
   client = setup_client("s3", params)
   for function in params["triggers"]:
-    print(function, params["lambda"][function]["input_bucket"])
-    print("triggers", params["triggers"][function])
     response = client.put_bucket_notification_configuration(
       Bucket=params["lambda"][function]["input_bucket"],
       NotificationConfiguration={
@@ -249,7 +247,6 @@ def run(params):
     print("Iteration {0:d}".format(i))
     process_iteration_params(params, i)
     results = benchmark(i, params)
-    print(len(results), len(stages))
     assert(len(results) == len(stages))
     for i in range(len(results)):
       stats[i].append(results[i])
@@ -494,7 +491,6 @@ def upload_functions(client, params):
       subprocess.call("cp ../{0:s} .".format(dependency), shell=True)
 
     files += fparams["dependencies"]
-    print(fparams["name"], files)
     subprocess.call("zip {0:s}.zip {1:s}".format(function, " ".join(files)), shell=True)
 
     with open("{0:s}.zip".format(function), "rb") as f:
