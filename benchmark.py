@@ -332,26 +332,38 @@ class CoordinatorStage(Enum):
   INITIATE = 2
   SETUP = 3
   DOWNLOAD = 4
-  COORDINATOR = 5
-  ANALYZE = 6
-  UPLOAD = 7
-  TERMINATE = 8
-  TOTAL = 9
+  SPLIT = 5
+  COMBINE = 6
+  PERCOLATOR = 7
+  ANALYZE = 8
+  UPLOAD = 9
+  TERMINATE = 10
+  TOTAL = 11
+
+
+SPLIT_REGEX = re.compile("SPLIT\sDURATION\s*([0-9\.]+)")
+COMBINE_REGEX = re.compile("COMBINE\sDURATION\s*([0-9\.]+)")
+PERCOLATOR_REGEX = re.compile("PERCOLATOR\sDURATION\s([0=9\.]+)")
 
 
 def run_coordinator(client, params):
-  start_time = time.time()
   key = params["key"]
   batch_size = params["lambda"]["split_spectra"]["batch_size"]
   chunk_size = params["lambda"]["split_spectra"]["chunk_size"]
   prefix = params["bucket_prefix"]
   print("Running coordinator")
   cmd = "python3 coordinator.py --file {0:s} --batch_size {1:d} --chunk_size {2:d} --bucket_prefix {3:s}".format(key, batch_size, chunk_size, prefix)
-  cexec(client, cmd)
-  end_time = time.time()
-  duration = end_time - start_time
+  stdout = cexec(client, cmd)
 
-  return calculate_results(duration, MEMORY_PARAMETERS["ec2"][params["ec2"]["type"]])
+  m = SPLIT_REGEX.search(stdout)
+  split_results = calculate_results(float(m.group(1), MEMORY_PARAMETERS["ec2"][params["ec2"]["type"]]))
+
+  m = COMBINE_REGEX.search(stdout)
+  combine_results = calculate_results(float(m.group(1), MEMORY_PARAMETERS["ec2"][params["ec2"]["type"]]))
+
+  m = PERCOLATOR_REGEX.search(stdout)
+  percolator_results = calculate_results(float(m.group(1), MEMORY_PARAMETERS["ec2"][params["ec2"]["type"]]))
+  return [split_results, combine_results, percolator_results]
 
 
 def setup_coordinator_instance(client, params):
@@ -416,7 +428,7 @@ def coordinator_benchmark(params):
   client = initiate_stats["client"]
   stats.append(setup_coordinator_instance(client, params))
   stats.append(download_input(client, params))
-  stats.append(run_coordinator(client, params))
+  stats += run_coordinator(client, params)
 
   lclient = setup_client("logs", params)
   stats.append(parse_analyze_logs(lclient, upload_timestamp, params))
