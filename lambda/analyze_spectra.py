@@ -11,6 +11,7 @@ import xml.etree.ElementTree as ET
 ET.register_namespace("", constants.XML_NAMESPACE)
 CLOSING_TAG = "</spectrum>"
 
+
 def split_spectra(s3, bucket_name, key):
   root = ET.parse("/tmp/{0:s}".format(key)).getroot()
   s = root[0][4][0]
@@ -31,6 +32,9 @@ def split_spectra(s3, bucket_name, key):
 def analyze_spectra(bucket_name, key, start_byte, end_byte, file_id, more, params):
   util.clear_tmp()
   m = util.parse_file_name(key)
+  ts = m["timestamp"]
+  print("TIMESTAMP {0:f}".format(ts))
+
   s3 = boto3.resource('s3')
 
   database_bucket = s3.Bucket("maccoss-human-fasta")
@@ -43,7 +47,7 @@ def analyze_spectra(bucket_name, key, start_byte, end_byte, file_id, more, param
   with open("/tmp/crux", "wb") as f:
     database_bucket.download_fileobj("crux", f)
 
-  subset_key = "{0:f}-{1:d}-{2:d}.{3:s}".format(m["timestamp"], start_byte, end_byte, m["ext"])
+  subset_key = "{0:f}-{1:d}-{2:d}.{3:s}".format(ts, start_byte, end_byte, m["ext"])
   obj = s3.Object(bucket_name, key)
 
   with open("/tmp/{0:s}".format(subset_key), "wb") as f:

@@ -1,6 +1,5 @@
 import boto3
 import json
-import re
 import subprocess
 import time
 import util
@@ -10,6 +9,7 @@ def run_percolator(bucket_name, key, params):
   util.clear_tmp()
   m = util.parse_file_name(key)
   ts = m["timestamp"]
+  print("TIMESTAMP {0:f}".format(ts))
 
   s3 = boto3.resource('s3')
   database_bucket = s3.Bucket("maccoss-human-fasta")
@@ -41,8 +41,11 @@ def run_percolator(bucket_name, key, params):
     time.sleep(1)
 
   print(subprocess.check_output("ls -l {0:s}".format(output_dir), shell=True))
+  output_bucket = params["output_bucket"]
   for item in ["target.psms", "decoy.psms", "target.peptides", "decoy.peptides"]:
-    s3.Object(params["output_bucket"], "percolator.{0:s}.{1:f}.txt".format(item, ts)).put(Body=open("{0:s}/percolator.{1:s}.txt".format(output_dir, item), 'rb'))
+    input_file = "{0:s}/percolator.{1:s}.txt".format(output_dir, item)
+    output_file = "percolator.{0:s}.{1:f}.txt".format(item, ts)
+    s3.Object(output_bucket, output_file).put(Body=open(input_file, 'rb'))
 
 
 def handler(event, context):

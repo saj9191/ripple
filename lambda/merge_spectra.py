@@ -55,12 +55,14 @@ def createFileObjects(s3, bucket_name, matching_keys, chunk_size):
 def merge_spectra(bucket_name, key, params):
   util.clear_tmp()
   s3 = boto3.resource("s3")
+  m = util.parse_file_name(key)
+  ts = m["timestamp"]
+  print("TIMESTAMP {0:f}".format(ts))
+
   output_bucket = s3.Bucket(params["output_bucket"])
   batch_size = params["batch_size"]
   chunk_size = params["chunk_size"]
 
-  m = util.parse_file_name(key)
-  ts = m["timestamp"]
   max_bytes = m["max_id"]
 
   if m["id"] != max_bytes:

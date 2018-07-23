@@ -576,28 +576,42 @@ def wait_for_completion(start_time, params):
   time.sleep(10)  # Wait a little to make sure percolator logs are on the server
 
 
-def fetch(client, num_events, log_name, start_time, filter_pattern, extra_args={}):
-  events = []
+def fetch(client, num_events, log_name, timestamp, filter_pattern, extra_args={}):
+  log_events = []
   next_token = None
-  while len(events) < num_events:
-    args = {
-      "filterPattern": filter_pattern,
-      "limit": num_events - len(events),
-      "logGroupName": "/aws/lambda/{0:s}".format(log_name),
-      "startTime": start_time
-    }
-    args = {**args, **extra_args}
+  args = {
+    "logGroupName": "/aws/lambda/{0:s}".format(log_name),
+    "startTime": timestamp,
+  }
+  args = {**args, **extra_args}
 
+  while len(log_events) < num_events:
+    args["filterPattern"] = "TIMESTAMP {0:f}".format(timestamp)
+    args["limit"] = num_events - len(log_events),
     if next_token:
       args["nextToken"] = next_token
-
     response = client.filter_log_events(**args)
-    if response["ResponseMetadata"]["HTTPStatusCode"] != 200:
-      print(response)
     assert(response["ResponseMetadata"]["HTTPStatusCode"] == 200)
 
     if "nextToken" not in response:
-      break
+      raise BenchmarkException("Token not found")
+    next_token = response["nextToken"]
+    log_events += response["events"]
+
+  events = []
+  args["logStreamName"] = list(map(lambda e: e["logStreamName"], log_events))
+  args["filterPattern"] = filter_pattern
+
+  next_token = None
+  while len(events) < num_events:
+    args["limit"] = num_events - len(events)
+    if next_token:
+      args["nextToken"] = next_token
+    response = client.filter_log_events(**args)
+    assert(response["ResponseMetadata"]["HTTPStatusCode"] == 200)
+
+    if "nextToken" not in response:
+      raise BenchmarkException("Token not found")
     next_token = response["nextToken"]
     events += response["events"]
 

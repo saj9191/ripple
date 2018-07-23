@@ -23,6 +23,7 @@ def combine(bucket_name, key, params):
   util.clear_tmp()
   m = util.parse_file_name(key)
   ts = m["timestamp"]
+  print("TIMESTAMP {0:f}".format(ts))
   num_bytes = m["max_id"]
 
   _, ext = os.path.splitext(key)

@@ -6,11 +6,12 @@ import util
 
 def sort_spectra(bucket_name, key, params):
   util.clear_tmp()
-  s3 = boto3.resource("s3")
+  m = util.parse_file_name(key)
+  print("TIMESTAMP {0:f}".format(m["timestamp"]))
 
+  s3 = boto3.resource("s3")
   obj = s3.Object(bucket_name, key)
   content = obj.get()["Body"].read().decode("utf-8")
-
   spectra = sort.sort(content)
 
   sorted_name = "sorted-{0:s}".format(key)
