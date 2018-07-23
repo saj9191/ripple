@@ -1002,7 +1002,7 @@ def sort_spectra(client, params):
 def run_analyze(client, params):
   print("Running Tide")
   arguments = [
-    "--num-threads", str(params["analyze_spectra"]["num_threads"]),
+    "--num-threads", str(params["lambda"]["analyze_spectra"]["num_threads"]),
     "--txt-output", "T",
     "--concat", "T",
     "--output-dir", "tide-output",
@@ -1020,7 +1020,7 @@ def run_analyze(client, params):
 def run_percolator(client, params):
   print("Running Percolator")
   arguments = [
-    "--subset-max-train", str(params["percolator"]["max_train"]),
+    "--subset-max-train", str(params["lambda"]["percolator"]["max_train"]),
     "--quick-validation", "T",
     "--overwrite", "T",
   ]
