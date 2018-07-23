@@ -353,13 +353,13 @@ def run_coordinator(client, params):
   stdout = cexec(client, cmd)
 
   m = SPLIT_REGEX.search(stdout)
-  split_results = calculate_results(float(m.group(1), MEMORY_PARAMETERS["ec2"][params["ec2"]["type"]]))
+  split_results = calculate_results(float(m.group(1)), MEMORY_PARAMETERS["ec2"][params["ec2"]["type"]])
 
   m = COMBINE_REGEX.search(stdout)
-  combine_results = calculate_results(float(m.group(1), MEMORY_PARAMETERS["ec2"][params["ec2"]["type"]]))
+  combine_results = calculate_results(float(m.group(1)), MEMORY_PARAMETERS["ec2"][params["ec2"]["type"]])
 
   m = PERCOLATOR_REGEX.search(stdout)
-  percolator_results = calculate_results(float(m.group(1), MEMORY_PARAMETERS["ec2"][params["ec2"]["type"]]))
+  percolator_results = calculate_results(float(m.group(1)), MEMORY_PARAMETERS["ec2"][params["ec2"]["type"]])
   return [split_results, combine_results, percolator_results]
 
 
