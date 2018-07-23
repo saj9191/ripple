@@ -340,7 +340,7 @@ class CoordinatorStage(Enum):
 
 SPLIT_REGEX = re.compile("SPLIT\sDURATION\s*([0-9\.]+)")
 COMBINE_REGEX = re.compile("COMBINE\sDURATION\s*([0-9\.]+)")
-PERCOLATOR_REGEX = re.compile("PERCOLATOR\sDURATION\s([0=9\.]+)")
+PERCOLATOR_REGEX = re.compile("PERCOLATOR\sDURATION\s*([0-9\.]+)")
 
 
 def run_coordinator(client, params):
