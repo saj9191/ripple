@@ -6,14 +6,14 @@ import time
 import util
 
 
-def combine_analyze(bucket_prefix, timestamp, num_splits):
+def combine_analyze(bucket_prefix, timestamp, nonce, num_splits):
   s3 = boto3.resource("s3")
   bucket_name = "{0:s}-human-analyze-spectra".format(bucket_prefix)
   bucket = s3.Bucket(bucket_name)
   processed = set()
 
   ts = "{0:f}".format(timestamp)
-  file_name = "combined-spectra-{0:s}.txt".format(ts)
+  file_name = "combined-spectra-{0:s}-{1:d}.txt".format(ts, nonce)
   f = open(file_name, "w+")
 
   while len(processed) < num_splits:
@@ -31,7 +31,7 @@ def combine_analyze(bucket_prefix, timestamp, num_splits):
   return file_name
 
 
-def run_percolator(timestamp, input_file):
+def run_percolator(timestamp, nonce, input_file):
   arguments = [
     "--quick-validation", "T",
     "--overwrite", "T",
@@ -41,7 +41,7 @@ def run_percolator(timestamp, input_file):
   bucket_name = "maccoss-human-output-spectra"
   for item in ["peptides", "psms"]:
     input_file = "percolator.target.{0:s}.txt".format(item)
-    output_file = "percolator.target.{0:s}.{1:f}.txt".format(item, timestamp)
+    output_file = "percolator.target.{0:s}.{1:f}.{2:d}txt".format(item, timestamp, nonce)
     subprocess.call("s3cmd put crux-output/{0:s} s3://{1:s}/{2:s}".format(input_file, bucket_name, output_file), shell=True)
 
 
@@ -49,6 +49,7 @@ def run(args):
   bucket_name = "{0:s}-human-input-spectra".format(args.bucket_prefix)
   m = util.parse_file_name(args.file)
   timestamp = m["timestamp"]
+  nonce = m["nonce"]
 
   start_time = time.time()
   num_splits = split.split_spectra(args.file, bucket_name, args.batch_size, args.chunk_size)
@@ -56,12 +57,12 @@ def run(args):
   print("SPLIT DURATION", end_time - start_time)
 
   start_time = time.time()
-  combine_file = combine_analyze(args.bucket_prefix, timestamp, num_splits)
+  combine_file = combine_analyze(args.bucket_prefix, timestamp, nonce, num_splits)
   end_time = time.time()
   print("COMBINE DURATION", end_time - start_time)
 
   start_time = time.time()
-  run_percolator(timestamp, combine_file)
+  run_percolator(timestamp, nonce, combine_file)
   end_time = time.time()
   print("PERCOLATOR DURATION", end_time - start_time)
 

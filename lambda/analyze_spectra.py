@@ -9,7 +9,6 @@ import util
 import xml.etree.ElementTree as ET
 
 ET.register_namespace("", constants.XML_NAMESPACE)
-CLOSING_TAG = "</spectrum>"
 
 
 def split_spectra(s3, bucket_name, key):
@@ -53,8 +52,8 @@ def analyze_spectra(bucket_name, key, start_byte, end_byte, file_id, more, param
 
   with open("/tmp/{0:s}".format(subset_key), "wb") as f:
     content = obj.get(Range="bytes={0:d}-{1:d}".format(start_byte, end_byte))["Body"].read().decode("utf-8").strip()
-    index = content.rindex(CLOSING_TAG)
-    content = content[:index + len(CLOSING_TAG)]
+    index = content.rindex(constants.CLOSING_TAG)
+    content = content[:index + len(constants.CLOSING_TAG)]
     root = ET.fromstring("<data>" + content + "</data>")
     f.write(str.encode(spectra.mzMLSpectraIterator.create(list(root.iter("spectrum")))))
 
@@ -107,6 +106,8 @@ def handler(event, context):
   bucket_name = event["Records"][0]["s3"]["bucket"]["name"]
   key = event["Records"][0]["s3"]["object"]["key"]
   start_byte = event["Records"][0]["s3"]["range"]["start_byte"]
+  start_byte = event["Records"][0]["s3"]["range"]["start_byte"]
+  end_byte = event["Records"][0]["s3"]["range"]["end_byte"]
   end_byte = event["Records"][0]["s3"]["range"]["end_byte"]
   file_id = event["Records"][0]["s3"]["range"]["file_id"]
   more = event["Records"][0]["s3"]["range"]["more"]

@@ -141,7 +141,7 @@ def process_params(params):
   elif params["model"] == "coordinator":
     params["buckets"] = ["input", "analyze"]
   else:
-    params["buckets"] = ["output"]
+    params["buckets"] = ["input", "output"]
 
   params["bucket_prefix"] = params["lambda"]["percolator"]["output_bucket"].split("-")[0]
 
@@ -309,13 +309,13 @@ def setup_connection(service, params):
 def clear_buckets(params):
   s3 = setup_connection("s3", params)
 
-  ts = "{0:f}".format(params["now"])
+  id = "{0:f}-{1:d}".format(params["now"], params["nonce"])
   for bn in params["buckets"]:
     count = 0
     bucket_name = "{0:s}-human-{1:s}-spectra".format(params["bucket_prefix"], bn)
     bucket = s3.Bucket(bucket_name)
     for obj in bucket.objects.all():
-      if ts in obj.key:
+      if id in obj.key:
         obj.delete()
         count += 1
     print("Deleted", count, bn, "objects")
@@ -355,12 +355,21 @@ def run_coordinator(client, params):
   stdout = cexec(client, cmd)
 
   m = SPLIT_REGEX.search(stdout)
+  if m is None:
+    print(stdout)
+    raise BenchmarkException("No split")
   split_results = calculate_results(float(m.group(1)), MEMORY_PARAMETERS["ec2"][params["ec2"]["type"]])
 
   m = COMBINE_REGEX.search(stdout)
+  if m is None:
+    print(stdout)
+    raise BenchmarkException("No combine")
   combine_results = calculate_results(float(m.group(1)), MEMORY_PARAMETERS["ec2"][params["ec2"]["type"]])
 
   m = PERCOLATOR_REGEX.search(stdout)
+  if m is None:
+    print(stdout)
+    raise BenchmarkException("No percolator")
   percolator_results = calculate_results(float(m.group(1)), MEMORY_PARAMETERS["ec2"][params["ec2"]["type"]])
   return [split_results, combine_results, percolator_results]
 
@@ -371,7 +380,7 @@ def setup_coordinator_instance(client, params):
   sftp = client.open_sftp()
 
   items = []
-  if not params["ec2"]["use_ami"]:
+  if not params["coordinator"]["use_ami"]:
     cexec(client, "sudo yum update -y")
     cexec(client, "cd /etc/yum.repos.d; sudo wget http://s3tools.org/repo/RHEL_6/s3tools.repo")
     cexec(client, "sudo yum -y install s3cmd")
@@ -398,7 +407,7 @@ def setup_coordinator_instance(client, params):
   for item in items:
     sftp.put(item, item)
 
-  if not params["ec2"]["use_ami"]:
+  if not params["coordinator"]["use_ami"]:
     cexec(client, "sudo chmod +x crux")
 
   sftp.close()
@@ -589,7 +598,7 @@ def fetch(client, num_events, log_name, timestamp, nonce, filter_pattern, extra_
 
   while len(log_events) < num_events:
     args["filterPattern"] = "TIMESTAMP {0:f} {1:d}".format(timestamp, nonce)
-    args["limit"] = num_events - len(log_events),
+    args["limit"] = num_events - len(log_events)
     if next_token:
       args["nextToken"] = next_token
     response = client.filter_log_events(**args)
@@ -853,8 +862,10 @@ def calculate_results(duration, cost):
 def create_instance(params):
   ec2 = setup_connection("ec2", params)
   ami = params["ec2"]["default_ami"]
-  if params["ec2"]["use_ami"]:
+  if params["model"] == "ec2" and params["ec2"]["use_ami"]:
     ami = params["ec2"]["ami"]
+  elif params["model"] == "coordinator" and params["coordinator"]["use_ami"]:
+    ami = params["coordinator"]["ami"]
 
   start_time = time.time()
   instances = ec2.create_instances(
@@ -1105,6 +1116,7 @@ def main():
   parser.add_argument('--parameters', type=str, required=True, help="File containing parameters")
   args = parser.parse_args()
   params = json.loads(open(args.parameters).read())
+  print(params)
   run(params)
 
 

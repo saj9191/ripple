@@ -104,24 +104,39 @@ class mzMLSpectraIterator(SpectraIterator):
     self.offsets = self.offsets[self.batch_size:]
     return (start_offset, end_offset, self.seen_count < self.total_count)
 
-  def getSpectra(self, start_byte, end_byte):
+  def getMass(spectrum):
+    for cvParam in spectrum.iter("cvParam"):
+      if cvParam.get("name") == "base peak m/z":
+        return float(cvParam.get("value"))
+
+  def getSpectra(self, start_byte, end_byte, mass=False):
     content = self.getBytes(start_byte, end_byte)
     index = content.rfind(self.SPECTRUM_LIST_CLOSE)
     if index != -1:
       content = content[:index - 1]
 
     root = ET.fromstring("<data>" + content.strip() + "</data>")
-    spectra = list(root.iter("spectrum"))
+    spectra = root.iter("spectrum")
+
+    if mass:
+      spectra = list(map(lambda s: (mzMLSpectraIterator.getMass(s), s), spectra))
+    else:
+      spectra = list(spectra)
     return spectra
 
   def next(self):
     [start_byte, end_byte, more] = self.nextOffsets()
     return [self.getSpectra(start_byte, end_byte), more]
 
-  def create(spectra):
+  def create(spectra, sort=False):
     content = mzMLSpectraIterator.HEADER
     offset = len(content)
     offsets = []
+    if sort:
+      spectra = list(map(lambda s: (mzMLSpectraIterator.getMass(s), s), spectra))
+      spectra = sorted(spectra, key=lambda s: s[0])
+      spectra = list(map(lambda s: s[1], spectra))
+
     for i in range(len(spectra)):
       xml = spectra[i]
       xml.set("index", str(i))
