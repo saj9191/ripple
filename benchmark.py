@@ -242,6 +242,7 @@ def run(params):
   if params["model"] != "ec2":
     upload_functions(client, params)
 
+  setup_triggers(params)
   stages = get_stages(params)
   stats = list(map(lambda s: [], stages))
 
@@ -297,10 +298,9 @@ def print_stats(stats):
 
 
 def setup_connection(service, params):
-  [access_key, secret_key] = util.get_credentials()
   session = boto3.Session(
-    aws_access_key_id=access_key,
-    aws_secret_access_key=secret_key,
+    aws_access_key_id=params["access_key"],
+    aws_secret_access_key=params["secret_key"],
     region_name=params["region"]
   )
   return session.resource(service)
@@ -392,10 +392,9 @@ def setup_coordinator_instance(client, params):
     cexec(client, "pip install awsebcli --upgrade --user")
     cexec(client, "sudo python3 -m pip install argparse")
     cexec(client, "sudo python3 -m pip install boto3")
-    [access_key, secret_key] = util.get_credentials()
     cexec(client, "sudo update-alternatives --set python /usr/bin/python2.6")
-    cexec(client, "echo -e '{0:s}\n{1:s}\n{2:s}\n\n' | aws configure".format(access_key, secret_key, params["region"]))
-    cexec(client, "echo -e '{0:s}\n{1:s}\n\n\n\n\nY\ny\n' | s3cmd --configure".format(access_key, secret_key))
+    cexec(client, "echo -e '{0:s}\n{1:s}\n{2:s}\n\n' | aws configure".format(params["access_key"], params["secret_key"], params["region"]))
+    cexec(client, "echo -e '{0:s}\n{1:s}\n\n\n\n\nY\ny\n' | s3cmd --configure".format(params["access_key"], params["secret_key"]))
     items.append("crux")
     items.append("coordinator.py")
     items.append("constants.py")
@@ -525,11 +524,10 @@ def upload_functions(client, params):
 
 def setup_client(service, params):
   extra_time = 20
-  [access_key, secret_key] = util.get_credentials()
   config = Config(read_timeout=params["timeout"] + extra_time)
   client = boto3.client(service,
-                        aws_access_key_id=access_key,
-                        aws_secret_access_key=secret_key,
+                        aws_access_key_id=params["access_key"],
+                        aws_secret_access_key=params["secret_key"],
                         region_name=params["region"],
                         config=config
                         )
@@ -961,8 +959,7 @@ def setup_instance(client, params):
     cexec(client, "sudo update-alternatives --set python /usr/bin/python2.6")
     cexec(client, "sudo yum -y install python-pip")
     cexec(client, "sudo pip install argparse")
-    [access_key, secret_key] = util.get_credentials()
-    cexec(client, "echo -e '{0:s}\n{1:s}\n\n\n\n\nY\ny\n' | s3cmd --configure".format(access_key, secret_key))
+    cexec(client, "echo -e '{0:s}\n{1:s}\n\n\n\n\nY\ny\n' | s3cmd --configure".format(params["access_key"], params["secret_key"]))
     items.append("crux")
     items.append("HUMAN.fasta.20170123")
     items.append("sort.py")
@@ -1116,6 +1113,9 @@ def main():
   parser.add_argument('--parameters', type=str, required=True, help="File containing parameters")
   args = parser.parse_args()
   params = json.loads(open(args.parameters).read())
+  [access_key, secret_key] = util.get_credentials(args.parameters.split(".")[0])
+  params["access_key"] = access_key
+  params["secret_key"] = secret_key
   print(params)
   run(params)
 

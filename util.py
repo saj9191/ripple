@@ -5,13 +5,16 @@ import re
 import subprocess
 
 
-def get_credentials():
+def get_credentials(name):
   home = os.path.expanduser("~")
   f = open("{0:s}/.aws/credentials".format(home))
   lines = f.readlines()
-  access_key = lines[1].split("=")[1].strip()
-  secret_key = lines[2].split("=")[1].strip()
-  return access_key, secret_key
+  for i in range(len(lines)):
+    header = "[{0:s}]".format(name)
+    if lines[i].strip() == header:
+      access_key = lines[i + 1].split("=")[1].strip()
+      secret_key = lines[i + 2].split("=")[1].strip()
+      return [access_key, secret_key]
 
 
 def file_name(timestamp, nonce, file_id, id, max_id, ext, split=0):
