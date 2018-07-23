@@ -14,20 +14,22 @@ def get_credentials():
   return access_key, secret_key
 
 
-def file_name(timestamp, file_id, id, max_id, ext, split=0):
-  return constants.FILE_FORMAT.format(timestamp, file_id, split, id, max_id, ext)
+def file_name(timestamp, nonce, file_id, id, max_id, ext, split=0):
+  return constants.FILE_FORMAT.format(timestamp, nonce, file_id, split, id, max_id, ext)
 
 
 def parse_file_name(file_name):
   m = constants.FILE_REGEX.match(file_name)
   timestamp = float(m.group(1))
-  file_id = int(m.group(2))
-  split = int(m.group(3))
-  id = int(m.group(4))
-  max_id = int(m.group(5))
-  ext = m.group(6)
+  nonce = int(m.group(2))
+  file_id = int(m.group(3))
+  split = int(m.group(4))
+  id = int(m.group(5))
+  max_id = int(m.group(6))
+  ext = m.group(7)
   return {
     "timestamp": timestamp,
+    "nonce": nonce,
     "file_id": file_id,
     "split": split,
     "id": id,
@@ -38,7 +40,7 @@ def parse_file_name(file_name):
 
 def get_key_regex(ts, num_bytes, ext="ms2"):
   regex = constants.FILE_FORMAT
-  for i in range(1, 4):
+  for i in range(1, 5):
     regex = regex.replace("{" + str(i) + ":d}", "([0-9]+)")
   regex = regex.replace("{4:d}", "{1:d}").replace("{5:s}", ext)
   return re.compile(regex.format(ts, num_bytes))

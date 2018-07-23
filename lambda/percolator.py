@@ -9,7 +9,8 @@ def run_percolator(bucket_name, key, params):
   util.clear_tmp()
   m = util.parse_file_name(key)
   ts = m["timestamp"]
-  print("TIMESTAMP {0:f}".format(ts))
+  nonce = m["nonce"]
+  print("TIMESTAMP {0:f} NONCE {1:d}".format(ts, nonce))
 
   s3 = boto3.resource('s3')
   database_bucket = s3.Bucket("maccoss-human-fasta")
@@ -23,7 +24,7 @@ def run_percolator(bucket_name, key, params):
 
   subprocess.call("chmod 755 /tmp/crux", shell=True)
 
-  output_dir = "/tmp/percolator-crux-output-{0:f}".format(ts)
+  output_dir = "/tmp/percolator-crux-output-{0:f}-{1:d}".format(ts, nonce)
 
   arguments = [
     "--subset-max-train", str(params["max_train"]),
@@ -44,7 +45,7 @@ def run_percolator(bucket_name, key, params):
   output_bucket = params["output_bucket"]
   for item in ["target.psms", "decoy.psms", "target.peptides", "decoy.peptides"]:
     input_file = "{0:s}/percolator.{1:s}.txt".format(output_dir, item)
-    output_file = "percolator.{0:s}.{1:f}.txt".format(item, ts)
+    output_file = "percolator.{0:s}.{1:f}.{2:d}.txt".format(item, ts, nonce)
     s3.Object(output_bucket, output_file).put(Body=open(input_file, 'rb'))
 
 

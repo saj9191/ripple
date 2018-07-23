@@ -7,6 +7,7 @@ from enum import Enum
 import json
 import os
 import paramiko
+import random
 import re
 import sort
 import subprocess
@@ -176,12 +177,13 @@ def setup_triggers(params):
 def process_iteration_params(params, iteration):
   now = time.time()
   params["now"] = now
-  params["key"] = util.file_name(params["now"], 1, 1, 1, params["ext"])
+  params["nonce"] = random.randint(1, 1000)
+  params["key"] = util.file_name(params["now"], params["nonce"], 1, 1, 1, params["ext"])
 
 
 def upload_input(params):
   bucket_name = params["input_bucket"]
-  key = util.file_name(params["now"], 1, 1, 1, params["ext"])
+  key = util.file_name(params["now"], params["nonce"], 1, 1, 1, params["ext"])
   s3 = setup_connection("s3", params)
 
   start = time.time()
@@ -576,7 +578,7 @@ def wait_for_completion(start_time, params):
   time.sleep(10)  # Wait a little to make sure percolator logs are on the server
 
 
-def fetch(client, num_events, log_name, timestamp, filter_pattern, extra_args={}):
+def fetch(client, num_events, log_name, timestamp, nonce, filter_pattern, extra_args={}):
   log_events = []
   next_token = None
   args = {
@@ -586,7 +588,7 @@ def fetch(client, num_events, log_name, timestamp, filter_pattern, extra_args={}
   args = {**args, **extra_args}
 
   while len(log_events) < num_events:
-    args["filterPattern"] = "TIMESTAMP {0:f}".format(timestamp)
+    args["filterPattern"] = "TIMESTAMP {0:f} {1:d}".format(timestamp, nonce)
     args["limit"] = num_events - len(log_events),
     if next_token:
       args["nextToken"] = next_token
@@ -618,8 +620,8 @@ def fetch(client, num_events, log_name, timestamp, filter_pattern, extra_args={}
   return events
 
 
-def fetch_events(client, num_events, log_name, start_time, filter_pattern, extra_args={}):
-  events = fetch(client, num_events, log_name, start_time, filter_pattern, extra_args)
+def fetch_events(client, num_events, log_name, start_time, nonce, filter_pattern, extra_args={}):
+  events = fetch(client, num_events, log_name, start_time, nonce, filter_pattern, extra_args)
   if len(events) != num_events:
     print(log_name, len(events), num_events)
     #  error_events = fetch(client, num_events - len(events), log_name, start_time, "*Task timed out after*", extra_args)
@@ -635,7 +637,7 @@ def calculate_cost(duration, memory_size):
 
 def parse_split_logs(client, start_time, params):
   sparams = params["lambda"]["split_spectra"]
-  events = fetch_events(client, 1, sparams["name"], start_time, "REPORT RequestId")
+  events = fetch_events(client, 1, sparams["name"], start_time, params["nonce"], "REPORT RequestId")
   m = REPORT.match(events[0]["message"])
   duration = int(m.group(2))
   memory_used = int(m.group(4))
@@ -671,7 +673,7 @@ def parse_mult_logs(client, start_time, params, lambda_name):
   lparams = params["lambda"][lambda_name]
   num_lambdas = file_count(lparams["output_bucket"], params)
 
-  events = fetch_events(client, num_lambdas, lparams["name"], start_time, "REPORT RequestId")
+  events = fetch_events(client, num_lambdas, lparams["name"], start_time, params["nonce"], "REPORT RequestId")
   max_billed_duration = 0
   total_billed_duration = 0
   total_memory_used = 0  # TODO: Handle
@@ -727,12 +729,12 @@ def parse_analyze_logs(client, start_time, params):
 def parse_combine_logs(client, start_time, params):
   cparams = params["lambda"]["combine_spectra_results"]
   name = cparams["name"]
-  combine_events = fetch_events(client, 1, name, start_time, "Combining")
+  combine_events = fetch_events(client, 1, name, start_time, params["nonce"], "Combining")
 
   extra_args = {
     "logStreamNames": [combine_events[0]["logStreamName"]],
   }
-  events = fetch_events(client, 1, name, combine_events[0]["timestamp"], "REPORT RequestId", extra_args)
+  events = fetch_events(client, 1, name, combine_events[0]["timestamp"], params["nonce"], "REPORT RequestId", extra_args)
 
   m = REPORT.match(events[0]["message"])
   duration = int(m.group(2))
@@ -756,7 +758,7 @@ def parse_combine_logs(client, start_time, params):
 
 def parse_percolator_logs(client, start_time, params):
   pparams = params["lambda"]["percolator"]
-  events = fetch_events(client, 1, pparams["name"], start_time, "REPORT RequestId")
+  events = fetch_events(client, 1, pparams["name"], start_time, params["nonce"], "REPORT RequestId")
   m = REPORT.match(events[0]["message"])
   duration = int(m.group(2))
   memory_used = int(m.group(4))

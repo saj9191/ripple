@@ -21,11 +21,11 @@ def split_spectra(s3, bucket_name, key):
   bucket = s3.Bucket(bucket_name)
 
   first_half = s[:half]
-  new_key = util.file_name(m["timestamp"], m["file_id"], m["id"], m["max_id"], m["ext"], 1)
+  new_key = util.file_name(m["timestamp"], m["nonce"], m["file_id"], m["id"], m["max_id"], m["ext"], 1)
   bucket.put_object(Key=new_key, Body=str.encode(spectra.mzMLSpectraIterator.create(first_half)))
 
   second_half = s[half:]
-  new_key = util.file_name(m["timestamp"], m["file_id"], m["id"], m["max_id"], m["ext"], 2)
+  new_key = util.file_name(m["timestamp"], m["nonce"], m["file_id"], m["id"], m["max_id"], m["ext"], 2)
   bucket.put_object(Key=new_key, Body=str.encode(spectra.mzMLSpectraIterator.create(second_half)))
 
 
@@ -33,7 +33,8 @@ def analyze_spectra(bucket_name, key, start_byte, end_byte, file_id, more, param
   util.clear_tmp()
   m = util.parse_file_name(key)
   ts = m["timestamp"]
-  print("TIMESTAMP {0:f}".format(ts))
+  nonce = m["nonce"]
+  print("TIMESTAMP {0:f} NONCE {1:d}".format(ts, nonce))
 
   s3 = boto3.resource('s3')
 
@@ -85,7 +86,7 @@ def analyze_spectra(bucket_name, key, start_byte, end_byte, file_id, more, param
     else:
       byte_id = obj.content_length
 
-    new_key = util.file_name(ts, file_id, byte_id, obj.content_length, "txt")
+    new_key = util.file_name(ts, nonce, file_id, byte_id, obj.content_length, "txt")
     output_file = "{0:s}/tide-search.txt".format(output_dir)
     if os.path.isfile(output_file):
       output = open(output_file).read()

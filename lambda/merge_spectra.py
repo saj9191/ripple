@@ -18,9 +18,9 @@ class Spectra:
     return True
 
 
-def save_spectra(output_bucket, spectra, ts, file_id, num_files):
+def save_spectra(output_bucket, spectra, ts, nonce, file_id, num_files):
   s = "\n".join(spectra)
-  key = util.file_name(ts, file_id, file_id, num_files, "ms2")
+  key = util.file_name(ts, nonce, file_id, file_id, num_files, "ms2")
   output_bucket.put_object(Key=key, Body=str.encode(s))
 
 
@@ -57,7 +57,8 @@ def merge_spectra(bucket_name, key, params):
   s3 = boto3.resource("s3")
   m = util.parse_file_name(key)
   ts = m["timestamp"]
-  print("TIMESTAMP {0:f}".format(ts))
+  nonce = m["nonce"]
+  print("TIMESTAMP {0:f} NONCE {1:d}".format(ts, nonce))
 
   output_bucket = s3.Bucket(params["output_bucket"])
   batch_size = params["batch_size"]
@@ -88,7 +89,7 @@ def merge_spectra(bucket_name, key, params):
     spectra.append(next_spectrum[1])
 
     if len(spectra) == batch_size:
-      save_spectra(output_bucket, spectra, ts, file_id, num_files)
+      save_spectra(output_bucket, spectra, ts, nonce, file_id, num_files)
       file_id += 1
       spectra = []
 
@@ -107,7 +108,7 @@ def merge_spectra(bucket_name, key, params):
     length = min(batch_size, len(spectra))
     s = spectra[:length]
 
-    save_spectra(output_bucket, s, ts, file_id, num_files)
+    save_spectra(output_bucket, s, ts, nonce, file_id, num_files)
     spectra = spectra[length:]
     if len(spectra) > 0:
       file_id += 1

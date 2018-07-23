@@ -23,7 +23,8 @@ def combine(bucket_name, key, params):
   util.clear_tmp()
   m = util.parse_file_name(key)
   ts = m["timestamp"]
-  print("TIMESTAMP {0:f}".format(ts))
+  nonce = m["nonce"]
+  print("TIMESTAMP {0:f} NONCE {1:d}".format(ts, nonce))
   num_bytes = m["max_id"]
 
   _, ext = os.path.splitext(key)
@@ -36,7 +37,7 @@ def combine(bucket_name, key, params):
     temp_file = "/tmp/combine.txt"
     s3 = boto3.resource("s3")
     combine_files(s3, bucket_name, matching_keys, temp_file)
-    file_name = util.file_name(ts, 1, 1, 1, "txt")
+    file_name = util.file_name(ts, nonce, 1, 1, 1, "txt")
     s3.Object(params["output_bucket"], file_name).put(Body=open(temp_file, 'rb'))
   else:
     print(ts, "Passing", len(matching_keys))

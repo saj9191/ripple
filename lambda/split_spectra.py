@@ -6,7 +6,7 @@ import util
 def split_spectra(bucket_name, key, params):
   util.clear_tmp()
   m = util.parse_file_name(key)
-  print("TIMESTAMP {0:f}".format(m["timestamp"]))
+  print("TIMESTAMP {0:f} NONCE {1:d}".format(m["timestamp"], m["nonce"]))
   batch_size = params["batch_size"]
   chunk_size = params["chunk_size"]
   split.split_spectra(key, bucket_name, batch_size, chunk_size)
