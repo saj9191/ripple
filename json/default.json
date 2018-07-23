@@ -1,83 +1,87 @@
 {
-  "input_name": "ASH_20170314_HELA_90MIN_20170320042659.mzML",
-  "iterations": 10,
-  "model": "coordinator",
-  "region": "us-east-1",
-  "sort": "no",
-  "timeout": 300,
-  "check_output": false,
-  "ec2": {
-    "ami": "ami-fd9bc885",
-    "cost": 0.0464,
-    "default_ami": "ami-cfe4b2b0",
-    "key": "shjoyner",
-    "security": "sg-0784f353c6234b5a7",
-    "subnet": "subnet-0a3c3757",
-    "timeout": 20,
-    "type": "t2.medium",
-    "wait_for_tests": false,
-    "use_ami": false
-  },
-  "lambda": {
-    "split_spectra": {
-      "arn": "arn:aws:lambda:us-east-1:469290334000:function:SplitSpectra",
-      "batch_size": 1000,
-      "chunk_size": 100000000,
-      "dependencies": ["constants.py", "header.mzML", "spectra.py", "split.py", "util.py"],
-      "memory_size": 1024,
-      "name": "SplitSpectra",
-      "input_bucket": "shjoyner-human-input-spectra",
-      "output_bucket": "shjoyner-human-split-spectra",
-      "timeout": 300
-    },
-    "sort_spectra": {
-      "arn": "arn:aws:lambda:us-east-1:469290334000:function:SortSpectra",
-      "dependencies": [],
-      "memory_size": 1024,
-      "name": "SortSpectra",
-      "input_bucket": "shjoyner-human-split-spectra",
-      "output_bucket": "shjoyner-human-sort-spectra",
-      "timeout": 300
-    },
-    "merge_spectra": {
-      "arn": "arn:aws:lambda:us-west-2:999145429263:function:MergeSpectra",
-      "batch_size": 1000,
-      "chunk_size": 10000,
-      "dependencies": [],
-      "memory_size": 1024,
-      "name": "MergeSpectra",
-      "input_bucket": "shjoyner-human-sort-spectra",
-      "output_bucket": "shjoyner-human-merge-spectra",
-      "timeout": 300
-    },
-    "analyze_spectra": {
-      "arn": "arn:aws:lambda:us-east-1:469290334000:function:MergeSpectra",
-      "dependencies": ["constants.py", "header.mzML", "spectra.py", "util.py"],
-      "memory_size": 1024,
-      "name": "AnalyzeSpectra",
-      "num_threads": 1,
-      "input_bucket": "shjoyner-human-merge-spectra",
-      "output_bucket": "shjoyner-human-analyze-spectra",
-      "timeout": 300
-    },
-    "combine_spectra_results": {
-      "arn": "arn:aws:lambda:us-east-1:469290334000:function:CombineSpectra",
-      "dependencies": ["constants.py", "util.py"],
-      "memory_size": 256,
-      "name": "CombineSpectra",
-      "input_bucket": "shjoyner-human-analyze-spectra",
-      "output_bucket": "shjoyner-human-combine-spectra",
-      "timeout": 300
-    },
-    "percolator": {
-      "arn": "arn:aws:lambda:us-east-1:469290334000:function:Percolator",
-      "dependencies": ["constants.py", "util.py"],
-      "max_train": 50000,
-      "memory_size": 3008,
-      "name": "Percolator",
-      "input_bucket": "shjoyner-human-combine-spectra",
-      "output_bucket": "shjoyner-human-output-spectra",
-      "timeout": 300
-    }
-  }
+	"input_name": "ASH_20170314_HELA_90MIN_20170320042659.mzML",
+	"iterations": 10,
+	"model": "coordinator",
+	"region": "us-east-1",
+	"sort": "no",
+	"timeout": 300,
+	"check_output": true,
+	"ec2": {
+		"ami": "ami-fd9bc885",
+		"cost": 0.0464,
+		"default_ami": "ami-cfe4b2b0",
+		"key": "shjoyner",
+		"security": "sg-0784f353c6234b5a7",
+		"subnet": "subnet-0a3c3757",
+		"timeout": 20,
+		"type": "t2.medium",
+		"wait_for_tests": false,
+		"use_ami": false
+	},
+	"coordinator": {
+		"ami": "ami-04cbc2a627746f10f",
+		"use_ami": true
+	},
+	"lambda": {
+		"split_spectra": {
+			"arn": "arn:aws:lambda:us-east-1:469290334000:function:SplitSpectra",
+			"batch_size": 1000,
+			"chunk_size": 100000000,
+			"dependencies": ["constants.py", "header.mzML", "spectra.py", "split.py", "util.py"],
+			"memory_size": 1024,
+			"name": "SplitSpectra",
+			"input_bucket": "shjoyner-human-input-spectra",
+			"output_bucket": "shjoyner-human-split-spectra",
+			"timeout": 300
+		},
+		"sort_spectra": {
+			"arn": "arn:aws:lambda:us-east-1:469290334000:function:SortSpectra",
+			"dependencies": [],
+			"memory_size": 1024,
+			"name": "SortSpectra",
+			"input_bucket": "shjoyner-human-split-spectra",
+			"output_bucket": "shjoyner-human-sort-spectra",
+			"timeout": 300
+		},
+		"merge_spectra": {
+			"arn": "arn:aws:lambda:us-west-2:999145429263:function:MergeSpectra",
+			"batch_size": 1000,
+			"chunk_size": 10000,
+			"dependencies": [],
+			"memory_size": 1024,
+			"name": "MergeSpectra",
+			"input_bucket": "shjoyner-human-sort-spectra",
+			"output_bucket": "shjoyner-human-merge-spectra",
+			"timeout": 300
+		},
+		"analyze_spectra": {
+			"arn": "arn:aws:lambda:us-east-1:469290334000:function:MergeSpectra",
+			"dependencies": ["constants.py", "header.mzML", "spectra.py", "util.py"],
+			"memory_size": 1024,
+			"name": "AnalyzeSpectra",
+			"num_threads": 0,
+			"input_bucket": "shjoyner-human-merge-spectra",
+			"output_bucket": "shjoyner-human-analyze-spectra",
+			"timeout": 300
+		},
+		"combine_spectra_results": {
+			"arn": "arn:aws:lambda:us-east-1:469290334000:function:CombineSpectra",
+			"dependencies": ["constants.py", "util.py"],
+			"memory_size": 256,
+			"name": "CombineSpectra",
+			"input_bucket": "shjoyner-human-analyze-spectra",
+			"output_bucket": "shjoyner-human-combine-spectra",
+			"timeout": 300
+		},
+		"percolator": {
+			"arn": "arn:aws:lambda:us-east-1:469290334000:function:Percolator",
+			"dependencies": ["constants.py", "util.py"],
+			"max_train": 0,
+			"memory_size": 3008,
+			"name": "Percolator",
+			"input_bucket": "shjoyner-human-combine-spectra",
+			"output_bucket": "shjoyner-human-output-spectra",
+			"timeout": 300
+		}
+	}
 }
