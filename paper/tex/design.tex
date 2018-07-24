@@ -1,4 +1,14 @@
 \section{Design}
+\subsection{Requirements}
+Ripple needs to be able to handle these input files at any time and there's no limit on the number of concurrent requests that can be submitted.
+This means the service needs to have high availability and scale with many spectra files.
+However, at the same time, there are likely to be many periods where Ripple receives no requests.
+The input spectra files can be up to 5GB in size.
+On a standard EC2 instance, analyzing a spectra file on Tide can take over 5GB of memory.
+The main reason for the high use of memory is Tide sorts all spectra by mass as this speeds up analysis.
+If we want to analyze the spectra on EC2, this means each file requires at least a medium EC2 instance.
+
+\subsection{Ripple}
 \begin{figure}
   \centering
   \includegraphics[scale=0.3]{serial_pipeline}
