@@ -77,7 +77,8 @@ def check_output(params):
   bucket = s3.Bucket(bucket_name)
   for item in ["peptides", "psms"]:
     key = "percolator.target.{0:s}.txt".format(item)
-    output_file = "percolator.target.{0:s}.{1:f}.txt".format(item, params["now"])
+    output_file = "percolator.target.{0:s}.{1:f}.{2:d}.txt".format(item, params["now"], params["nonce"])
+    print(bucket_name, output_file)
     obj = s3.Object(bucket_name, output_file)
     content = obj.get()["Body"].read().decode("utf-8")
 
@@ -162,16 +163,18 @@ def process_params(params):
 def setup_triggers(params):
   client = setup_client("s3", params)
   for function in params["triggers"]:
-    response = client.put_bucket_notification_configuration(
-      Bucket=params["lambda"][function]["input_bucket"],
-      NotificationConfiguration={
+    if len(params["triggers"][function]) > 0:
+      config = {
         "LambdaFunctionConfigurations": [{
           "LambdaFunctionArn": params["lambda"][function]["arn"],
           "Events": params["triggers"][function]
         }]
       }
-    )
-    assert(response["ResponseMetadata"]["HTTPStatusCode"] == 200)
+      response = client.put_bucket_notification_configuration(
+        Bucket=params["lambda"][function]["input_bucket"],
+        NotificationConfiguration=config
+      )
+      assert(response["ResponseMetadata"]["HTTPStatusCode"] == 200)
 
 
 def process_iteration_params(params, iteration):
@@ -242,7 +245,9 @@ def run(params):
   if params["model"] != "ec2":
     upload_functions(client, params)
 
-  setup_triggers(params)
+  if params["model"] == "lambda":
+    setup_triggers(params)
+
   stages = get_stages(params)
   stats = list(map(lambda s: [], stages))
 
@@ -352,7 +357,9 @@ def run_coordinator(client, params):
   prefix = params["bucket_prefix"]
   print("Running coordinator")
   cmd = "python3 coordinator.py --file {0:s} --batch_size {1:d} --chunk_size {2:d} --bucket_prefix {3:s}".format(key, batch_size, chunk_size, prefix)
-  stdout = cexec(client, cmd)
+  stdout = cexec(client, cmd, True)
+  print("WHAT")
+  print(stdout)
 
   m = SPLIT_REGEX.search(stdout)
   if m is None:
@@ -396,12 +403,13 @@ def setup_coordinator_instance(client, params):
     cexec(client, "echo -e '{0:s}\n{1:s}\n{2:s}\n\n' | aws configure".format(params["access_key"], params["secret_key"], params["region"]))
     cexec(client, "echo -e '{0:s}\n{1:s}\n\n\n\n\nY\ny\n' | s3cmd --configure".format(params["access_key"], params["secret_key"]))
     items.append("crux")
-    items.append("coordinator.py")
     items.append("constants.py")
     items.append("spectra.py")
     items.append("split.py")
     items.append("util.py")
     items.append("header.mzML")
+
+  items.append("coordinator.py")
 
   for item in items:
     sftp.put(item, item)
@@ -438,7 +446,7 @@ def coordinator_benchmark(params):
   stats += run_coordinator(client, params)
 
   lclient = setup_client("logs", params)
-  stats.append(parse_analyze_logs(lclient, upload_timestamp, params))
+  stats.append(parse_analyze_logs(lclient, params))
   stats.append(upload_results(client, params))
   stats.append(terminate_instance(instance, client, params))
 
@@ -590,12 +598,12 @@ def fetch(client, num_events, log_name, timestamp, nonce, filter_pattern, extra_
   next_token = None
   args = {
     "logGroupName": "/aws/lambda/{0:s}".format(log_name),
-    "startTime": timestamp,
+    "startTime": int(timestamp),
   }
   args = {**args, **extra_args}
 
   while len(log_events) < num_events:
-    args["filterPattern"] = "TIMESTAMP {0:f} {1:d}".format(timestamp, nonce)
+    args["filterPattern"] = filter_pattern  # "TIMESTAMP {0:f} NONCE {1:d}".format(timestamp, nonce)
     args["limit"] = num_events - len(log_events)
     if next_token:
       args["nextToken"] = next_token
@@ -603,27 +611,43 @@ def fetch(client, num_events, log_name, timestamp, nonce, filter_pattern, extra_
     assert(response["ResponseMetadata"]["HTTPStatusCode"] == 200)
 
     if "nextToken" not in response:
+      print(args)
+      print(response)
       raise BenchmarkException("Token not found")
-    next_token = response["nextToken"]
+    else:
+      next_token = response["nextToken"]
+
     log_events += response["events"]
+  return log_events
 
   events = []
-  args["logStreamName"] = list(map(lambda e: e["logStreamName"], log_events))
   args["filterPattern"] = filter_pattern
-
+  print("num log events", len(log_events))
+  # Can only handle up to 100 event streams
+  max_streams = 100
+  del args["nextToken"]
   next_token = None
+
+  log_events = list(map(lambda e: e["logStreamName"], log_events))
   while len(events) < num_events:
-    args["limit"] = num_events - len(events)
+    print("num_log_events", len(log_events), "num_events", len(events))
     if next_token:
       args["nextToken"] = next_token
+    max_events = min(max_streams, len(log_events))
+    print("events", len(events), "max", max_events, "num", num_events)
+    args["logStreamNames"] = log_events[:max_streams]
+    args["limit"] = max_events
     response = client.filter_log_events(**args)
     assert(response["ResponseMetadata"]["HTTPStatusCode"] == 200)
-
     if "nextToken" not in response:
-      raise BenchmarkException("Token not found")
-    next_token = response["nextToken"]
-    events += response["events"]
+      print("wtf111", log_name, len(response["events"]))
 
+    es = response["events"]
+    s = set(list(map(lambda e: e["logStreamName"], es)))
+    events += es
+    log_events = list(filter(lambda e: e not in s, log_events))
+
+  print("num_events", len(events))
   return events
 
 
@@ -642,9 +666,9 @@ def calculate_cost(duration, memory_size):
   return int(duration / 100) * millisecond_cost
 
 
-def parse_split_logs(client, start_time, params):
+def parse_split_logs(client, params):
   sparams = params["lambda"]["split_spectra"]
-  events = fetch_events(client, 1, sparams["name"], start_time, params["nonce"], "REPORT RequestId")
+  events = fetch_events(client, 1, sparams["name"], params["now"], params["nonce"], "REPORT RequestId")
   m = REPORT.match(events[0]["message"])
   duration = int(m.group(2))
   memory_used = int(m.group(4))
@@ -676,11 +700,11 @@ def file_count(bucket_name, params):
   return count
 
 
-def parse_mult_logs(client, start_time, params, lambda_name):
+def parse_mult_logs(client, params, lambda_name):
   lparams = params["lambda"][lambda_name]
   num_lambdas = file_count(lparams["output_bucket"], params)
 
-  events = fetch_events(client, num_lambdas, lparams["name"], start_time, params["nonce"], "REPORT RequestId")
+  events = fetch_events(client, num_lambdas, lparams["name"], params["now"], params["nonce"], "REPORT RequestId")
   max_billed_duration = 0
   total_billed_duration = 0
   total_memory_used = 0  # TODO: Handle
@@ -721,22 +745,22 @@ def parse_mult_logs(client, start_time, params, lambda_name):
   }
 
 
-def parse_sort_logs(client, start_time, params):
-  return parse_mult_logs(client, start_time, params, "sort_spectra")
+def parse_sort_logs(client, params):
+  return parse_mult_logs(client, params, "sort_spectra")
 
 
-def parse_merge_logs(client, start_time, params):
-  return parse_mult_logs(client, start_time, params, "merge_spectra")
+def parse_merge_logs(client, params):
+  return parse_mult_logs(client, params, "merge_spectra")
 
 
-def parse_analyze_logs(client, start_time, params):
-  return parse_mult_logs(client, start_time, params, "analyze_spectra")
+def parse_analyze_logs(client, params):
+  return parse_mult_logs(client, params, "analyze_spectra")
 
 
-def parse_combine_logs(client, start_time, params):
+def parse_combine_logs(client, params):
   cparams = params["lambda"]["combine_spectra_results"]
   name = cparams["name"]
-  combine_events = fetch_events(client, 1, name, start_time, params["nonce"], "Combining")
+  combine_events = fetch_events(client, 1, name, params["now"], params["nonce"], "Combining")
 
   extra_args = {
     "logStreamNames": [combine_events[0]["logStreamName"]],
@@ -763,9 +787,9 @@ def parse_combine_logs(client, start_time, params):
   }
 
 
-def parse_percolator_logs(client, start_time, params):
+def parse_percolator_logs(client, params):
   pparams = params["lambda"]["percolator"]
-  events = fetch_events(client, 1, pparams["name"], start_time, params["nonce"], "REPORT RequestId")
+  events = fetch_events(client, 1, pparams["name"], params["now"], params["nonce"], "REPORT RequestId")
   m = REPORT.match(events[0]["message"])
   duration = int(m.group(2))
   memory_used = int(m.group(4))
@@ -791,15 +815,15 @@ def parse_logs(params, upload_timestamp, upload_duration):
 
   stats = []
   stats.append(load_stats(upload_duration))
-  stats.append(parse_split_logs(client, upload_timestamp, params))
+  stats.append(parse_split_logs(client, params))
 
   if params["sort"] == "yes":
-    stats.append(parse_sort_logs(client, upload_timestamp, params))
-    stats.append(parse_merge_logs(client, upload_timestamp, params))
+    stats.append(parse_sort_logs(client, params))
+    stats.append(parse_merge_logs(client, params))
 
-  stats.append(parse_analyze_logs(client, upload_timestamp, params))
-  stats.append(parse_combine_logs(client, upload_timestamp, params))
-  stats.append(parse_percolator_logs(client, upload_timestamp, params))
+  stats.append(parse_analyze_logs(client, params))
+  stats.append(parse_combine_logs(client, params))
+  stats.append(parse_percolator_logs(client, params))
 
   total_stats = calculate_total_stats(stats)
   print("END RESULTS")
@@ -898,9 +922,11 @@ def create_instance(params):
   return results
 
 
-def cexec(client, command):
+def cexec(client, command, error=False):
   (stdin, stdout, stderr) = client.exec_command(command)
   stdout.channel.recv_exit_status()
+  if error:
+    print(stderr.read())
   return stdout.read().decode("utf-8")
 
 
@@ -1113,7 +1139,7 @@ def main():
   parser.add_argument('--parameters', type=str, required=True, help="File containing parameters")
   args = parser.parse_args()
   params = json.loads(open(args.parameters).read())
-  [access_key, secret_key] = util.get_credentials(args.parameters.split(".")[0])
+  [access_key, secret_key] = util.get_credentials(args.parameters.split(".")[0].split("/")[1])
   params["access_key"] = access_key
   params["secret_key"] = secret_key
   print(params)

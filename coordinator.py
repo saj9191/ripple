@@ -31,17 +31,17 @@ def combine_analyze(bucket_prefix, timestamp, nonce, num_splits):
   return file_name
 
 
-def run_percolator(timestamp, nonce, input_file):
+def run_percolator(bucket_prefix, timestamp, nonce, input_file):
   arguments = [
     "--quick-validation", "T",
     "--overwrite", "T",
   ]
 
   subprocess.call("sudo ./crux percolator {0:s} {1:s}".format(input_file, " ".join(arguments)), shell=True)
-  bucket_name = "maccoss-human-output-spectra"
+  bucket_name = "{0:s}-human-output-spectra".format(bucket_prefix)
   for item in ["peptides", "psms"]:
     input_file = "percolator.target.{0:s}.txt".format(item)
-    output_file = "percolator.target.{0:s}.{1:f}.{2:d}txt".format(item, timestamp, nonce)
+    output_file = "percolator.target.{0:s}.{1:f}.{2:d}.txt".format(item, timestamp, nonce)
     subprocess.call("s3cmd put crux-output/{0:s} s3://{1:s}/{2:s}".format(input_file, bucket_name, output_file), shell=True)
 
 
@@ -62,7 +62,7 @@ def run(args):
   print("COMBINE DURATION", end_time - start_time)
 
   start_time = time.time()
-  run_percolator(timestamp, nonce, combine_file)
+  run_percolator(args.bucket_prefix, timestamp, nonce, combine_file)
   end_time = time.time()
   print("PERCOLATOR DURATION", end_time - start_time)
 

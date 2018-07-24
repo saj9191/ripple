@@ -49,6 +49,7 @@ def analyze_spectra(bucket_name, key, start_byte, end_byte, file_id, more, param
 
   subset_key = "{0:f}-{1:d}-{2:d}.{3:s}".format(ts, start_byte, end_byte, m["ext"])
   obj = s3.Object(bucket_name, key)
+  print(bucket_name, key)
 
   with open("/tmp/{0:s}".format(subset_key), "wb") as f:
     content = obj.get(Range="bytes={0:d}-{1:d}".format(start_byte, end_byte))["Body"].read().decode("utf-8").strip()

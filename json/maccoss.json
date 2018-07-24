@@ -1,7 +1,7 @@
 {
   "input_name": "ASH_20170314_HELA_90MIN_20170320042659.mzML",
-  "iterations": 1,
-  "model": "ec2",
+  "iterations": 10,
+  "model": "lambda",
   "region": "us-west-2",
   "sort": "no",
   "timeout": 300,
@@ -55,7 +55,7 @@
       "dependencies": ["constants.py", "header.mzML", "spectra.py", "util.py"],
       "memory_size": 1024,
       "name": "AnalyzeSpectra",
-      "num_threads": 1,
+      "num_threads": 0,
       "input_bucket": "maccoss-human-merge-spectra",
       "output_bucket": "maccoss-human-analyze-spectra",
       "timeout": 300
@@ -72,7 +72,7 @@
     "percolator": {
       "arn": "arn:aws:lambda:us-west-2:999145429263:function:Percolator",
       "dependencies": ["constants.py", "util.py"],
-      "max_train": 50000,
+      "max_train": 20000,
       "memory_size": 3008,
       "name": "Percolator",
       "input_bucket": "maccoss-human-combine-spectra",

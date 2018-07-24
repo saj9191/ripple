@@ -45,7 +45,7 @@ def get_key_regex(ts, num_bytes, ext="ms2"):
   regex = constants.FILE_FORMAT
   for i in range(1, 5):
     regex = regex.replace("{" + str(i) + ":d}", "([0-9]+)")
-  regex = regex.replace("{4:d}", "{1:d}").replace("{5:s}", ext)
+  regex = regex.replace("{5:d}", "{1:d}").replace("{6:s}", ext)
   return re.compile(regex.format(ts, num_bytes))
 
 
@@ -109,7 +109,7 @@ def have_all_files(bucket_name, num_bytes, key_regex):
       if m["id"] == m["max_id"]:
         num_files = m["file_id"]
 
-  if num_files != None:
+  if num_files is not None:
     num_files += len(splits)
   return (len(matching_keys) == num_files, matching_keys)
 
