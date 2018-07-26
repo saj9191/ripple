@@ -65,20 +65,20 @@ def check_sort(s3, params):
 def check_output(params):
   s3 = setup_connection("s3", params)
 
-  tide_file = "spectra-{0:f}-1-1-1.txt".format(params["now"])
+  tide_file = util.file_name(params["now"], params["nonce"], 1, 1, 1, "txt")
   bucket = s3.Bucket(params["tide_bucket"])
   for obj in bucket.objects.all():
     if obj.key == tide_file:
       content = obj.get()["Body"].read().decode("utf-8")
       num_lines = len(content.split("\n"))
-      print("key", tide_file, "num_lines", num_lines)
+      print("key", tide_file, "num_lines", num_lines, flush=True)
 
   bucket_name = params["output_bucket"]
   bucket = s3.Bucket(bucket_name)
   for item in ["peptides", "psms"]:
     key = "percolator.target.{0:s}.txt".format(item)
     output_file = "percolator.target.{0:s}.{1:f}.{2:d}.txt".format(item, params["now"], params["nonce"])
-    print(bucket_name, output_file)
+    print(bucket_name, output_file, flush=True)
     obj = s3.Object(bucket_name, output_file)
     content = obj.get()["Body"].read().decode("utf-8")
 
@@ -86,7 +86,7 @@ def check_output(params):
     lines = list(filter(lambda line: len(line.strip()) > 0, lines))
     qvalues = list(map(lambda line: float(line.split("\t")[7]), lines))
     count = len(list(filter(lambda qvalue: qvalue <= CHECKS["qvalue"], qvalues)))
-    print("key", key, "qvalues", count)
+    print("key", key, "qvalues", count, flush=True)
 
 
 def get_stages(params):
@@ -105,7 +105,7 @@ def get_stages(params):
 
 def print_run_information():
   git_output = subprocess.check_output("git log --oneline | head -n 1", shell=True).decode("utf-8").strip()
-  print("Current Git commit", git_output, "\n")
+  print("Current Git commit", git_output, "\n", flush=True)
 
 
 def create_client(params):
@@ -150,31 +150,39 @@ def process_params(params):
   active_functions = set()
   if params["model"] == "lambda":
     active_functions = set(params["lambda"].keys())
-  elif params["model"] == "coordinator":
-    active_functions = set(["analyze_spectra"])
+#  elif params["model"] == "coordinator":
+#    active_functions = set(["analyze_spectra"])
 
   for function in params["lambda"]:
     if function in active_functions:
-      params["triggers"][function] = ["s3:ObjectCreated:*"]
+      params["triggers"][function] = ""
     else:
-      params["triggers"][function] = []
+      params["triggers"][function] = "VOID"
 
 
 def setup_triggers(params):
   client = setup_client("s3", params)
   for function in params["triggers"]:
-    if len(params["triggers"][function]) > 0:
-      config = {
-        "LambdaFunctionConfigurations": [{
-          "LambdaFunctionArn": params["lambda"][function]["arn"],
-          "Events": params["triggers"][function]
-        }]
-      }
-      response = client.put_bucket_notification_configuration(
-        Bucket=params["lambda"][function]["input_bucket"],
-        NotificationConfiguration=config
-      )
-      assert(response["ResponseMetadata"]["HTTPStatusCode"] == 200)
+    config = {
+      "LambdaFunctionConfigurations": [{
+        "LambdaFunctionArn": params["lambda"][function]["arn"],
+        "Events": ["s3:ObjectCreated:*"],
+        "Filter": {
+          "Key": {
+            "FilterRules": [{
+              "Name": "prefix",
+              "Value": params["triggers"][function]
+            }]
+          }
+        }
+      }]
+    }
+    print(function, config)
+    response = client.put_bucket_notification_configuration(
+      Bucket=params["lambda"][function]["input_bucket"],
+      NotificationConfiguration=config
+    )
+    assert(response["ResponseMetadata"]["HTTPStatusCode"] == 200)
 
 
 def process_iteration_params(params, iteration):
@@ -190,13 +198,13 @@ def upload_input(params):
   s3 = setup_connection("s3", params)
 
   start = time.time()
-  print("Uploading {0:s} to s3://{1:s}".format(params["input"], bucket_name))
+  print("Uploading {0:s} to s3://{1:s}".format(params["input"], bucket_name), flush=True)
   s3.Object(bucket_name, key).put(Body=open("data/{0:s}".format(params["input"]), 'rb'))
   end = time.time()
 
   obj = s3.Object(bucket_name, key)
   timestamp = obj.last_modified.timestamp() * 1000
-  print(key, "last modified", timestamp)
+  print(key, "last modified", timestamp, flush=True)
   seconds = end - start
   milliseconds = seconds * 1000
 
@@ -225,8 +233,9 @@ def benchmark(i, params):
 
       done = True
     except BenchmarkException as e:
-      print("Error during iteration {0:d}".format(i), e)
-      clear_buckets(params)
+      raise e
+#      print("Error during iteration {0:d}".format(i), e, flush=True)
+#      clear_buckets(params)
 
   return results
 
@@ -245,14 +254,13 @@ def run(params):
   if params["model"] != "ec2":
     upload_functions(client, params)
 
-  if params["model"] == "lambda":
-    setup_triggers(params)
+  setup_triggers(params)
 
   stages = get_stages(params)
   stats = list(map(lambda s: [], stages))
 
   for i in range(iterations):
-    print("Iteration {0:d}".format(i))
+    print("Iteration {0:d}".format(i), flush=True)
     process_iteration_params(params, i)
     results = benchmark(i, params)
     assert(len(results) == len(stages))
@@ -263,13 +271,13 @@ def run(params):
       check_output(params)
 
     clear_buckets(params)
-    print("--------------------------\n")
+    print("--------------------------\n", flush=True)
 
-  print("END RESULTS ({0:d} ITERATIONS)".format(iterations))
+  print("END RESULTS ({0:d} ITERATIONS)".format(iterations), flush=True)
   for stage in stages:
-    print("AVERAGE {0:s} RESULTS".format(stage.name))
+    print("AVERAGE {0:s} RESULTS".format(stage.name), flush=True)
     print_stats(calculate_average_results(stats[stage.value], iterations))
-    print("")
+    print("", flush=True)
 
 
 def calculate_total_stats(stats):
@@ -296,10 +304,10 @@ def calculate_average_results(stats, iterations):
 
 
 def print_stats(stats):
-  print("Total Cost", stats["cost"])
-  print("Total Runtime", stats["max_duration"] / 1000, "seconds")
-  print("Total Billed Duration", stats["billed_duration"] / 1000, "seconds")
-  print("Total Memory Used", stats["memory_used"], "MB")
+  print("Total Cost", stats["cost"], flush=True)
+  print("Total Runtime", stats["max_duration"] / 1000, "seconds", flush=True)
+  print("Total Billed Duration", stats["billed_duration"] / 1000, "seconds", flush=True)
+  print("Total Memory Used", stats["memory_used"], "MB", flush=True)
 
 
 def setup_connection(service, params):
@@ -355,15 +363,16 @@ def run_coordinator(client, params):
   batch_size = params["lambda"]["split_spectra"]["batch_size"]
   chunk_size = params["lambda"]["split_spectra"]["chunk_size"]
   prefix = params["bucket_prefix"]
-  print("Running coordinator")
+  print("Running coordinator", flush=True)
   cmd = "python3 coordinator.py --file {0:s} --batch_size {1:d} --chunk_size {2:d} --bucket_prefix {3:s}".format(key, batch_size, chunk_size, prefix)
+  print(cmd)
   stdout = cexec(client, cmd, True)
   print("WHAT")
   print(stdout)
 
   m = SPLIT_REGEX.search(stdout)
   if m is None:
-    print(stdout)
+    print(stdout, flush=True)
     raise BenchmarkException("No split")
   split_results = calculate_results(float(m.group(1)), MEMORY_PARAMETERS["ec2"][params["ec2"]["type"]])
 
@@ -400,8 +409,6 @@ def setup_coordinator_instance(client, params):
     cexec(client, "sudo python3 -m pip install argparse")
     cexec(client, "sudo python3 -m pip install boto3")
     cexec(client, "sudo update-alternatives --set python /usr/bin/python2.6")
-    cexec(client, "echo -e '{0:s}\n{1:s}\n{2:s}\n\n' | aws configure".format(params["access_key"], params["secret_key"], params["region"]))
-    cexec(client, "echo -e '{0:s}\n{1:s}\n\n\n\n\nY\ny\n' | s3cmd --configure".format(params["access_key"], params["secret_key"]))
     items.append("crux")
     items.append("constants.py")
     items.append("spectra.py")
@@ -409,6 +416,8 @@ def setup_coordinator_instance(client, params):
     items.append("util.py")
     items.append("header.mzML")
 
+  cexec(client, "echo -e '{0:s}\n{1:s}\n{2:s}\n\n' | aws configure".format(params["access_key"], params["secret_key"], params["region"]))
+  cexec(client, "echo -e '{0:s}\n{1:s}\n\n\n\n\nY\ny\n' | s3cmd --configure".format(params["access_key"], params["secret_key"]))
   items.append("coordinator.py")
 
   for item in items:
@@ -569,12 +578,12 @@ def check_objects(client, bucket_name, prefix, count, timeout, params):
     now = end.strftime("%H:%M:%S")
     if not done:
       num_analyze = file_count(params["lambda"]["analyze_spectra"]["output_bucket"], params)
-      print("{0:s}: Waiting for {1:s} function{2:s}. Analyze {3:d}.".format(now, prefix, suffix, num_analyze))
+      print("{0:s}: Waiting for {1:s} function{2:s}. Analyze {3:d}.".format(now, prefix, suffix, num_analyze), flush=True)
       if (end - start).total_seconds() > timeout:
         raise BenchmarkException("Could not find bucket {0:s} prefix {1:s}".format(bucket_name, prefix))
       time.sleep(30)
     else:
-      print("{0:s}: Found {1:s} function{2:s}".format(now, prefix, suffix))
+      print("{0:s}: Found {1:s} function{2:s}".format(now, prefix, suffix), flush=True)
 
 
 def wait_for_completion(start_time, params):
@@ -610,27 +619,27 @@ def fetch(client, num_events, log_name, timestamp, nonce, filter_pattern, extra_
     response = client.filter_log_events(**args)
     assert(response["ResponseMetadata"]["HTTPStatusCode"] == 200)
 
-    if "nextToken" not in response:
-      print(args)
-      print(response)
+    log_events += response["events"]
+    if "nextToken" not in response and len(log_events) < num_events:
+      print(args, flush=True)
+      print(response, flush=True)
       raise BenchmarkException("Token not found")
     else:
       next_token = response["nextToken"]
 
-    log_events += response["events"]
   return log_events
-
   events = []
   args["filterPattern"] = filter_pattern
-  print("num log events", len(log_events))
+  print("num log events", len(log_events), flush=True)
   # Can only handle up to 100 event streams
   max_streams = 100
-  del args["nextToken"]
+  if "nextToken" in args:
+    del args["nextToken"]
   next_token = None
 
   log_events = list(map(lambda e: e["logStreamName"], log_events))
   while len(events) < num_events:
-    print("num_log_events", len(log_events), "num_events", len(events))
+    print("num_log_events", len(log_events), "num_events", len(events), flush=True)
     if next_token:
       args["nextToken"] = next_token
     max_events = min(max_streams, len(log_events))
@@ -652,7 +661,7 @@ def fetch(client, num_events, log_name, timestamp, nonce, filter_pattern, extra_
 
 
 def fetch_events(client, num_events, log_name, start_time, nonce, filter_pattern, extra_args={}):
-  events = fetch(client, num_events, log_name, start_time, nonce, filter_pattern, extra_args)
+  events = fetch(client, num_events, log_name, start_time * 1000, nonce, filter_pattern, extra_args)
   if len(events) != num_events:
     print(log_name, len(events), num_events)
     #  error_events = fetch(client, num_events - len(events), log_name, start_time, "*Task timed out after*", extra_args)
@@ -735,7 +744,7 @@ def parse_mult_logs(client, params, lambda_name):
   print("Max Billed Duration", max_billed_duration, "milliseconds")
   print("Total Billed Duration", total_billed_duration, "milliseconds")
   print("Cost", cost)
-  print("")
+  print("", flush=True)
 
   return {
     "billed_duration": total_billed_duration,
@@ -765,7 +774,7 @@ def parse_combine_logs(client, params):
   extra_args = {
     "logStreamNames": [combine_events[0]["logStreamName"]],
   }
-  events = fetch_events(client, 1, name, combine_events[0]["timestamp"], params["nonce"], "REPORT RequestId", extra_args)
+  events = fetch(client, 1, name, combine_events[0]["timestamp"], params["nonce"], "REPORT RequestId", extra_args)
 
   m = REPORT.match(events[0]["message"])
   duration = int(m.group(2))
@@ -882,6 +891,7 @@ def calculate_results(duration, cost):
 
 
 def create_instance(params):
+  print("Creating instance")
   ec2 = setup_connection("ec2", params)
   ami = params["ec2"]["default_ami"]
   if params["model"] == "ec2" and params["ec2"]["use_ami"]:
@@ -1034,7 +1044,7 @@ def sort_spectra(client, params):
 
 
 def run_analyze(client, params):
-  print("Running Tide")
+  print("Running Tide", flush=True)
   arguments = [
     "--num-threads", str(params["lambda"]["analyze_spectra"]["num_threads"]),
     "--txt-output", "T",
@@ -1052,7 +1062,7 @@ def run_analyze(client, params):
 
 
 def run_percolator(client, params):
-  print("Running Percolator")
+  print("Running Percolator", flush=True)
   arguments = [
     "--subset-max-train", str(params["lambda"]["percolator"]["max_train"]),
     "--quick-validation", "T",
@@ -1073,11 +1083,11 @@ def upload_results(client, params):
   start_time = time.time()
   for item in ["peptides", "psms"]:
     input_file = "percolator.target.{0:s}.txt".format(item)
-    output_file = "percolator.target.{0:s}.{1:f}.txt".format(item, params["now"])
+    output_file = "percolator.target.{0:s}.{1:f}.{2:d}.txt".format(item, params["now"], params["nonce"])
     cexec(client, "s3cmd put crux-output/{0:s} s3://{1:s}/{2:s}".format(input_file, bucket_name, output_file))
 
   input_file = "tide-output/tide-search.txt"
-  output_file = "spectra-{0:f}-1-1-1.txt".format(params["now"])
+  output_file = util.file_name(params["now"], params["nonce"], 1, 1, 1, "txt")
   cexec(client, "s3cmd put {0:s} s3://{1:s}/{2:s}".format(input_file, bucket_name, output_file))
 
   end_time = time.time()
@@ -1098,6 +1108,7 @@ def terminate_instance(instance, client, params):
 
 
 def ec2_benchmark(params):
+  print("EC2 benchmark")
   [upload_timestamp, upload_duration] = upload_input(params)
 
   stats = []

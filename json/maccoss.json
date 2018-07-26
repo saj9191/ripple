@@ -18,10 +18,14 @@
     "wait_for_tests": false,
     "use_ami": true
   },
+	"coordinator": {
+		"ami": "ami-0f3b5aa7d9f472d6a",
+		"use_ami": true
+	},
   "lambda": {
     "split_spectra": {
       "arn": "arn:aws:lambda:us-west-2:999145429263:function:SplitSpectra",
-      "batch_size": 1000,
+      "batch_size": 4000,
       "chunk_size": 100000000,
       "dependencies": ["constants.py", "header.mzML", "spectra.py", "split.py", "util.py"],
       "memory_size": 1024,

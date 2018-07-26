@@ -84,5 +84,9 @@ def bucket_split_spectra(bucket_name, key, params):
 def handler(event, context):
   bucket_name = event["Records"][0]["s3"]["bucket"]["name"]
   key = event["Records"][0]["s3"]["object"]["key"]
+  #sort = event["Records"][0]["s3"]["object"]["sort"]
   params = json.loads(open("split_spectra.json").read())
   split_spectra(bucket_name, key, params)
+  #if sort:
+  #  bucket_split_spectra(bucket_name, key, params)
+  #else:

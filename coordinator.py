@@ -13,7 +13,7 @@ def combine_analyze(bucket_prefix, timestamp, nonce, num_splits):
   processed = set()
 
   ts = "{0:f}".format(timestamp)
-  file_name = "combined-spectra-{0:s}-{1:d}.txt".format(ts, nonce)
+  file_name = util.file_name(timestamp, nonce, 1, 1, 1, "txt")
   f = open(file_name, "w+")
 
   while len(processed) < num_splits:
@@ -28,11 +28,13 @@ def combine_analyze(bucket_prefix, timestamp, nonce, num_splits):
         processed.add(obj.key)
     time.sleep(5)
 
+  subprocess.call("s3cmd put crux-output/{0:s} s3://{1:s}/{0:s}".format(file_name, bucket_name), shell=True)
   return file_name
 
 
 def run_percolator(bucket_prefix, timestamp, nonce, input_file):
   arguments = [
+    "--subset-max-train", "20000",
     "--quick-validation", "T",
     "--overwrite", "T",
   ]
