@@ -24,7 +24,7 @@ def format_file_chunk(bucket_name, key, file_id, start_byte, end_byte, more, par
   else:
     byte_id = obj.content_length
 
-  new_key = util.file_name(timestamp, nonce, file_id, byte_id, obj.content_length, "txt")
+  new_key = util.file_name(timestamp, nonce, file_id, byte_id, obj.content_length, ext)
   output_bucket.put_object(Key=new_key, Body=iterator_class.createContent(content))
 
 

@@ -5,8 +5,8 @@ import re
 import subprocess
 
 #  spectra-<timestamp>-<nonce>-<file-id>-<split>-<id>-<max-id>.<ext>
-FILE_FORMAT = "spectra-{0:f}-{1:d}-{2:d}-{3:d}-{4:d}-{5:d}.{6:s}"
-FILE_REGEX = re.compile("spectra-([0-9\.]+)-([0-9]+)-([0-9]+)-([0-9]+)-([0-9]+)-([0-9]+)\.([A-Za-z]+)")
+FILE_FORMAT = "{0:s}-{1:f}-{2:d}-{3:d}-{4:d}-{5:d}-{6:d}.{7:s}"
+FILE_REGEX = re.compile(".*-([0-9\.]+)-([0-9]+)-([0-9]+)-([0-9]+)-([0-9]+)-([0-9]+)\.([A-Za-z]+)")
 SPECTRA = re.compile("^\S[A-Ya-y0-9\s\.\+]+Z\s[0-9]+\s([0-9\.e\+]+)\n+([0-9\.\se\+]+)", re.MULTILINE)
 
 def setup_client(service, params):
@@ -41,8 +41,8 @@ def get_credentials(name):
       return [access_key, secret_key]
 
 
-def file_name(timestamp, nonce, file_id, id, max_id, ext, split=0):
-  return FILE_FORMAT.format(timestamp, nonce, file_id, split, id, max_id, ext)
+def file_name(timestamp, nonce, file_id, id, max_id, ext, split=0, prefix="spectra"):
+  return FILE_FORMAT.format(prefix, timestamp, nonce, file_id, split, id, max_id, ext)
 
 
 def parse_file_name(file_name):
@@ -65,12 +65,14 @@ def parse_file_name(file_name):
   }
 
 
-def get_key_regex(ts, num_bytes, ext="ms2"):
+def get_key_regex(ts, num_bytes, ext="ms2", prefix=""):
   regex = FILE_FORMAT
-  for i in range(1, 5):
+  for i in range(2, 6):
     regex = regex.replace("{" + str(i) + ":d}", "([0-9]+)")
-  regex = regex.replace("{5:d}", "{1:d}").replace("{6:s}", ext)
-  return re.compile(regex.format(ts, num_bytes))
+  regex = regex.replace("{6:d}", "{2:d}").replace("{7:s}", ext)
+  if len(prefix) == 0:
+    prefix = ".*"
+  return re.compile(regex.format(prefix, ts, num_bytes))
 
 
 def clear_tmp():

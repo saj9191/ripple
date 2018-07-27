@@ -53,12 +53,18 @@ def upload_format_file_chunk_file(client, fparams):
   upload_lambda(client, fparams, files)
 
 
-def upload_analyze_file(client, fparams):
+def upload_application_file(client, fparams):
   files = [
-    "analyze_spectra.py",
+    "application.py",
     "util.py",
   ]
+
+  file = "{0:s}.py".format(fparams["application"])
+  shutil.copyfile("../{0:s}".format(file), file)
+
+  files.append(file)
   upload_lambda(client, fparams, files)
+  os.remove(file)
 
 
 def upload_combine_files(client, fparams):
@@ -91,8 +97,8 @@ def upload_functions(client, params):
       upload_format_file_chunk_file(client, fparams)
     elif fparams["file"] == "combine_files":
       upload_combine_files(client, fparams)
-    else:
-      upload_analyze_file(client, fparams)
+    elif fparams["file"] == "application":
+      upload_application_file(client, fparams)
 
   os.chdir("..")
   for file in common_files:
