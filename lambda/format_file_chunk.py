@@ -7,7 +7,6 @@ import util
 def format_file_chunk(bucket_name, key, file_id, start_byte, end_byte, more, params):
   util.clear_tmp()
   m = util.parse_file_name(key)
-  ext = m["ext"]
   nonce = m["nonce"]
   timestamp = m["timestamp"]
   print("TIMESTAMP {0:f} NONCE {1:d}".format(timestamp, nonce))
@@ -19,12 +18,8 @@ def format_file_chunk(bucket_name, key, file_id, start_byte, end_byte, more, par
   content = obj.get(Range="bytes={0:d}-{1:d}".format(start_byte, end_byte))["Body"].read().decode("utf-8").strip()
 
   output_bucket = s3.Bucket(params["output_bucket"])
-  if more:
-    byte_id = start_byte
-  else:
-    byte_id = obj.content_length
-
-  new_key = util.file_name(timestamp, nonce, file_id, byte_id, obj.content_length, ext)
+  m["last"] = not more
+  new_key = util.file_name(m)
   output_bucket.put_object(Key=new_key, Body=iterator_class.createContent(content))
 
 

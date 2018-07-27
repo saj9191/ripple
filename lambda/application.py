@@ -34,7 +34,9 @@ def run_application(bucket_name, key, params):
     index = file_name.rfind(".")
     prefix = file_name[:index]
     ext = file_name[index+1:]
-    new_key = util.file_name(ts, nonce, m["file_id"], m["id"], m["max_id"], ext, prefix=prefix)
+    m["prefix"] = prefix
+    m["ext"] = ext
+    new_key = util.file_name(m)
     output_bucket.put_object(Key=new_key, Body=open(output_file, "rb"))
 
 

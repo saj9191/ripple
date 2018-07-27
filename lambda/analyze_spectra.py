@@ -51,7 +51,8 @@ def analyze_spectra(bucket_name, key, params):
   command = "cd /tmp; ./crux tide-search {0:s} HUMAN.fasta.20170123.index {1:s}".format(key, " ".join(arguments))
   try:
     subprocess.check_output(command, stderr=subprocess.STDOUT, shell=True)
-    new_key = util.file_name(ts, nonce, m["file_id"], m["id"], m["max_id"], "txt")
+    m["ext"] = "txt"
+    new_key = util.file_name(m)
     output_file = "{0:s}/tide-search.txt".format(output_dir)
     if os.path.isfile(output_file):
       output = open(output_file).read()

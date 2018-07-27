@@ -4,10 +4,27 @@ import os
 import re
 import subprocess
 
-#  spectra-<timestamp>-<nonce>-<file-id>-<split>-<id>-<max-id>.<ext>
-FILE_FORMAT = "{0:s}-{1:f}-{2:d}-{3:d}-{4:d}-{5:d}-{6:d}.{7:s}"
-FILE_REGEX = re.compile(".*-([0-9\.]+)-([0-9]+)-([0-9]+)-([0-9]+)-([0-9]+)-([0-9]+)\.([A-Za-z]+)")
+
+FILE_FORMAT = [{
+  "name": "prefix",
+  "type": "any",
+}, {
+  "name": "timestamp",
+  "type": "float",
+}, {
+  "name": "nonce",
+  "type": "int",
+}, {
+  "name": "file-id",
+  "type": "int",
+}, {
+  "name": "last",
+  "type": "bool",
+}]
+
+
 SPECTRA = re.compile("^\S[A-Ya-y0-9\s\.\+]+Z\s[0-9]+\s([0-9\.e\+]+)\n+([0-9\.\se\+]+)", re.MULTILINE)
+
 
 def setup_client(service, params):
   extra_time = 20
@@ -41,45 +58,72 @@ def get_credentials(name):
       return [access_key, secret_key]
 
 
-def file_name(timestamp, nonce, file_id, id, max_id, ext, split=0, prefix="spectra"):
-  return FILE_FORMAT.format(prefix, timestamp, nonce, file_id, split, id, max_id, ext)
+def file_format(m):
+  name = ""
+  for part in FILE_FORMAT:
+    if len(name) > 0:
+      name += "-"
+    if part["name"] in m:
+      value = m[part["name"]]
+      if part["type"] == "any":
+        name += value
+      elif part["type"] == "bool":
+        name += str(int(value))
+      else:
+        name += str(value)
+    else:
+      if part["type"] == "any":
+        name += "(.*)"
+      elif part["type"] == "float":
+        name += "([0-9\.]+)"
+      elif part["type"] == "int":
+        name += "([0-9]+)"
+      else:
+        name += "([0-1])"
+  name += "."
+  if "ext" in m:
+    name += m["ext"]
+  else:
+    name += "([A-Za-z0-9]+)"
+
+  return name
+
+
+def file_name(m):
+  return file_format(m)
 
 
 def parse_file_name(file_name):
-  m = FILE_REGEX.match(file_name)
-  timestamp = float(m.group(1))
-  nonce = int(m.group(2))
-  file_id = int(m.group(3))
-  split = int(m.group(4))
-  id = int(m.group(5))
-  max_id = int(m.group(6))
-  ext = m.group(7)
-  return {
-    "timestamp": timestamp,
-    "nonce": nonce,
-    "file_id": file_id,
-    "split": split,
-    "id": id,
-    "max_id": max_id,
-    "ext": ext
-  }
+  regex = re.compile(file_format({}))
+  m = regex.match(file_name)
+  p = {}
+  i = 0
+  for i in range(len(FILE_FORMAT)):
+    part = FILE_FORMAT[i]
+    name = part["name"]
+    value = m.group(i+1)
+    if part["type"] == "int":
+      p[name] = int(value)
+    elif part["type"] == "float":
+      p[name] = float(value)
+    elif part["type"] == "bool":
+      p[name] = value == "1"
+    else:
+      p[name] = value
+
+  p["ext"] = m.group(len(FILE_FORMAT) + 1)
+  return p
 
 
-def get_key_regex(ts, num_bytes, ext="ms2", prefix=""):
-  regex = FILE_FORMAT
-  for i in range(2, 6):
-    regex = regex.replace("{" + str(i) + ":d}", "([0-9]+)")
-  regex = regex.replace("{6:d}", "{2:d}").replace("{7:s}", ext)
-  if len(prefix) == 0:
-    prefix = ".*"
-  return re.compile(regex.format(prefix, ts, num_bytes))
+def get_key_regex(m):
+  return re.compile(file_format(m))
 
 
 def clear_tmp():
   subprocess.call("rm -rf /tmp/*", shell=True)
 
 
-def have_all_files(bucket_name, num_bytes, key_regex):
+def have_all_files(bucket_name, key_regex):
   s3 = boto3.resource("s3")
   bucket = s3.Bucket(bucket_name)
 
@@ -90,10 +134,8 @@ def have_all_files(bucket_name, num_bytes, key_regex):
     if key_regex.match(key.key):
       m = parse_file_name(key.key)
       matching_keys.append(key.key)
-      if m["split"] != 0:
-        splits.add(m["file_id"])
-      if m["id"] == m["max_id"]:
-        num_files = m["file_id"]
+      if m["last"]:
+        num_files = m["file-id"]
 
   if num_files is not None:
     num_files += len(splits)

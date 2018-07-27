@@ -1,7 +1,6 @@
 import boto3
 import importlib
 import json
-import os
 import util
 
 
@@ -12,9 +11,13 @@ def combine(bucket_name, key, params):
   nonce = m["nonce"]
   num_bytes = m["max_id"]
 
-  _, ext = os.path.splitext(key)
-  key_regex = util.get_key_regex(ts, num_bytes, "txt")
+  p = {
+    "timestamp": ts,
+    "nonce": nonce,
+    "ext": m["ext"]
+  }
 
+  key_regex = util.get_key_regex(p)
   [have_all_files, keys] = util.have_all_files(bucket_name, num_bytes, key_regex)
 
   if have_all_files:
@@ -23,7 +26,9 @@ def combine(bucket_name, key, params):
     s3 = boto3.resource("s3")
     format_lib = importlib.import_module(params["format"])
     combine_class = getattr(format_lib, "Combine")
-    file_name = util.file_name(ts, nonce, 1, 1, 1, m["ext"])
+    m["file-id"] = 1
+    m["last"] = True
+    file_name = util.file_name(m)
     temp_name = "/tmp/{0:s}".format(file_name)
     # Make this deterministic and combine in the same order
     keys.sort()
