@@ -45,7 +45,7 @@ def split_file(bucket_name, key, params):
       }]
     }
     response = client.invoke(
-      FunctionName="format_file_chunk",
+      FunctionName="format_{0:s}_chunk".format(ext),
       InvocationType="Event",
       Payload=json.JSONEncoder().encode(payload)
     )

@@ -7,7 +7,12 @@ import util
 
 
 def upload_lambda(client, fparams, files):
-  print("zip {0:s}.zip {1:s}".format(fparams["file"], " ".join(files)))
+  f = open("params.json", "w")
+  f.write(json.dumps(fparams))
+  f.close()
+
+  files.append("params.json")
+
   subprocess.call("zip {0:s}.zip {1:s}".format(fparams["file"], " ".join(files)), shell=True)
 
   with open("{0:s}.zip".format(fparams["file"]), "rb") as f:
@@ -28,16 +33,23 @@ def upload_lambda(client, fparams, files):
 
 
 def upload_split_file(client, fparams):
-  f = open("params.json", "w")
-  f.write(json.dumps(fparams))
-  f.close()
-
   files = [
     "{0:s}.py".format(fparams["format"]),
     "constants.py",
     "iterator.py",
-    "params.json",
     "split_file.py",
+    "util.py",
+  ]
+  upload_lambda(client, fparams, files)
+
+
+def upload_format_file_chunk_file(client, fparams):
+  files = [
+    "{0:s}.py".format(fparams["format"]),
+    "constants.py",
+    "format_file_chunk.py",
+    "header.{0:s}".format(fparams["format"]),
+    "iterator.py",
     "util.py",
   ]
   upload_lambda(client, fparams, files)
@@ -45,6 +57,8 @@ def upload_split_file(client, fparams):
 
 def upload_functions(client, params):
   common_files = [
+    "constants.py",
+    "header.mzML",
     "iterator.py",
     "mzML.py",
     "util.py",
@@ -53,9 +67,11 @@ def upload_functions(client, params):
     shutil.copyfile(file, "lambda/{0:s}".format(file))
 
   os.chdir("lambda")
-  for section in params["pipeline"]:
-    if section["file"] == "split_file":
-      upload_split_file(client, section)
+  for fparams in params["pipeline"]:
+    if fparams["file"] == "split_file":
+      upload_split_file(client, fparams)
+    elif fparams["file"] == "format_file_chunk":
+      upload_format_file_chunk_file(client, fparams)
 
   os.chdir("..")
   for file in common_files:
@@ -79,22 +95,22 @@ def setup_triggers(params):
   client = util.setup_client("s3", params)
   clear_triggers(client, params)
   for function in params["pipeline"]:
-    config = {
-      "LambdaFunctionConfigurations": [{
-        "LambdaFunctionArn": params["lambda"][function["name"]]["arn"],
-        "Events": ["s3:ObjectCreated:*"],
-        "Filter": {
-          "Key": {
-            "FilterRules": [{
-              "Name": "prefix",
-              "Value": ""
-            }]
+    if "input_bucket" in function:
+      config = {
+        "LambdaFunctionConfigurations": [{
+          "LambdaFunctionArn": params["lambda"][function["name"]]["arn"],
+          "Events": ["s3:ObjectCreated:*"],
+          "Filter": {
+            "Key": {
+              "FilterRules": [{
+                "Name": "prefix",
+                "Value": ""
+              }]
+            }
           }
-        }
-      }]
-    }
-    print(function, config)
-    setup_notifications(client, function["input_bucket"], config)
+        }]
+      }
+      setup_notifications(client, function["input_bucket"], config)
 
 
 def setup(params):

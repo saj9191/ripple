@@ -1,7 +1,6 @@
 import re
 
 
-CLOSING_TAG = "</spectrum>"
 MASS = re.compile(".*Z\s+([0-9\.]+)\s+([0-9\.]+).*")
 XML_NAMESPACE = "http://psi.hupo.org/ms/mzml"
 SPECTRA = re.compile("^\S[A-Ya-y0-9\s\.\+]+Z\s[0-9]+\s([0-9\.e\+]+)\n+([0-9\.\se\+]+)", re.MULTILINE)

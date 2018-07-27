@@ -9,8 +9,9 @@ class Iterator(iterator.Iterator):
   INDEX_LIST_OFFSET_REGEX = re.compile("[\s\S]*<indexListOffset>(\d+)</indexListOffset>")
   OFFSET_REGEX = re.compile("<offset[^>]*>(\d+)</offset>")
   SPECTRUM_LIST_COUNT_REGEX = re.compile('[\s\S]*<spectrumList [\s\S]*count="(\d+)" [\s\S]*>[\s\S]*')
-  SPECTRUM_LIST_CLOSE = "</spectrumList>"
+  SPECTRUM_LIST_CLOSE_TAG = "</spectrumList>"
   INDEX_CHUNK_SIZE = 1000
+  SPECTRUM_CLOSE_TAG = "</spectrum>"
 
   def __init__(self, obj, batch_size, chunk_size):
     iterator.Iterator.__init__(self, obj, batch_size, chunk_size)
@@ -78,7 +79,7 @@ class Iterator(iterator.Iterator):
 
   def getSpectra(self, start_byte, end_byte, mass=False):
     content = self.getBytes(start_byte, end_byte)
-    index = content.rfind(self.SPECTRUM_LIST_CLOSE)
+    index = content.rfind(self.SPECTRUM_LIST_CLOSE_TAG)
     if index != -1:
       content = content[:index - 1]
 
@@ -126,6 +127,12 @@ class Iterator(iterator.Iterator):
     content += str(hashlib.sha1(content.encode("utf-8")).hexdigest())
     content += "</fileChecksum>\n</indexedmzML>"
     return content
+
+  def createContent(content):
+    index = content.rindex(Iterator.SPECTRUM_CLOSE_TAG)
+    content = content[:index + len(Iterator.SPECTRUM_CLOSE_TAG)]
+    root = ET.fromstring("<data>" + content + "</data>")
+    return str.encode(Iterator.create(list(root.iter("spectrum"))))
 
   def nextFile(self):
     [spectra, more] = self.next()

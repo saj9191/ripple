@@ -15,3 +15,6 @@ class Iterator:
 
   def findOffsets(self):
     raise Exception("Not Implemented")
+
+  def createContent(self, content):
+    raise Exception("Not Implemented")
