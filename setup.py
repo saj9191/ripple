@@ -33,24 +33,30 @@ def upload_lambda(client, fparams, files):
 
 
 def upload_split_file(client, fparams):
+  format_file = "{0:s}.py".format(fparams["format"])
+  shutil.copyfile("../formats/{0:s}".format(format_file), format_file)
   files = [
-    "{0:s}.py".format(fparams["format"]),
+    format_file,
     "iterator.py",
     "split_file.py",
     "util.py",
   ]
   upload_lambda(client, fparams, files)
+  os.remove(format_file)
 
 
 def upload_format_file_chunk_file(client, fparams):
+  format_file = "{0:s}.py".format(fparams["format"])
+  shutil.copyfile("../formats/{0:s}".format(format_file), format_file)
   files = [
-    "{0:s}.py".format(fparams["format"]),
+    format_file,
     "format_file_chunk.py",
     "header.{0:s}".format(fparams["format"]),
     "iterator.py",
     "util.py",
   ]
   upload_lambda(client, fparams, files)
+  os.remove(format_file)
 
 
 def upload_application_file(client, fparams):
@@ -68,13 +74,15 @@ def upload_application_file(client, fparams):
 
 
 def upload_combine_files(client, fparams):
+  format_file = "{0:s}.py".format(fparams["format"])
   files = [
-    "{0:s}.py".format(fparams["format"]),
+    format_file,
     "iterator.py",
     "combine_files.py",
     "util.py",
   ]
   upload_lambda(client, fparams, files)
+  os.remove(format_file)
 
 
 def upload_functions(client, params):
@@ -82,8 +90,6 @@ def upload_functions(client, params):
     "constants.py",
     "header.mzML",
     "iterator.py",
-    "mzML.py",
-    "tsv.py",
     "util.py",
   ]
   for file in common_files:
