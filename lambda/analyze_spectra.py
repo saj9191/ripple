@@ -51,12 +51,9 @@ def analyze_spectra(bucket_name, key, start_byte, end_byte, file_id, more, param
   obj = s3.Object(bucket_name, key)
   print(bucket_name, key)
 
-  with open("/tmp/{0:s}".format(subset_key), "wb") as f:
-    content = obj.get(Range="bytes={0:d}-{1:d}".format(start_byte, end_byte))["Body"].read().decode("utf-8").strip()
-    index = content.rindex(constants.CLOSING_TAG)
-    content = content[:index + len(constants.CLOSING_TAG)]
-    root = ET.fromstring("<data>" + content + "</data>")
-    f.write(str.encode(spectra.mzMLSpectraIterator.create(list(root.iter("spectrum")))))
+  input_bucket = s3.Bucket(bucket_name)
+  with open("/tmp/{0:s}".format(key), "wb") as f:
+    input_bucket.download_fileobj(key, f)
 
   subprocess.call("chmod 755 /tmp/crux", shell=True)
   index_files = ["auxlocs", "pepix", "protix"]
