@@ -66,7 +66,7 @@ def upload_application_file(client, fparams):
   ]
 
   file = "{0:s}.py".format(fparams["application"])
-  shutil.copyfile("../{0:s}".format(file), file)
+  shutil.copyfile("../applications/{0:s}".format(file), file)
 
   files.append(file)
   upload_lambda(client, fparams, files)
