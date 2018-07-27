@@ -1,8 +1,29 @@
 import boto3
+from botocore.client import Config
 import constants
 import os
 import re
 import subprocess
+
+
+def setup_client(service, params):
+  extra_time = 20
+  config = Config(read_timeout=params["timeout"] + extra_time)
+  client = boto3.client(service,
+                        aws_access_key_id=params["access_key"],
+                        aws_secret_access_key=params["secret_key"],
+                        region_name=params["region"],
+                        config=config
+                        )
+  return client
+
+
+def create_client(params):
+  client = setup_client("lambda", params)
+  # https://github.com/boto/boto3/issues/1104#issuecomment-305136266
+  # boto3 by default retries even if max timeout is set. This is a workaround.
+  client.meta.events._unique_id_handlers['retry-config-lambda']['handler']._checker.__dict__['_max_attempts'] = 0
+  return client
 
 
 def get_credentials(name):
