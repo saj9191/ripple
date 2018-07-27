@@ -35,7 +35,6 @@ def upload_lambda(client, fparams, files):
 def upload_split_file(client, fparams):
   files = [
     "{0:s}.py".format(fparams["format"]),
-    "constants.py",
     "iterator.py",
     "split_file.py",
     "util.py",
@@ -46,10 +45,27 @@ def upload_split_file(client, fparams):
 def upload_format_file_chunk_file(client, fparams):
   files = [
     "{0:s}.py".format(fparams["format"]),
-    "constants.py",
     "format_file_chunk.py",
     "header.{0:s}".format(fparams["format"]),
     "iterator.py",
+    "util.py",
+  ]
+  upload_lambda(client, fparams, files)
+
+
+def upload_analyze_file(client, fparams):
+  files = [
+    "analyze_spectra.py",
+    "util.py",
+  ]
+  upload_lambda(client, fparams, files)
+
+
+def upload_combine_files(client, fparams):
+  files = [
+    "{0:s}.py".format(fparams["format"]),
+    "iterator.py",
+    "combine_files.py",
     "util.py",
   ]
   upload_lambda(client, fparams, files)
@@ -61,6 +77,7 @@ def upload_functions(client, params):
     "header.mzML",
     "iterator.py",
     "mzML.py",
+    "tsv.py",
     "util.py",
   ]
   for file in common_files:
@@ -72,6 +89,10 @@ def upload_functions(client, params):
       upload_split_file(client, fparams)
     elif fparams["file"] == "format_file_chunk":
       upload_format_file_chunk_file(client, fparams)
+    elif fparams["file"] == "combine_files":
+      upload_combine_files(client, fparams)
+    else:
+      upload_analyze_file(client, fparams)
 
   os.chdir("..")
   for file in common_files:
@@ -110,6 +131,7 @@ def setup_triggers(params):
           }
         }]
       }
+      print(function, function["input_bucket"], config)
       setup_notifications(client, function["input_bucket"], config)
 
 
@@ -118,7 +140,7 @@ def setup(params):
     client = util.create_client(params)
     upload_functions(client, params)
 
-  setup_triggers(params)
+  #setup_triggers(params)
 
 
 def main():

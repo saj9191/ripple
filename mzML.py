@@ -1,4 +1,3 @@
-import constants
 import hashlib
 import re
 import iterator
@@ -12,13 +11,12 @@ class Iterator(iterator.Iterator):
   SPECTRUM_LIST_CLOSE_TAG = "</spectrumList>"
   INDEX_CHUNK_SIZE = 1000
   SPECTRUM_CLOSE_TAG = "</spectrum>"
+  XML_NAMESPACE = "http://psi.hupo.org/ms/mzml"
 
   def __init__(self, obj, batch_size, chunk_size):
     iterator.Iterator.__init__(self, obj, batch_size, chunk_size)
-    ET.register_namespace("", constants.XML_NAMESPACE)
+    ET.register_namespace("", Iterator.XML_NAMESPACE)
     self.footer_offset = 235
-    self.obj = obj
-    self.content_length = obj.content_length
     self.remainder = ""
     self.offsets = []
     self.seen_count = 0

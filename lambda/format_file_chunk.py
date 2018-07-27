@@ -14,7 +14,7 @@ def format_file_chunk(bucket_name, key, file_id, start_byte, end_byte, more, par
 
   s3 = boto3.resource('s3')
   obj = s3.Object(bucket_name, key)
-  format_lib = importlib.import_module(ext)
+  format_lib = importlib.import_module(params["format"])
   iterator_class = getattr(format_lib, "Iterator")
   content = obj.get(Range="bytes={0:d}-{1:d}".format(start_byte, end_byte))["Body"].read().decode("utf-8").strip()
 

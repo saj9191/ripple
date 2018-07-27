@@ -1,10 +1,13 @@
 import boto3
 from botocore.client import Config
-import constants
 import os
 import re
 import subprocess
 
+#  spectra-<timestamp>-<nonce>-<file-id>-<split>-<id>-<max-id>.<ext>
+FILE_FORMAT = "spectra-{0:f}-{1:d}-{2:d}-{3:d}-{4:d}-{5:d}.{6:s}"
+FILE_REGEX = re.compile("spectra-([0-9\.]+)-([0-9]+)-([0-9]+)-([0-9]+)-([0-9]+)-([0-9]+)\.([A-Za-z]+)")
+SPECTRA = re.compile("^\S[A-Ya-y0-9\s\.\+]+Z\s[0-9]+\s([0-9\.e\+]+)\n+([0-9\.\se\+]+)", re.MULTILINE)
 
 def setup_client(service, params):
   extra_time = 20
@@ -39,11 +42,11 @@ def get_credentials(name):
 
 
 def file_name(timestamp, nonce, file_id, id, max_id, ext, split=0):
-  return constants.FILE_FORMAT.format(timestamp, nonce, file_id, split, id, max_id, ext)
+  return FILE_FORMAT.format(timestamp, nonce, file_id, split, id, max_id, ext)
 
 
 def parse_file_name(file_name):
-  m = constants.FILE_REGEX.match(file_name)
+  m = FILE_REGEX.match(file_name)
   timestamp = float(m.group(1))
   nonce = int(m.group(2))
   file_id = int(m.group(3))
@@ -63,7 +66,7 @@ def parse_file_name(file_name):
 
 
 def get_key_regex(ts, num_bytes, ext="ms2"):
-  regex = constants.FILE_FORMAT
+  regex = FILE_FORMAT
   for i in range(1, 5):
     regex = regex.replace("{" + str(i) + ":d}", "([0-9]+)")
   regex = regex.replace("{5:d}", "{1:d}").replace("{6:s}", ext)
@@ -72,46 +75,6 @@ def get_key_regex(ts, num_bytes, ext="ms2"):
 
 def clear_tmp():
   subprocess.call("rm -rf /tmp/*", shell=True)
-
-
-def get_next_spectra(lines, start_index):
-  if start_index >= len(lines):
-    return (-1, "", -1)
-
-  mass = None
-
-  remaining = "\n".join(lines[start_index:])
-  if len(remaining.strip()) == 0:
-    return (-1, "", -1)
-
-  split = constants.SPECTRA_START.split(remaining)
-  spectra = "S\t" + split[1]
-
-  temp_lines = spectra.strip().split("\n")
-
-  m = list(filter(lambda s: constants.MASS.match(s), temp_lines))
-  if len(m) == 0:
-    print("ERROR", temp_lines, m)
-    return (-1, "", -1)
-  assert(len(m) > 0)
-  mass = float(constants.MASS.match(m[0]).group(2))
-
-  start_index += len(temp_lines)
-  if start_index >= len(lines):
-    start_index = -1
-  return(mass, spectra, start_index)
-
-
-def parse_spectra(stream):
-  spectra = constants.SPECTRA_START.split(stream)
-  spectra = filter(lambda s: len(s) > 0, spectra)
-  spectra = list(map(lambda s: "S\t" + s, spectra))
-
-  remainder = spectra[-1]
-  spectra = spectra[:-1]
-  # Filter out spectra that don't have a mass line
-  spectra = list(filter(lambda s: len(list(filter(lambda line: constants.MASS.match(line), s.split("\n")))) > 0, spectra))
-  return (spectra, remainder)
 
 
 def have_all_files(bucket_name, num_bytes, key_regex):

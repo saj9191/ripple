@@ -17,7 +17,7 @@ def split_file(bucket_name, key, params):
   s3 = boto3.resource("s3")
   obj = s3.Object(bucket_name, key)
 
-  format_lib = importlib.import_module(ext)
+  format_lib = importlib.import_module(params["format"])
   iterator_class = getattr(format_lib, "Iterator")
   iterator = iterator_class(obj, batch_size, chunk_size)
 
