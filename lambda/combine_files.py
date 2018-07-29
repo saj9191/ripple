@@ -9,7 +9,6 @@ def combine(bucket_name, key, params):
   m = util.parse_file_name(key)
   ts = m["timestamp"]
   nonce = m["nonce"]
-  num_bytes = m["max_id"]
 
   p = {
     "timestamp": ts,
@@ -18,22 +17,26 @@ def combine(bucket_name, key, params):
   }
 
   key_regex = util.get_key_regex(p)
-  [have_all_files, keys] = util.have_all_files(bucket_name, num_bytes, key_regex)
-
+  [have_all_files, keys] = util.have_all_files(bucket_name, key_regex)
   if have_all_files:
     print("TIMESTAMP {0:f} NONCE {1:d}".format(ts, nonce))
     print(ts, "Combining", len(keys))
     s3 = boto3.resource("s3")
     format_lib = importlib.import_module(params["format"])
-    combine_class = getattr(format_lib, "Combine")
-    m["file-id"] = 1
-    m["last"] = True
+    combine_function = getattr(format_lib, "combine")
+    if params["sort"]:
+      m["file-id"] = int(bucket_name.split("-")[-1])
+      m["last"] = m["file-id"] == params["num_bins"]
+    else:
+      m["file-id"] = 1
+      m["last"] = True
     file_name = util.file_name(m)
     temp_name = "/tmp/{0:s}".format(file_name)
     # Make this deterministic and combine in the same order
     keys.sort()
-    combine_class.combine(bucket_name, keys, temp_name)
-    s3.Object(params["output_bucket"], file_name).put(Body=open(temp_name, 'rb'))
+    content = combine_function(bucket_name, keys, temp_name, params)
+    print("output_bucket", params["output_bucket"])
+    s3.Object(params["output_bucket"], file_name).put(Body=str.encode(content))
 
 
 def handler(event, context):

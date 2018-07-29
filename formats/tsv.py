@@ -2,19 +2,20 @@ import boto3
 import iterator
 
 
-class Combine():
-  def combine(bucket_name, keys, temp_name):
-    s3 = boto3.resource("s3")
-    f = open(temp_name, "w+")
-
-    for i in range(len(keys)):
-      key = keys[i]
-      content = s3.Object(bucket_name, key).get()["Body"].read().decode("utf-8")
-      if i == 0:
-        f.write(content)
-      else:
-        results = content.split("\n")[1:]
-        f.write("\n".join(results))
+def combine(bucket_name, keys, temp_name, params):
+  if params["sort"]:
+    raise "Not Implemented"
+  s3 = boto3.resource("s3")
+  output = ""
+  for i in range(len(keys)):
+    key = keys[i]
+    content = s3.Object(bucket_name, key).get()["Body"].read().decode("utf-8")
+    if i == 0:
+      output += content
+    else:
+      results = content.split("\n")[1:]
+      output == "\n".join(results)
+  return output
 
 
 class Iterator(iterator.Iterator):
@@ -25,7 +26,7 @@ class Iterator(iterator.Iterator):
 
     start_byte = 0
     end_byte = start_byte + self.chunk_size
-    stream = self.getBytes(start_byte, end_byte)
+    stream = iterator.Iterator.getBytes(self.obj, start_byte, end_byte)
     self.current_offset = stream.indexOf("\n") + 1
     # First element
     self.offsets.append(self.current_offset)
@@ -39,7 +40,7 @@ class Iterator(iterator.Iterator):
     count = 0
     while start_byte < self.content_length:
       end_byte = start_byte + self.chunk_size
-      stream = self.getBytes(start_byte, end_byte)
+      stream = iterator.Iterator.getBytes(self.obj, start_byte, end_byte)
       count += stream.count("\n")
       start_byte = end_byte + 1
 
@@ -52,7 +53,7 @@ class Iterator(iterator.Iterator):
   def updateOffsets(self):
     start_byte = self.current_offset
     end_byte = min(start_byte + self.chunk_size, self.content_length)
-    stream = self.getBytes(start_byte, end_byte)
+    stream = iterator.Iterator.getBytes(self.obj, start_byte, end_byte)
     done = False
     while not done:
       index = stream.index("\n")

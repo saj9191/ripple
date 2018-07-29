@@ -50,4 +50,4 @@
       </instrumentConfiguration>
     </instrumentConfigurationList>
     <run id="TN_CSF_062617_03" defaultInstrumentConfigurationRef="IC1" startTimeStamp="2017-06-27T08:43:06Z" defaultSourceFileRef="RAW1">
-      <spectrumList count="0" defaultDataProcessingRef="pwiz_Reader_Thermo_conversion">
+      <spectrumList count="-123456789" defaultDataProcessingRef="pwiz_Reader_Thermo_conversion">

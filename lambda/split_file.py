@@ -1,13 +1,13 @@
 import boto3
 import importlib
 import json
+import pivot
 import util
 
 
 def split_file(bucket_name, key, params):
   util.clear_tmp()
   m = util.parse_file_name(key)
-  ext = m["ext"]
   print("TIMESTAMP {0:f} NONCE {1:d}".format(m["timestamp"], m["nonce"]))
 
   batch_size = params["batch_size"]
@@ -15,14 +15,21 @@ def split_file(bucket_name, key, params):
 
   client = boto3.client("lambda")
   s3 = boto3.resource("s3")
-  obj = s3.Object(bucket_name, key)
-
   format_lib = importlib.import_module(params["format"])
-  iterator_class = getattr(format_lib, "Iterator")
-  iterator = iterator_class(obj, batch_size, chunk_size)
 
   more = True
   file_id = 0
+
+  if "bucket_prefix" in params:
+    [input_bucket, input_key, ranges] = pivot.get_pivot_ranges(bucket_name, key, params["bucket_prefix"])
+  else:
+    input_bucket = bucket_name
+    input_key = key
+
+  obj = s3.Object(input_bucket, input_key)
+  iterator_class = getattr(format_lib, "Iterator")
+  iterator = iterator_class(obj, batch_size, chunk_size)
+
   while more:
     file_id += 1
     [start_byte, end_byte, more] = iterator.nextOffsets()
@@ -30,10 +37,10 @@ def split_file(bucket_name, key, params):
       "Records": [{
         "s3": {
           "bucket": {
-            "name": bucket_name
+            "name": input_bucket
           },
           "object": {
-            "key": key
+            "key": input_key
           },
           "range": {
             "file_id": file_id,
@@ -44,8 +51,11 @@ def split_file(bucket_name, key, params):
         }
       }]
     }
+    if "bucket_prefix" in params:
+      payload["pivots"] = ranges
+
     response = client.invoke(
-      FunctionName="format_{0:s}_chunk".format(ext),
+      FunctionName=params["output_function"],
       InvocationType="Event",
       Payload=json.JSONEncoder().encode(payload)
     )

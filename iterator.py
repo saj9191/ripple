@@ -5,8 +5,12 @@ class Iterator:
     self.content_length = obj.content_length
     self.obj = obj
 
-  def getBytes(self, start_byte, end_byte):
-    return self.obj.get(Range="bytes={0:d}-{1:d}".format(start_byte, end_byte))["Body"].read().decode("utf-8")
+  def getBytes(obj, start_byte, end_byte):
+    return obj.get(Range="bytes={0:d}-{1:d}".format(start_byte, end_byte))["Body"].read().decode("utf-8")
+
+  # This is for the sort function
+  def __lt__(self, other):
+    return True
 
   def getCount(self):
     raise Exception("Not Implemented")
@@ -27,4 +31,7 @@ class Iterator:
     return (start_offset, end_offset, self.seen_count < self.total_count)
 
   def createContent(self, content):
+    raise Exception("Not Implemented")
+
+  def from_array(items):
     raise Exception("Not Implemented")
