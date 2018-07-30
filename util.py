@@ -69,6 +69,8 @@ def file_format(m):
         name += value
       elif part["type"] == "bool":
         name += str(int(value))
+      elif part["type"] == "float":
+        name += "{0:f}".format(value)
       else:
         name += str(value)
     else:

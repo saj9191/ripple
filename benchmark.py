@@ -1,6 +1,5 @@
 import argparse
 import boto3
-from botocore.client import Config
 import constants
 import datetime
 from enum import Enum
@@ -9,6 +8,7 @@ import os
 import paramiko
 import random
 import re
+import setup
 import sort
 import subprocess
 import time
@@ -89,113 +89,39 @@ def check_output(params):
     print("key", key, "qvalues", count, flush=True)
 
 
-def get_stages(params):
-  stages = MergeLambdaStage
-  if params["model"] == "coordinator":
-    stages = CoordinatorStage
-  elif params["model"] == "ec2":
-    if params["sort"] == "yes":
-      stages = SortEc2Stage
-    else:
-      stages = NoSortEc2Stage
-  elif params["sort"] != "yes":
-    stages = NonMergeLambdaStage
-  return stages
-
-
 def print_run_information():
   git_output = subprocess.check_output("git log --oneline | head -n 1", shell=True).decode("utf-8").strip()
   print("Current Git commit", git_output, "\n", flush=True)
 
 
-def create_client(params):
-  client = setup_client("lambda", params)
-  # https://github.com/boto/boto3/issues/1104#issuecomment-305136266
-  # boto3 by default retries even if max timeout is set. This is a workaround.
-  client.meta.events._unique_id_handlers['retry-config-lambda']['handler']._checker.__dict__['_max_attempts'] = 0
-  return client
-
-
 def process_params(params):
-  params["output_bucket"] = params["lambda"]["percolator"]["output_bucket"]
   _, ext = os.path.splitext(params["input_name"])
   params["ext"] = ext[1:]
-  if params["model"] == "lambda":
-    params["input_bucket"] = params["lambda"]["split_spectra"]["input_bucket"]
-    params["tide_bucket"] = params["lambda"]["combine_spectra_results"]["output_bucket"]
-  else:
-    params["input_bucket"] = params["lambda"]["percolator"]["output_bucket"]
-    params["tide_bucket"] = params["input_bucket"]
-  params["input_bucket"] = params["lambda"]["split_spectra"]["input_bucket"]
-
-  if params["sort"] == "pre":
-    params["input"] = "sorted_{0:s}".format(params["input_name"])
-  else:
-    params["input"] = params["input_name"]
-
-  if params["model"] == "lambda":
-    if params["sort"] == "yes":
-      params["buckets"] = ["input", "split", "sort", "merge", "analyze", "combine", "output"]
-    else:
-      params["lambda"]["split_spectra"]["output_bucket"] = params["lambda"]["merge_spectra"]["output_bucket"]
-      params["buckets"] = ["input", "merge", "analyze", "combine", "output"]
-  elif params["model"] == "coordinator":
-    params["buckets"] = ["input", "analyze"]
-  else:
-    params["buckets"] = ["input", "output"]
-
-  params["bucket_prefix"] = params["lambda"]["percolator"]["output_bucket"].split("-")[0]
-
-  params["triggers"] = {}
-  active_functions = set()
-  if params["model"] == "lambda":
-    active_functions = set(params["lambda"].keys())
-#  elif params["model"] == "coordinator":
-#    active_functions = set(["analyze_spectra"])
-
-  for function in params["lambda"]:
-    if function in active_functions:
-      params["triggers"][function] = ""
-    else:
-      params["triggers"][function] = "VOID"
-
-
-def setup_triggers(params):
-  client = setup_client("s3", params)
-  for function in params["triggers"]:
-    config = {
-      "LambdaFunctionConfigurations": [{
-        "LambdaFunctionArn": params["lambda"][function]["arn"],
-        "Events": ["s3:ObjectCreated:*"],
-        "Filter": {
-          "Key": {
-            "FilterRules": [{
-              "Name": "prefix",
-              "Value": params["triggers"][function]
-            }]
-          }
-        }
-      }]
-    }
-    print(function, config)
-    response = client.put_bucket_notification_configuration(
-      Bucket=params["lambda"][function]["input_bucket"],
-      NotificationConfiguration=config
-    )
-    assert(response["ResponseMetadata"]["HTTPStatusCode"] == 200)
+  params["input"] = params["input_name"]
+  params["input_bucket"] = params["pipeline"][0]["input_bucket"]
+  params["output_bucket"] = params["pipeline"][-1]["output_bucket"]
 
 
 def process_iteration_params(params, iteration):
   now = time.time()
   params["now"] = now
   params["nonce"] = random.randint(1, 1000)
-  params["key"] = util.file_name(params["now"], params["nonce"], 1, 1, 1, params["ext"])
+  print("now", "{0:f}".format(params["now"]))
+  m = {
+    "prefix": "spectra",
+    "timestamp": params["now"],
+    "nonce": params["nonce"],
+    "file-id": 1,
+    "last": True,
+    "ext": params["ext"]
+  }
+  params["key"] = util.file_name(m)
 
 
 def upload_input(params):
   bucket_name = params["input_bucket"]
-  key = util.file_name(params["now"], params["nonce"], 1, 1, 1, params["ext"])
   s3 = setup_connection("s3", params)
+  key = params["key"]
 
   start = time.time()
   print("Uploading {0:s} to s3://{1:s}".format(params["input"], bucket_name), flush=True)
@@ -243,7 +169,6 @@ def benchmark(i, params):
 def run(params):
   print_run_information()
   process_params(params)
-  client = create_client(params)
   iterations = params["iterations"]
 
   if params["sort"] == "pre":
@@ -251,19 +176,18 @@ def run(params):
     args.file = params["input_name"]
     sort.run(args)
 
-  if params["model"] != "ec2":
-    upload_functions(client, params)
-
-  setup_triggers(params)
-
-  stages = get_stages(params)
-  stats = list(map(lambda s: [], stages))
+  setup.setup(params)
+  stats = list(map(lambda s: [], params["pipeline"]))
+  # Load stats
+  stats.append([])
+  # Total stats
+  stats.append([])
 
   for i in range(iterations):
     print("Iteration {0:d}".format(i), flush=True)
     process_iteration_params(params, i)
     results = benchmark(i, params)
-    assert(len(results) == len(stages))
+    print("stats", len(stats), "results", len(results))
     for i in range(len(results)):
       stats[i].append(results[i])
 
@@ -274,9 +198,10 @@ def run(params):
     print("--------------------------\n", flush=True)
 
   print("END RESULTS ({0:d} ITERATIONS)".format(iterations), flush=True)
-  for stage in stages:
-    print("AVERAGE {0:s} RESULTS".format(stage.name), flush=True)
-    print_stats(calculate_average_results(stats[stage.value], iterations))
+  for i in range(len(params["pipeline"])):
+    step = params["pipeline"][i]
+    print("AVERAGE {0:s} RESULTS".format(step["name"]), flush=True)
+    print_stats(calculate_average_results(stats[i], iterations))
     print("", flush=True)
 
 
@@ -454,7 +379,7 @@ def coordinator_benchmark(params):
   stats.append(download_input(client, params))
   stats += run_coordinator(client, params)
 
-  lclient = setup_client("logs", params)
+  lclient = util.setup_client("logs", params)
   stats.append(parse_analyze_logs(lclient, params))
   stats.append(upload_results(client, params))
   stats.append(terminate_instance(instance, client, params))
@@ -491,66 +416,6 @@ class MergeLambdaStage(Enum):
   TOTAL = 7
 
 
-def upload_functions(client, params):
-  functions = [
-    "split_spectra",
-    "sort_spectra",
-    "merge_spectra",
-    "analyze_spectra",
-    "combine_spectra_results",
-    "percolator"
-  ]
-
-  os.chdir("lambda")
-  for function in functions:
-    fparams = params["lambda"][function]
-
-    f = open("{0:s}.json".format(function), "w")
-    f.write(json.dumps(fparams))
-    f.close()
-
-    files = [
-      "{0:s}.py".format(function),
-      "{0:s}.json".format(function)
-    ]
-
-    for dependency in fparams["dependencies"]:
-      subprocess.call("cp ../{0:s} .".format(dependency), shell=True)
-
-    files += fparams["dependencies"]
-    subprocess.call("zip {0:s}.zip {1:s}".format(function, " ".join(files)), shell=True)
-
-    with open("{0:s}.zip".format(function), "rb") as f:
-      zipped_code = f.read()
-
-    response = client.update_function_code(
-      FunctionName=fparams["name"],
-      ZipFile=zipped_code,
-    )
-    assert(response["ResponseMetadata"]["HTTPStatusCode"] == 200)
-    response = client.update_function_configuration(
-      FunctionName=fparams["name"],
-      Timeout=fparams["timeout"],
-      MemorySize=fparams["memory_size"]
-    )
-    assert(response["ResponseMetadata"]["HTTPStatusCode"] == 200)
-
-  os.chdir("..")
-  print("")
-
-
-def setup_client(service, params):
-  extra_time = 20
-  config = Config(read_timeout=params["timeout"] + extra_time)
-  client = boto3.client(service,
-                        aws_access_key_id=params["access_key"],
-                        aws_secret_access_key=params["secret_key"],
-                        region_name=params["region"],
-                        config=config
-                        )
-  return client
-
-
 def check_objects(client, bucket_name, prefix, count, timeout, params):
   done = False
   suffix = ""
@@ -569,6 +434,7 @@ def check_objects(client, bucket_name, prefix, count, timeout, params):
     c = 0
     now = time.time()
     for obj in bucket.objects.all():
+      print("\t", obj.key, prefix, ts)
       # print(obj.key, ts, obj.key.startswith(prefix), ts in obj.key)
       if obj.key.startswith(prefix) and ts in obj.key:
         c += 1
@@ -577,8 +443,7 @@ def check_objects(client, bucket_name, prefix, count, timeout, params):
     end = datetime.datetime.now()
     now = end.strftime("%H:%M:%S")
     if not done:
-      num_analyze = file_count(params["lambda"]["analyze_spectra"]["output_bucket"], params)
-      print("{0:s}: Waiting for {1:s} function{2:s}. Analyze {3:d}.".format(now, prefix, suffix, num_analyze), flush=True)
+      print("{0:s}: Waiting for {1:s} function{2:s}.".format(now, prefix, suffix), flush=True)
       if (end - start).total_seconds() > timeout:
         raise BenchmarkException("Could not find bucket {0:s} prefix {1:s}".format(bucket_name, prefix))
       time.sleep(30)
@@ -587,22 +452,19 @@ def check_objects(client, bucket_name, prefix, count, timeout, params):
 
 
 def wait_for_completion(start_time, params):
-  client = setup_client("s3", params)
+  client = util.setup_client("s3", params)
 
-  overhead = 3.5  # Give ourselves time as we need to wait for the split and analyze functions to finish.
-  bucket_name = params["lambda"]["combine_spectra_results"]["output_bucket"]
-  check_objects(client, bucket_name, "spectra", 1, params["lambda"]["combine_spectra_results"]["timeout"] * overhead, params)
-  overhead = 1.5
-  bucket_name = params["lambda"]["percolator"]["output_bucket"]
-  check_objects(client, bucket_name, "percolator.decoy", 2,  params["lambda"]["percolator"]["timeout"] * overhead, params)
-
-  target_timeout = 30  # Target should be created around the same time as decoys
-  check_objects(client, bucket_name, "percolator.target", 2, target_timeout, params)
+  # Give ourselves time as we need to wait for each part of the pipeline
+  last = params["pipeline"][-1]
+  timeout = len(params["pipeline"]) * last["timeout"]
+  bucket_name = last["output_bucket"]
+  check_objects(client, bucket_name, "percolator.target", 2, timeout, params)
   print("")
   time.sleep(10)  # Wait a little to make sure percolator logs are on the server
 
 
 def fetch(client, num_events, log_name, timestamp, nonce, filter_pattern, extra_args={}):
+  print(log_name, num_events)
   log_events = []
   next_token = None
   args = {
@@ -611,61 +473,46 @@ def fetch(client, num_events, log_name, timestamp, nonce, filter_pattern, extra_
   }
   args = {**args, **extra_args}
 
-  while len(log_events) < num_events:
-    args["filterPattern"] = filter_pattern  # "TIMESTAMP {0:f} NONCE {1:d}".format(timestamp, nonce)
-    args["limit"] = num_events - len(log_events)
+  more = True
+  while more:
+    args["filterPattern"] = "TIMESTAMP {0:f} NONCE {1:d}".format(timestamp / 1000, nonce)
+  #  args["limit"] = num_events - len(log_events)
     if next_token:
       args["nextToken"] = next_token
     response = client.filter_log_events(**args)
     assert(response["ResponseMetadata"]["HTTPStatusCode"] == 200)
 
     log_events += response["events"]
-    if "nextToken" not in response and len(log_events) < num_events:
-      print(args, flush=True)
-      print(response, flush=True)
-      raise BenchmarkException("Token not found")
+    if "nextToken" not in response:
+      more = False
+      # raise BenchmarkException("Token not found")
     else:
       next_token = response["nextToken"]
 
-  return log_events
   events = []
   args["filterPattern"] = filter_pattern
-  print("num log events", len(log_events), flush=True)
-  # Can only handle up to 100 event streams
-  max_streams = 100
-  if "nextToken" in args:
-    del args["nextToken"]
-  next_token = None
 
-  log_events = list(map(lambda e: e["logStreamName"], log_events))
-  while len(events) < num_events:
-    print("num_log_events", len(log_events), "num_events", len(events), flush=True)
-    if next_token:
-      args["nextToken"] = next_token
-    max_events = min(max_streams, len(log_events))
-    print("events", len(events), "max", max_events, "num", num_events)
-    args["logStreamNames"] = log_events[:max_streams]
-    args["limit"] = max_events
+  les = {}
+  for event in log_events:
+    if event["logStreamName"] not in les:
+      les[event["logStreamName"]] = 0
+    les[event["logStreamName"]] += 1
+
+  for name in les.keys():
+    count = les[name]
+    args["logStreamNames"] = [name]
+    args["limit"] = count
     response = client.filter_log_events(**args)
     assert(response["ResponseMetadata"]["HTTPStatusCode"] == 200)
-    if "nextToken" not in response:
-      print("wtf111", log_name, len(response["events"]))
-
     es = response["events"]
-    s = set(list(map(lambda e: e["logStreamName"], es)))
     events += es
-    log_events = list(filter(lambda e: e not in s, log_events))
 
-  print("num_events", len(events))
+  print(log_name, num_events, len(events))
   return events
 
 
 def fetch_events(client, num_events, log_name, start_time, nonce, filter_pattern, extra_args={}):
   events = fetch(client, num_events, log_name, start_time * 1000, nonce, filter_pattern, extra_args)
-  if len(events) != num_events:
-    print(log_name, len(events), num_events)
-    #  error_events = fetch(client, num_events - len(events), log_name, start_time, "*Task timed out after*", extra_args)
-    raise BenchmarkException("sad")  # log_name, "has", len(error_events), "timeouts", extra_args)
   return events
 
 
@@ -709,14 +556,19 @@ def file_count(bucket_name, params):
   return count
 
 
-def parse_mult_logs(client, params, lambda_name):
-  lparams = params["lambda"][lambda_name]
-  num_lambdas = file_count(lparams["output_bucket"], params)
+def parse_mult_logs(client, params, lparams, num_lambdas=None):
+  if num_lambdas is None:
+    if "output_bucket" in lparams:
+      num_lambdas = file_count(lparams["output_bucket"], params)
+    elif lparams["file"] == "sort":
+      num_lambdas = 46 * lparams["num_bins"]
+    else:
+      num_lambdas = 1
 
   events = fetch_events(client, num_lambdas, lparams["name"], params["now"], params["nonce"], "REPORT RequestId")
   max_billed_duration = 0
   total_billed_duration = 0
-  total_memory_used = 0  # TODO: Handle
+  total_memory_used = 0
   min_timestamp = events[0]["timestamp"]
   max_timestamp = events[0]["timestamp"]
   min_memory = 4000
@@ -736,7 +588,7 @@ def parse_mult_logs(client, params, lambda_name):
 
   cost = calculate_cost(total_billed_duration, lparams["memory_size"])
 
-  print(lambda_name)
+  print(lparams["name"])
   print("Min Timestamp", min_timestamp)
   print("Max Timestamp", max_timestamp)
   print("Min Memory", min_memory)
@@ -754,8 +606,9 @@ def parse_mult_logs(client, params, lambda_name):
   }
 
 
-def parse_sort_logs(client, params):
-  return parse_mult_logs(client, params, "sort_spectra")
+def parse_sort_logs(client, prefix, params, lparams):
+  num_lambdas = file_count(prefix + "-0", params) * params["num_bins"]
+  return parse_mult_logs(client, params, lparams, num_lambdas)
 
 
 def parse_merge_logs(client, params):
@@ -820,19 +673,13 @@ def parse_percolator_logs(client, params):
 
 
 def parse_logs(params, upload_timestamp, upload_duration):
-  client = setup_client("logs", params)
+  client = util.setup_client("logs", params)
 
   stats = []
   stats.append(load_stats(upload_duration))
-  stats.append(parse_split_logs(client, params))
-
-  if params["sort"] == "yes":
-    stats.append(parse_sort_logs(client, params))
-    stats.append(parse_merge_logs(client, params))
-
-  stats.append(parse_analyze_logs(client, params))
-  stats.append(parse_combine_logs(client, params))
-  stats.append(parse_percolator_logs(client, params))
+  for i in range(len(params["pipeline"])):
+    step = params["pipeline"][i]
+    stats.append(parse_mult_logs(client, params, step))
 
   total_stats = calculate_total_stats(stats)
   print("END RESULTS")
@@ -1150,7 +997,7 @@ def main():
   parser.add_argument('--parameters', type=str, required=True, help="File containing parameters")
   args = parser.parse_args()
   params = json.loads(open(args.parameters).read())
-  [access_key, secret_key] = util.get_credentials(args.parameters.split(".")[0].split("/")[1])
+  [access_key, secret_key] = util.get_credentials("default")
   params["access_key"] = access_key
   params["secret_key"] = secret_key
   print(params)
