@@ -246,17 +246,17 @@ def setup_connection(service, params):
 
 def clear_buckets(params):
   s3 = setup_connection("s3", params)
-
   id = "{0:f}-{1:d}".format(params["now"], params["nonce"])
-  for bn in params["buckets"]:
-    count = 0
-    bucket_name = "{0:s}-human-{1:s}-spectra".format(params["bucket_prefix"], bn)
-    bucket = s3.Bucket(bucket_name)
-    for obj in bucket.objects.all():
-      if id in obj.key:
-        obj.delete()
-        count += 1
-    print("Deleted", count, bn, "objects")
+
+  for function in params["pipeline"]:
+    for bucket_name in setup.function_buckets(function):
+      bucket = s3.Bucket(bucket_name)
+      count = 0
+      for obj in bucket.objects.all():
+        if id in obj.key:
+          obj.delete()
+          count += 1
+      print("Deleted", count, bucket_name, "objects")
 
 #############################
 #       COORDINATOR         #
