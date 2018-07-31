@@ -8,7 +8,7 @@ import util
 def split_file(bucket_name, key, params):
   util.clear_tmp()
   m = util.parse_file_name(key)
-  print("TIMESTAMP {0:f} NONCE {1:d}".format(m["timestamp"], m["nonce"]))
+  print("TIMESTAMP {0:f} NONCE {1:d} FILE {2:d}".format(m["timestamp"], m["nonce"], m["file-id"]))
 
   batch_size = params["batch_size"]
   chunk_size = params["chunk_size"]

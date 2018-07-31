@@ -22,7 +22,7 @@ def create_pivots(s3, sorted_input, params):
 def find_pivots(bucket_name, key, file_id, start_byte, end_byte, more, params):
   util.clear_tmp()
   m = util.parse_file_name(key)
-  print("TIMESTAMP {0:f} NONCE {1:d}".format(m["timestamp"], m["nonce"]))
+  print("TIMESTAMP {0:f} NONCE {1:d} FILE {2:d}".format(m["timestamp"], m["nonce"], file_id))
 
   s3 = boto3.resource("s3")
   obj = s3.Object(bucket_name, key)

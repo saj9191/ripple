@@ -9,7 +9,7 @@ def run_application(bucket_name, key, params):
   m = util.parse_file_name(key)
   ts = m["timestamp"]
   nonce = m["nonce"]
-  print("TIMESTAMP {0:f} NONCE {1:d}".format(ts, nonce))
+  print("TIMESTAMP {0:f} NONCE {1:d} FILE {2:d}".format(ts, nonce, m["file-id"]))
 
   s3 = boto3.resource('s3')
   input_bucket = s3.Bucket(bucket_name)

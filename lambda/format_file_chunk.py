@@ -9,7 +9,7 @@ def format_file_chunk(bucket_name, key, file_id, start_byte, end_byte, more, par
   m = util.parse_file_name(key)
   nonce = m["nonce"]
   timestamp = m["timestamp"]
-  print("TIMESTAMP {0:f} NONCE {1:d}".format(timestamp, nonce))
+  print("TIMESTAMP {0:f} NONCE {1:d} FILE {2:d}".format(timestamp, nonce, file_id))
 
   s3 = boto3.resource('s3')
   obj = s3.Object(bucket_name, key)

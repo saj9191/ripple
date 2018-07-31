@@ -21,7 +21,7 @@ def combine(bucket_name, key, params):
   m = util.parse_file_name(key)
   ts = m["timestamp"]
   nonce = m["nonce"]
-  print("TIMESTAMP {0:f} NONCE {1:d}".format(ts, nonce))
+  print("TIMESTAMP {0:f} NONCE {1:d} FILE {2:d}".format(ts, nonce, m["file-id"]))
 
   p = {
     "timestamp": ts,
