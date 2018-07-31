@@ -158,9 +158,8 @@ def benchmark(i, params):
 
       done = True
     except BenchmarkException as e:
-      raise e
-#      print("Error during iteration {0:d}".format(i), e, flush=True)
-#      clear_buckets(params)
+      print("Error during iteration {0:d}".format(i), e, flush=True)
+      clear_buckets(params)
 
   return results
 
