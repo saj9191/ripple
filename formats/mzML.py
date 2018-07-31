@@ -54,7 +54,9 @@ def combine(bucket_name, keys, temp_name, params):
       element.more = more
       heapq.heappush(iterators, element)
 
-  return Iterator.from_array(spectra)
+  with open(temp_name, "w+") as f:
+    content = Iterator.from_array(spectra)
+    f.write(content)
 
 
 class Iterator(iterator.Iterator):

@@ -5,17 +5,17 @@ import iterator
 def combine(bucket_name, keys, temp_name, params):
   if params["sort"]:
     raise "Not Implemented"
+
   s3 = boto3.resource("s3")
-  output = ""
-  for i in range(len(keys)):
-    key = keys[i]
-    content = s3.Object(bucket_name, key).get()["Body"].read().decode("utf-8")
-    if i == 0:
-      output += content
-    else:
-      results = content.split("\n")[1:]
-      output == "\n".join(results)
-  return output
+  with open(temp_name, "w+") as f:
+    for i in range(len(keys)):
+      key = keys[i]
+      content = s3.Object(bucket_name, key).get()["Body"].read().decode("utf-8")
+      if i == 0:
+        f.write(content)
+      else:
+        results = content.split("\n")[1:]
+        f.write("\n".join(results))
 
 
 class Iterator(iterator.Iterator):

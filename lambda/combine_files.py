@@ -4,15 +4,15 @@ import json
 import util
 
 
-def last_file(s3, bucket, keys):
+def last_file(keys):
   last_modified_key = None
   last_modified_key_time = None
   keys.sort()
   for key in keys:
-    obj = s3.Object(bucket, key)
-    if last_modified_key_time is None or obj.last_modified > last_modified_key_time:
+    m = util.parse_file_name(key)
+    if last_modified_key_time is None or m["created"] > last_modified_key_time:
+      last_modified_key_time = m["created"]
       last_modified_key = key
-      last_modified_key_time = obj.last_modified
   return last_modified_key
 
 
@@ -21,6 +21,7 @@ def combine(bucket_name, key, params):
   m = util.parse_file_name(key)
   ts = m["timestamp"]
   nonce = m["nonce"]
+  print("TIMESTAMP {0:f} NONCE {1:d}".format(ts, nonce))
 
   p = {
     "timestamp": ts,
@@ -30,13 +31,9 @@ def combine(bucket_name, key, params):
 
   s3 = boto3.resource("s3")
   key_regex = util.get_key_regex(p)
-  have_all_files = False
-  if m["last"]:
-    while not have_all_files:
-      [have_all_files, keys] = util.have_all_files(bucket_name, key_regex)
+  [have_all_files, keys] = util.have_all_files(bucket_name, key_regex)
 
-  if have_all_files:
-    print("TIMESTAMP {0:f} NONCE {1:d}".format(ts, nonce))
+  if have_all_files and last_file(keys) == key:
     print(ts, "Combining", len(keys))
     format_lib = importlib.import_module(params["format"])
     combine_function = getattr(format_lib, "combine")
@@ -50,9 +47,8 @@ def combine(bucket_name, key, params):
     temp_name = "/tmp/{0:s}".format(file_name)
     # Make this deterministic and combine in the same order
     keys.sort()
-    content = combine_function(bucket_name, keys, temp_name, params)
-    print("output_bucket", params["output_bucket"])
-    s3.Object(params["output_bucket"], file_name).put(Body=str.encode(content))
+    combine_function(bucket_name, keys, temp_name, params)
+    s3.Object(params["output_bucket"], file_name).put(Body=open(temp_name, "rb"))
 
 
 def handler(event, context):

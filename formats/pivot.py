@@ -26,7 +26,8 @@ def combine(bucket_name, keys, temp_name, params):
   super_pivots.append(pivots[-1])
   spivots = list(map(lambda p: str(p), super_pivots))
   content = "{0:s}\n{1:s}\n{2:s}".format(file_bucket, file_key, "\t".join(spivots))
-  return content
+  with open(temp_name, "w+") as f:
+    f.write(content)
 
 
 def get_pivot_ranges(bucket_name, key, bucket_prefix):

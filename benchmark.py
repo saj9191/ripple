@@ -65,28 +65,28 @@ def check_sort(s3, params):
 def check_output(params):
   s3 = setup_connection("s3", params)
 
-  tide_file = util.file_name(params["now"], params["nonce"], 1, 1, 1, "txt")
-  bucket = s3.Bucket(params["tide_bucket"])
+  prefix = "tide-search-{0:f}-{1:d}".format(params["now"], params["nonce"])
+  bucket_name = params["pipeline"][-2]["output_bucket"]
+  print("Checking output from bucket", bucket_name)
+  bucket = s3.Bucket(bucket_name)
   for obj in bucket.objects.all():
-    if obj.key == tide_file:
+    if obj.key.startswith(prefix):
       content = obj.get()["Body"].read().decode("utf-8")
       num_lines = len(content.split("\n"))
-      print("key", tide_file, "num_lines", num_lines, flush=True)
+      print("key", obj.key, "num_lines", num_lines, flush=True)
 
-  bucket_name = params["output_bucket"]
+  bucket_name = params["pipeline"][-1]["output_bucket"]
   bucket = s3.Bucket(bucket_name)
-  for item in ["peptides", "psms"]:
-    key = "percolator.target.{0:s}.txt".format(item)
-    output_file = "percolator.target.{0:s}.{1:f}.{2:d}.txt".format(item, params["now"], params["nonce"])
-    print(bucket_name, output_file, flush=True)
-    obj = s3.Object(bucket_name, output_file)
-    content = obj.get()["Body"].read().decode("utf-8")
+  for obj in bucket.objects.all():
+    token = "{0:f}-{1:d}".format(params["now"], params["nonce"])
+    if token in obj.key and "target" in obj.key:
+      content = obj.get()["Body"].read().decode("utf-8")
 
-    lines = content.split("\n")[1:]
-    lines = list(filter(lambda line: len(line.strip()) > 0, lines))
-    qvalues = list(map(lambda line: float(line.split("\t")[7]), lines))
-    count = len(list(filter(lambda qvalue: qvalue <= CHECKS["qvalue"], qvalues)))
-    print("key", key, "qvalues", count, flush=True)
+      lines = content.split("\n")[1:]
+      lines = list(filter(lambda line: len(line.strip()) > 0, lines))
+      qvalues = list(map(lambda line: float(line.split("\t")[7]), lines))
+      count = len(list(filter(lambda qvalue: qvalue <= CHECKS["qvalue"], qvalues)))
+      print("key", obj.key, "qvalues", count, flush=True)
 
 
 def print_run_information():
@@ -176,9 +176,8 @@ def run(params):
     sort.run(args)
 
   setup.setup(params)
-  stats = list(map(lambda s: [], params["pipeline"]))
-  # Load stats
-  stats.append([])
+  pipeline = [{"name": "load"}] + params["pipeline"]
+  stats = list(map(lambda s: [], pipeline))
   # Total stats
   # stats.append([])
 
@@ -190,15 +189,16 @@ def run(params):
     for i in range(len(results)):
       stats[i].append(results[i])
 
-  #  if params["check_output"]:
-  #    check_output(params)
+    if params["check_output"]:
+      check_output(params)
 
     clear_buckets(params)
     print("--------------------------\n", flush=True)
 
   print("END RESULTS ({0:d} ITERATIONS)".format(iterations), flush=True)
-  for i in range(len(params["pipeline"])):
-    step = params["pipeline"][i]
+
+  for i in range(len(pipeline)):
+    step = pipeline[i]
     print("AVERAGE {0:s} RESULTS".format(step["name"]), flush=True)
     print_stats(calculate_average_results(stats[i], iterations))
     print("", flush=True)
@@ -473,7 +473,6 @@ def wait_for_completion(start_time, params):
 
 
 def fetch(client, num_events, log_name, timestamp, nonce, filter_pattern, extra_args={}):
-  print(log_name, num_events)
   log_events = []
   next_token = None
   args = {
@@ -561,12 +560,11 @@ def parse_mult_logs(client, params, lparams, num_lambdas=None):
   max_timestamp = events[0]["timestamp"]
   min_memory = 4000
   max_memory = 0
-  timestamps = list(map(lambda e: e["timestamp"], events))
+  durations = []
 
-  for i in range(len(events)):
-    event = events[i]
-    min_timestamp = min(min_timestamp, timestamps[i])
-    max_timestamp = max(max_timestamp, timestamps[i])
+  for event in events:
+    min_timestamp = min(min_timestamp, event["timestamp"])
+    max_timestamp = max(max_timestamp, event["timestamp"])
     m = REPORT.match(event["message"])
     duration = int(m.group(2))
     memory_used = int(m.group(4))
@@ -575,6 +573,7 @@ def parse_mult_logs(client, params, lparams, num_lambdas=None):
     max_billed_duration = max(max_billed_duration, duration)
     total_billed_duration += duration
     total_memory_used += memory_used
+    durations.append(duration)
 
   cost = calculate_cost(total_billed_duration, lparams["memory_size"])
 
@@ -589,7 +588,7 @@ def parse_mult_logs(client, params, lparams, num_lambdas=None):
   print("", flush=True)
 
   return {
-    "billed_duration": timestamps,
+    "billed_duration": durations,
     "max_duration": max_billed_duration,
     "memory_used": total_memory_used,
     "cost": cost

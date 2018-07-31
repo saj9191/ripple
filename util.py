@@ -3,6 +3,7 @@ from botocore.client import Config
 import os
 import re
 import subprocess
+import time
 
 
 FILE_FORMAT = [{
@@ -17,6 +18,9 @@ FILE_FORMAT = [{
 }, {
   "name": "file-id",
   "type": "int",
+}, {
+  "name": "created",
+  "type": "float",
 }, {
   "name": "last",
   "type": "bool",
@@ -92,6 +96,7 @@ def file_format(m):
 
 
 def file_name(m):
+  m["created"] = time.time()
   return file_format(m)
 
 
