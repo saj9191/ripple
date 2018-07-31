@@ -19,7 +19,7 @@ MEMORY_PARAMETERS = json.loads(open("json/memory.json").read())
 CHECKS = json.loads(open("json/checks.json").read())
 REPORT = re.compile(".*Duration:\s([0-9\.]+)\sms.*Billed Duration:\s([0-9\.]+)\sms.*Memory Size:\s([0-9]+)\sMB.*Max Memory Used:\s([0-9]+)\sMB.*")
 SPECTRA = re.compile("S\s+([0-9\.]+)\s+([0-9\.]+)\s+([0-9\.]+)*")
-STAT_FIELDS = ["cost", "max_duration", "billed_duration", "memory_used"]
+STAT_FIELDS = ["cost", "max_duration", "memory_used"]
 
 #############################
 #         COMMON            #
@@ -106,7 +106,6 @@ def process_iteration_params(params, iteration):
   now = time.time()
   params["now"] = now
   params["nonce"] = random.randint(1, 1000)
-  print("now", "{0:f}".format(params["now"]))
   m = {
     "prefix": "spectra",
     "timestamp": params["now"],
@@ -139,7 +138,7 @@ def upload_input(params):
 
 def load_stats(upload_duration):
   return {
-    "billed_duration": 0,
+    "billed_duration": [upload_duration],
     "max_duration": upload_duration,
     "memory_used": 0,
     "cost": 0
@@ -181,7 +180,7 @@ def run(params):
   # Load stats
   stats.append([])
   # Total stats
-  stats.append([])
+  # stats.append([])
 
   for i in range(iterations):
     print("Iteration {0:d}".format(i), flush=True)
@@ -191,8 +190,8 @@ def run(params):
     for i in range(len(results)):
       stats[i].append(results[i])
 
-    if params["check_output"]:
-      check_output(params)
+  #  if params["check_output"]:
+  #    check_output(params)
 
     clear_buckets(params)
     print("--------------------------\n", flush=True)
@@ -207,6 +206,11 @@ def run(params):
 
 def calculate_total_stats(stats):
   total_stats = {}
+  total_stats["billed_duration"] = list(map(lambda d: 0, stats[0]["billed_duration"]))
+
+  for i in range(len(total_stats["billed_duration"])):
+    for stat in stats:
+      total_stats["billed_duration"][i] += stat["billed_duration"][i]
 
   for field in STAT_FIELDS:
     total_stats[field] = 0
@@ -222,6 +226,10 @@ def calculate_average_results(stats, iterations):
   total_stats = calculate_total_stats(stats)
   average_stats = {}
 
+  average_stats["billed_duration"] = list(map(lambda d: 0, total_stats["billed_duration"]))
+  for i in range(len(total_stats["billed_duration"])):
+    average_stats["billed_duration"][i] = float(total_stats["billed_duration"][i]) / iterations
+
   for field in STAT_FIELDS:
     average_stats[field] = float(total_stats[field]) / iterations
 
@@ -230,8 +238,10 @@ def calculate_average_results(stats, iterations):
 
 def print_stats(stats):
   print("Total Cost", stats["cost"], flush=True)
+  for i in range(len(stats["billed_duration"])):
+    print("Runtime", i, stats["billed_duration"][i] / 1000, "seconds", flush=True)
   print("Total Runtime", stats["max_duration"] / 1000, "seconds", flush=True)
-  print("Total Billed Duration", stats["billed_duration"] / 1000, "seconds", flush=True)
+  print("Total Billed Duration", sum(stats["billed_duration"]) / 1000, "seconds", flush=True)
   print("Total Memory Used", stats["memory_used"], "MB", flush=True)
 
 
@@ -434,7 +444,6 @@ def check_objects(client, bucket_name, prefix, count, timeout, params):
     c = 0
     now = time.time()
     for obj in bucket.objects.all():
-      print("\t", obj.key, prefix, ts)
       # print(obj.key, ts, obj.key.startswith(prefix), ts in obj.key)
       if obj.key.startswith(prefix) and ts in obj.key:
         c += 1
@@ -513,6 +522,8 @@ def fetch(client, num_events, log_name, timestamp, nonce, filter_pattern, extra_
 
 def fetch_events(client, num_events, log_name, start_time, nonce, filter_pattern, extra_args={}):
   events = fetch(client, num_events, log_name, start_time * 1000, nonce, filter_pattern, extra_args)
+  if len(events) == 0:
+    raise BenchmarkException("Could not find any events")
   return events
 
 
@@ -520,29 +531,6 @@ def calculate_cost(duration, memory_size):
   # Cost per 100ms
   millisecond_cost = MEMORY_PARAMETERS["lambda"][str(memory_size)]
   return int(duration / 100) * millisecond_cost
-
-
-def parse_split_logs(client, params):
-  sparams = params["lambda"]["split_spectra"]
-  events = fetch_events(client, 1, sparams["name"], params["now"], params["nonce"], "REPORT RequestId")
-  m = REPORT.match(events[0]["message"])
-  duration = int(m.group(2))
-  memory_used = int(m.group(4))
-  cost = calculate_cost(duration, sparams["memory_size"])
-
-  print("Split Spectra")
-  print("Timestamp", events[0]["timestamp"])
-  print("Billed Duration", duration, "milliseconds")
-  print("Max Memory Used", m.group(4))
-  print("Cost", cost)
-  print("")
-
-  return {
-    "billed_duration": duration,
-    "max_duration": duration,
-    "memory_used": memory_used,
-    "cost": cost
-  }
 
 
 def file_count(bucket_name, params):
@@ -573,10 +561,12 @@ def parse_mult_logs(client, params, lparams, num_lambdas=None):
   max_timestamp = events[0]["timestamp"]
   min_memory = 4000
   max_memory = 0
+  timestamps = list(map(lambda e: e["timestamp"], events))
 
-  for event in events:
-    min_timestamp = min(min_timestamp, event["timestamp"])
-    max_timestamp = max(max_timestamp, event["timestamp"])
+  for i in range(len(events)):
+    event = events[i]
+    min_timestamp = min(min_timestamp, timestamps[i])
+    max_timestamp = max(max_timestamp, timestamps[i])
     m = REPORT.match(event["message"])
     duration = int(m.group(2))
     memory_used = int(m.group(4))
@@ -599,77 +589,15 @@ def parse_mult_logs(client, params, lparams, num_lambdas=None):
   print("", flush=True)
 
   return {
-    "billed_duration": total_billed_duration,
+    "billed_duration": timestamps,
     "max_duration": max_billed_duration,
     "memory_used": total_memory_used,
     "cost": cost
   }
 
 
-def parse_sort_logs(client, prefix, params, lparams):
-  num_lambdas = file_count(prefix + "-0", params) * params["num_bins"]
-  return parse_mult_logs(client, params, lparams, num_lambdas)
-
-
-def parse_merge_logs(client, params):
-  return parse_mult_logs(client, params, "merge_spectra")
-
-
 def parse_analyze_logs(client, params):
   return parse_mult_logs(client, params, "analyze_spectra")
-
-
-def parse_combine_logs(client, params):
-  cparams = params["lambda"]["combine_spectra_results"]
-  name = cparams["name"]
-  combine_events = fetch_events(client, 1, name, params["now"], params["nonce"], "Combining")
-
-  extra_args = {
-    "logStreamNames": [combine_events[0]["logStreamName"]],
-  }
-  events = fetch(client, 1, name, combine_events[0]["timestamp"], params["nonce"], "REPORT RequestId", extra_args)
-
-  m = REPORT.match(events[0]["message"])
-  duration = int(m.group(2))
-  memory_used = int(m.group(4))
-  cost = calculate_cost(duration, cparams["memory_size"])
-
-  print("Combine Spectra")
-  print("Timestamp", combine_events[0]["timestamp"])
-  print("Billed Duration", duration, "milliseconds")
-  print("Max Memory Used", m.group(4))
-  print("Cost", cost)
-  print("")
-
-  return {
-    "billed_duration": duration,
-    "max_duration": duration,
-    "memory_used": memory_used,
-    "cost": cost
-  }
-
-
-def parse_percolator_logs(client, params):
-  pparams = params["lambda"]["percolator"]
-  events = fetch_events(client, 1, pparams["name"], params["now"], params["nonce"], "REPORT RequestId")
-  m = REPORT.match(events[0]["message"])
-  duration = int(m.group(2))
-  memory_used = int(m.group(4))
-  cost = calculate_cost(duration, pparams["memory_size"])
-
-  print("Percolator Spectra")
-  print("Timestamp", events[0]["timestamp"])
-  print("Billed Duration", duration, "milliseconds")
-  print("Max Memory Used", m.group(4))
-  print("Cost", cost)
-  print("")
-
-  return {
-    "billed_duration": duration,
-    "max_duration": duration,
-    "memory_used": memory_used,
-    "cost": cost
-  }
 
 
 def parse_logs(params, upload_timestamp, upload_duration):
@@ -681,10 +609,10 @@ def parse_logs(params, upload_timestamp, upload_duration):
     step = params["pipeline"][i]
     stats.append(parse_mult_logs(client, params, step))
 
-  total_stats = calculate_total_stats(stats)
-  print("END RESULTS")
-  print_stats(total_stats)
-  stats.append(total_stats)
+#  total_stats = calculate_total_stats(stats)
+#  print("END RESULTS")
+#  print_stats(total_stats)
+#  stats.append(total_stats)
 
   return stats
 
