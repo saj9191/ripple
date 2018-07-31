@@ -465,7 +465,7 @@ def wait_for_completion(start_time, params):
 
   # Give ourselves time as we need to wait for each part of the pipeline
   last = params["pipeline"][-1]
-  timeout = len(params["pipeline"]) * last["timeout"]
+  timeout = 6 * 60
   bucket_name = last["output_bucket"]
   check_objects(client, bucket_name, "percolator.target", 2, timeout, params)
   print("")
