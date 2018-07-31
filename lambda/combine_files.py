@@ -31,7 +31,11 @@ def combine(bucket_name, key, params):
 
   s3 = boto3.resource("s3")
   key_regex = util.get_key_regex(p)
-  [have_all_files, keys] = util.have_all_files(bucket_name, key_regex)
+
+  have_all_files = False
+  keys = []
+  while not have_all_files and (len(keys) == 0 or last_file(keys) == key):
+    [have_all_files, keys] = util.have_all_files(bucket_name, key_regex)
 
   if have_all_files and last_file(keys) == key:
     print(ts, "Combining", len(keys))
