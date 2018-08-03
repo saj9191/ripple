@@ -1,8 +1,10 @@
 import boto3
 from botocore.client import Config
+import json
 import os
 import re
 import subprocess
+import sys
 import time
 
 
@@ -19,15 +21,28 @@ FILE_FORMAT = [{
   "name": "file-id",
   "type": "int",
 }, {
-  "name": "created",
-  "type": "float",
-}, {
   "name": "last",
   "type": "bool",
 }]
 
 
 SPECTRA = re.compile("^\S[A-Ya-y0-9\s\.\+]+Z\s[0-9]+\s([0-9\.e\+]+)\n+([0-9\.\se\+]+)", re.MULTILINE)
+
+
+def print_request(m, params):
+  print("TIMESTAMP {0:f} NONCE {1:d} FILE {2:d} REQUEST ID {3:s}".format(m["timestamp"], m["nonce"], m["file-id"], params["request_id"]))
+
+
+def print_read(m, key, params):
+  print_action(m, key, "READ", params)
+
+
+def print_write(m, key, params):
+  print_action(m, key, "WRITE", params)
+
+
+def print_action(m, key, action, params):
+  print("TIMESTAMP {0:f} NONCE {1:d} {2:s} REQUEST ID {3:s} FILE NAME {4:s}".format(m["timestamp"], m["nonce"], action, params["request_id"], key))
 
 
 def setup_client(service, params):
@@ -40,6 +55,24 @@ def setup_client(service, params):
                         config=config
                         )
   return client
+
+
+def key_prefix(key):
+  return "-".join(key.split("-")[:3])
+
+
+def run(event, context, func):
+  s3 = event["Records"][0]["s3"]
+  bucket_name = s3["bucket"]["name"]
+  key = s3["object"]["key"]
+
+  params = json.loads(open("params.json").read())
+  stdout_file = "{0:s}-{1:s}".format(params["name"], key)
+  temp_file = "/tmp/{0:s}".format(stdout_file)
+  sys.stdout = open(temp_file, "w")
+  func(s3, bucket_name, key, params)
+  s3 = boto3.resource("s3")
+  s3.Object("shjoyner-logs", stdout_file).put(Body=open(temp_file))
 
 
 def create_client(params):
@@ -104,6 +137,9 @@ def parse_file_name(file_name):
   regex = re.compile(file_format({}))
   m = regex.match(file_name)
   p = {}
+  if m is None:
+    return p
+
   i = 0
   for i in range(len(FILE_FORMAT)):
     part = FILE_FORMAT[i]
@@ -134,41 +170,18 @@ def have_all_files(bucket_name, key_regex):
   s3 = boto3.resource("s3")
   bucket = s3.Bucket(bucket_name)
 
-  matching_keys = []
   num_files = None
-  splits = set()
+  ids_to_keys = {}
   for key in bucket.objects.all():
     if key_regex.match(key.key):
       m = parse_file_name(key.key)
-      matching_keys.append(key.key)
+      if m["file-id"] in ids_to_keys:
+        if key.key < ids_to_keys[m["file-id"]]:
+          ids_to_keys[m["file-id"]] = key.key
+      else:
+        ids_to_keys[m["file-id"]] = key.key
       if m["last"]:
         num_files = m["file-id"]
 
-  if num_files is not None:
-    num_files += len(splits)
+  matching_keys = list(ids_to_keys.values())
   return (len(matching_keys) == num_files, matching_keys)
-
-
-def getMass(spectrum):
-  return spectrum[0]
-
-
-def get_spectra(obj, start_byte, end_byte, num_bytes, remainder):
-  if len(remainder.strip()) == 0 and start_byte >= num_bytes:
-    return ([], "")
-
-  if start_byte < num_bytes:
-    end_byte = min(num_bytes, end_byte)
-    stream = obj.get(Range="bytes={0:d}-{1:d}".format(start_byte, end_byte))["Body"].read().decode("utf-8")
-  else:
-    stream = ""
-
-  stream = remainder + stream
-  spectra_regex = list(constants.SPECTRA.finditer(stream))
-  if len(spectra_regex) > 0:
-    spectra_end_byte = spectra_regex[-1].span(0)[1]
-    remainder = stream[spectra_end_byte:]
-  else:
-    remainder = stream.strip()
-
-  return (spectra_regex, remainder)

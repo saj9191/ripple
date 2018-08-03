@@ -16,43 +16,60 @@ def bin_input(s3, sorted_input, format_lib, m, bin_ranges, params):
         bin = bin_index
       else:
         bin_index += 1
-
     binned_input[bin_index].append(sinput[1])
 
   iterator_class = getattr(format_lib, "Iterator")
   for i in range(len(binned_input)):
-    content = iterator_class.from_array(binned_input[i])
+    content = iterator_class.fromArray(binned_input[i])
     bin_key = util.file_name(m)
+    util.print_write(m, bin_key, params)
     s3.Object(bin_ranges[i]["bucket"], bin_key).put(Body=str.encode(content))
 
 
-def sort(bucket_name, key, start_byte, end_byte, file_id, more, pivots, params):
+def sort(bucket_name, key, m, start_byte, end_byte, pivots, params):
   util.clear_tmp()
   m = util.parse_file_name(key)
-  print("TIMESTAMP {0:f} NONCE {1:d} FILE {2:d}".format(m["timestamp"], m["nonce"], file_id))
+  util.print_request(m, params)
+  util.print_read(m, key, params)
 
   s3 = boto3.resource("s3")
   obj = s3.Object(bucket_name, key)
 
   format_lib = importlib.import_module(params["format"])
-  sort_identifier = getattr(format_lib, "sortIdentifier")
-  print("sb", start_byte, "eb", end_byte)
-  sorted_input = sort_identifier(obj, start_byte, end_byte)
+  iterator = getattr(format_lib, "Iterator")
+  sorted_input = iterator.get(obj, start_byte, end_byte, identifier=True)
   sorted_input = sorted(sorted_input, key=lambda k: k[0])
-  print("sorted len", len(sorted_input))
 
-  m["last"] = not more
-  m["file-id"] = file_id
   bin_input(s3, sorted_input, format_lib, m, pivots, params)
 
 
+def handle_sort(bucket_name, key, params, eparams, pivots):
+  util.clear_tmp()
+  m = util.parse_file_name(key)
+  if "range" in eparams:
+    rparams = eparams["range"]
+    start_byte = rparams["start_byte"]
+    end_byte = rparams["end_byte"]
+    file_id = rparams["file_id"]
+    more = rparams["more"]
+
+    m["last"] = not more
+    m["file-id"] = file_id
+    sort(bucket_name, key, m, start_byte, end_byte, pivots, params)
+  else:
+    s3 = boto3.resource('s3')
+    obj = s3.Object(bucket_name, key)
+    sort(bucket_name, key, m, 0, obj.content_length, pivots, params)
+
+
 def handler(event, context):
-  bucket_name = event["Records"][0]["s3"]["bucket"]["name"]
-  key = event["Records"][0]["s3"]["object"]["key"]
+  s3 = event["Records"][0]["s3"]
+  if "extra_params" in s3:
+    bucket_name = s3["extra_params"]["target_bucket"]
+    key = s3["extra_params"]["target_file"]
+  else:
+    bucket_name = s3["bucket"]["name"]
+    key = s3["object"]["key"]
   params = json.loads(open("params.json").read())
-  start_byte = event["Records"][0]["s3"]["range"]["start_byte"]
-  end_byte = event["Records"][0]["s3"]["range"]["end_byte"]
-  file_id = event["Records"][0]["s3"]["range"]["file_id"]
-  more = event["Records"][0]["s3"]["range"]["more"]
-  pivots = event["pivots"]
-  sort(bucket_name, key, start_byte, end_byte, file_id, more, pivots, params)
+  params["request_id"] = context.aws_request_id
+  handle_sort(bucket_name, key, params, s3, event["pivots"])

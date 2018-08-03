@@ -69,6 +69,7 @@ def upload_lambda(client, functions, fparams, files):
 
 
 def upload_format_file(client, functions, fparams):
+  print(fparams)
   format_file = "{0:s}.py".format(fparams["format"])
   shutil.copyfile("../formats/{0:s}".format(format_file), format_file)
   files = [
@@ -116,9 +117,23 @@ def upload_application_file(client, functions, fparams):
   os.remove(file)
 
 
+def upload_map_file(client, functions, fparams):
+  files = [
+    "pivot.py",
+    "iterator.py",
+    "map.py",
+    "util.py",
+  ]
+  shutil.copyfile("../formats/pivot.py", "pivot.py")
+
+  upload_lambda(client, functions, fparams, files)
+  os.remove("pivot.py")
+
+
 def upload_combine_files(client, functions, fparams):
   format_file = "{0:s}.py".format(fparams["format"])
   shutil.copyfile("../formats/{0:s}".format(format_file), format_file)
+  shutil.copyfile("../formats/iterator.py", "iterator.py")
   files = [
     format_file,
     "header.{0:s}".format(fparams["format"]),
@@ -148,11 +163,12 @@ def upload_functions(client, params):
   common_files = [
     "constants.py",
     "header.mzML",
-    "iterator.py",
     "util.py",
   ]
   for file in common_files:
     shutil.copyfile(file, "lambda/{0:s}".format(file))
+
+  shutil.copyfile("formats/iterator.py", "lambda/iterator.py")
 
   response = client.list_functions()
   functions = set(list(map(lambda f: f["FunctionName"], response["Functions"])))
@@ -167,12 +183,15 @@ def upload_functions(client, params):
       upload_application_file(client, functions, fparams)
     elif fparams["file"] == "pivot_file":
       upload_pivot_file(client, functions, fparams)
+    elif fparams["file"] == "map":
+      upload_map_file(client, functions, fparams)
     else:
       upload_format_file(client, functions, fparams)
 
   os.chdir("..")
   for file in common_files:
     os.remove("lambda/{0:s}".format(file))
+  os.remove("lambda/iterator.py")
 
 
 def setup_notifications(client, bucket, config):
