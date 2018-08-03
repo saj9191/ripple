@@ -1,13 +1,7 @@
-import boto3
 import hashlib
-import heapq
 import re
 import iterator
 import xml.etree.ElementTree as ET
-
-
-def sortIdentifier(obj, start_byte, end_byte):
-  return Iterator.getSpectra(obj, start_byte, end_byte, identifier=True)
 
 
 class Element():
@@ -20,45 +14,6 @@ class Element():
     return self.spectra[0][0] < other.spectra[0][0]
 
 
-def combine(bucket_name, keys, temp_name, params):
-  s3 = boto3.resource("s3")
-
-  iterators = []
-  spectra = []
-  for key in keys:
-    obj = s3.Object(bucket_name, key)
-    iterator = Iterator(obj, params["batch_size"], params["chunk_size"])
-    if params["sort"]:
-      [s, more] = iterator.next(identifier=True)
-      if len(s) > 0:
-        heapq.heappush(iterators, Element(s, more, iterator))
-    else:
-      more = True
-      while more:
-        [s, more] = iterator.next(identifier=False)
-        spectra += s
-
-  last = None
-  while params["sort"] and len(iterators) > 0:
-    x = heapq.heappop(iterators)
-    element = x
-    next_spectrum = element.spectra.pop(0)
-    assert(last is None or last <= next_spectrum[0])
-    last = next_spectrum[0]
-    spectra.append(next_spectrum[1])
-    if len(element.spectra) > 0:
-      heapq.heappush(iterators, element)
-    elif more:
-      [s, more] = element.iterator.next(identifier=True)
-      element.spectra = s
-      element.more = more
-      heapq.heappush(iterators, element)
-
-  with open(temp_name, "w+") as f:
-    content = Iterator.from_array(spectra)
-    f.write(content)
-
-
 class Iterator(iterator.Iterator):
   INDEX_LIST_OFFSET_REGEX = re.compile("[\s\S]*<indexListOffset>(\d+)</indexListOffset>")
   OFFSET_REGEX = re.compile("<offset[^>]*>(\d+)</offset>")
@@ -69,7 +24,7 @@ class Iterator(iterator.Iterator):
   XML_NAMESPACE = "http://psi.hupo.org/ms/mzml"
 
   def __init__(self, obj, batch_size, chunk_size):
-    iterator.Iterator.__init__(self, obj, batch_size, chunk_size)
+    iterator.Iterator.__init__(self, Iterator, obj, batch_size, chunk_size)
     ET.register_namespace("", Iterator.XML_NAMESPACE)
     self.footer_offset = 235
     self.remainder = ""
@@ -119,29 +74,12 @@ class Iterator(iterator.Iterator):
       self.remainder = ""
     self.current_spectra_offset = end_byte + 1
 
-  def nextOffsets(self):
-    if self.total_count == 0:
-      return (-1, -1, False)
-    # Plus one is so we get end byte of spectra
-    while len(self.offsets) < (self.batch_size + 1) and self.current_spectra_offset < self.content_length:
-      self.updateOffsets()
-
-    start_offset = self.offsets[0]
-    if len(self.offsets) > self.batch_size:
-      end_offset = self.offsets[self.batch_size] - 1
-    else:
-      end_offset = self.spectra_list_offset
-
-    self.seen_count += min(len(self.offsets), self.batch_size)
-    self.offsets = self.offsets[self.batch_size:]
-    return (start_offset, end_offset, self.seen_count < self.total_count)
-
   def getMass(spectrum):
     for cvParam in spectrum.iter("cvParam"):
       if cvParam.get("name") == "base peak m/z":
         return float(cvParam.get("value"))
 
-  def getSpectra(obj, start_byte, end_byte, identifier=False):
+  def get(obj, start_byte, end_byte, identifier=False):
     content = Iterator.getBytes(obj, start_byte, end_byte)
     index = content.rfind(Iterator.SPECTRUM_LIST_CLOSE_TAG)
     if index != -1:
@@ -156,13 +94,7 @@ class Iterator(iterator.Iterator):
       spectra = list(spectra)
     return spectra
 
-  def next(self, identifier=False):
-    [start_byte, end_byte, more] = self.nextOffsets()
-    if start_byte == -1:
-      return [[], more]
-    return [Iterator.getSpectra(self.obj, start_byte, end_byte, identifier), more]
-
-  def from_array(spectra):
+  def fromArray(spectra):
     content = open("header.mzML").read()
     content = content.replace("-123456789", str(len(spectra)))
     offset = len(content)
@@ -195,9 +127,9 @@ class Iterator(iterator.Iterator):
     index = content.rindex(Iterator.SPECTRUM_CLOSE_TAG)
     content = content[:index + len(Iterator.SPECTRUM_CLOSE_TAG)]
     root = ET.fromstring("<data>" + content + "</data>")
-    return str.encode(Iterator.from_array(list(root.iter("spectrum"))))
+    return str.encode(Iterator.fromArray(list(root.iter("spectrum"))))
 
   def nextFile(self):
     [spectra, more] = self.next()
-    content = Iterator.from_array(spectra)
+    content = Iterator.fromArray(spectra)
     return [content, more]
