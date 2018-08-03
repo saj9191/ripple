@@ -6,10 +6,10 @@ from enum import Enum
 import json
 import os
 import paramiko
+import plot
 import random
 import re
 import setup
-import sort
 import subprocess
 import time
 import util
@@ -169,11 +169,6 @@ def run(params):
   process_params(params)
   iterations = params["iterations"]
 
-  if params["sort"] == "pre":
-    args = argparse.Namespace()
-    args.file = params["input_name"]
-    sort.run(args)
-
   setup.setup(params)
   pipeline = [{"name": "load"}] + params["pipeline"]
   stats = list(map(lambda s: [], pipeline))
@@ -196,11 +191,16 @@ def run(params):
 
   print("END RESULTS ({0:d} ITERATIONS)".format(iterations), flush=True)
 
+  avg_stats = []
   for i in range(len(pipeline)):
     step = pipeline[i]
     print("AVERAGE {0:s} RESULTS".format(step["name"]), flush=True)
-    print_stats(calculate_average_results(stats[i], iterations))
+    avg_stat = calculate_average_results(stats[i], iterations)
+    print_stats(avg_stat)
+    avg_stats.append(avg_stat)
     print("", flush=True)
+
+  plot.plot(params["pipeline"], avg_stats[1:])
 
 
 def calculate_total_stats(stats):
