@@ -31,6 +31,8 @@ SPECTRA = re.compile("^\S[A-Ya-y0-9\s\.\+]+Z\s[0-9]+\s([0-9\.e\+]+)\n+([0-9\.\se
 
 def print_request(m, params):
   print("TIMESTAMP {0:f} NONCE {1:d} FILE {2:d} REQUEST ID {3:s}".format(m["timestamp"], m["nonce"], m["file-id"], params["request_id"]))
+  if "extra_params" in params and "request_id" in params["extra_params"]:
+    print("TIMESTAMP {0:f} NONCE {1:d} REQUEST ID {2:s} INVOKED BY REQUEST ID {3:s}".format(m["timestamp"], m["nonce"], params["request_id"], params["extra_params"]["request_id"]))
 
 
 def print_read(m, key, params):

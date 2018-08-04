@@ -7,7 +7,7 @@ import util
 def map_file(bucket_name, key, params):
   util.clear_tmp()
   m = util.parse_file_name(key)
-  print("TIMESTAMP {0:f} NONCE {1:d} FILE {2:d}".format(m["timestamp"], m["nonce"], m["file-id"]))
+  util.print_request(m, params)
 
   client = boto3.client("lambda")
   s3 = boto3.resource("s3")
@@ -31,6 +31,7 @@ def map_file(bucket_name, key, params):
             "key": key,
           },
           "extra_params": {
+            "request_id": params["request_id"],
             "target_bucket": params["map_bucket"],
             "target_file": obj.key,
           }
@@ -54,4 +55,5 @@ def handler(event, context):
   key = s3["object"]["key"]
 
   params = json.loads(open("params.json").read())
+  params["request_id"] = context.aws_request_id
   map_file(bucket_name, key, params)

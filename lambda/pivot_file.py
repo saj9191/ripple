@@ -41,7 +41,7 @@ def handle_pivots(bucket_name, key, m, start_byte, end_byte, params):
 def find_pivots(bucket_name, key, params, eparams):
   util.clear_tmp()
   m = util.parse_file_name(key)
-  print("TIMESTAMP {0:f} NONCE {1:d} FILE {2:d}".format(m["timestamp"], m["nonce"], m["file-id"]))
+  util.print_request(m, params)
 
   if "range" in eparams:
     rparams = eparams["range"]
@@ -54,6 +54,7 @@ def find_pivots(bucket_name, key, params, eparams):
     m["file-id"] = file_id
     handle_pivots(bucket_name, key, m, start_byte, end_byte, params)
   else:
+    util.print_read(m, key, params)
     s3 = boto3.resource('s3')
     obj = s3.Object(bucket_name, key)
     handle_pivots(bucket_name, key, m, 0, obj.content_length, params)
