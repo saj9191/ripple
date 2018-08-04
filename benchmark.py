@@ -17,9 +17,15 @@ import util
 MASS = re.compile("Z\s+([0-9\.]+)\s+([0-9\.]+)")
 MEMORY_PARAMETERS = json.loads(open("json/memory.json").read())
 CHECKS = json.loads(open("json/checks.json").read())
-REPORT = re.compile(".*Duration:\s([0-9\.]+)\sms.*Billed Duration:\s([0-9\.]+)\sms.*Memory Size:\s([0-9]+)\sMB.*Max Memory Used:\s([0-9]+)\sMB.*")
+REPORT = re.compile(".*RequestId:\s([^\s]*)\tDuration:\s([0-9\.]+)\sms.*Billed Duration:\s([0-9\.]+)\sms.*Size:\s([0-9]+)\sMB.*Used:\s([0-9]+)\sMB.*")
 SPECTRA = re.compile("S\s+([0-9\.]+)\s+([0-9\.]+)\s+([0-9\.]+)*")
 STAT_FIELDS = ["cost", "max_duration", "memory_used"]
+INVOKED_REGEX = re.compile("TIMESTAMP [0-9\.]+ NONCE [0-9]+ REQUEST ID (.*) INVOKED BY REQUEST ID (.*)")
+REQUEST_REGEX = re.compile("TIMESTAMP [0-9\.]+ NONCE [0-9]+ FILE ([0-9]+) REQUEST ID (.*)")
+WRITE_REGEX = re.compile("TIMESTAMP [0-9\.]+ NONCE [0-9]+ WRITE REQUEST ID (.*) FILE NAME (.*)")
+READ_REGEX = re.compile("TIMESTAMP [0-9\.]+ NONCE [0-9]+ READ REQUEST ID (.*) FILE NAME (.*)")
+
+
 
 #############################
 #         COMMON            #
@@ -138,10 +144,12 @@ def upload_input(params):
 
 def load_stats(upload_duration):
   return {
+    "name": "load",
     "billed_duration": [upload_duration],
     "max_duration": upload_duration,
     "memory_used": 0,
-    "cost": 0
+    "cost": 0,
+    "messages": [],
   }
 
 
@@ -164,6 +172,107 @@ def benchmark(i, params):
   return results
 
 
+class Request:
+  def __init__(self, name, request_id):
+    self.name = name
+    self.request_id = request_id
+    self.parent_key = None
+    self.duration = 0
+    self.file_id = None
+    self.children = []
+
+
+def process_request(message, dependencies, request_to_file, name, layer):
+  m = REQUEST_REGEX.match(message)
+  if m is not None:
+    file_id = int(m.group(1))
+    key = "{0:d}:{1:d}".format(layer, file_id)
+    request_id = m.group(2)
+    if request_id not in dependencies:
+      request = Request(name, request_id)
+      dependencies[key] = request
+    dependencies[key].file_id = file_id
+    request_to_file[request_id] = file_id
+
+
+def process_read(message, file_writes, dependencies, request_to_file, name, layer):
+  m = READ_REGEX.match(message)
+  if m is not None:
+    request_id = m.group(1)
+    file_id = request_to_file[request_id]
+    file_name = m.group(2)
+    parent_id = file_writes[file_name]
+    key = "{0:d}:{1:d}".format(layer, file_id)
+    file_id = request_to_file[parent_id]
+    parent_key = "{0:d}:{1:d}".format(layer - 1, file_id)
+
+    dependencies[key].parent_key = parent_key
+    dependencies[parent_key].children.append(key)
+
+
+def process_write(message, file_writes, dependencies, name):
+  m = WRITE_REGEX.match(message)
+  if m is not None:
+    request_id = m.group(1)
+    file_name = m.group(2)
+    file_writes[file_name] = request_id
+
+
+def process_invoke(message, dependencies, request_to_file, name, layer):
+  m = INVOKED_REGEX.match(message)
+  if m is not None:
+    request_id = m.group(1)
+    parent_id = m.group(2)
+
+    file_id = request_to_file[request_id]
+    key = "{0:d}:{1:d}".format(layer, file_id)
+    file_id = request_to_file[parent_id]
+    parent_key = "{0:d}:{1:d}".format(layer - 1, file_id)
+
+    dependencies[key].parent_key = parent_key
+    dependencies[parent_key].children.append(key)
+
+
+def process_report(message, dependencies, request_to_file, name, layer):
+  m = REPORT.match(message)
+  if m is not None:
+    request_id = m.group(1)
+    file_id = request_to_file[request_id]
+    duration = int(m.group(3))
+    key = "{0:d}:{1:d}".format(layer, file_id)
+    if request_id not in dependencies:
+      request = Request(name, request_id)
+      dependencies[key] = request
+    dependencies[key].duration += duration
+
+
+def create_dependency_chain(stats, iterations):
+  stats = stats
+  dependencies = {}
+  file_writes = {}
+  request_to_file = {}
+  for layer in range(len(stats)):
+    for i in range(len(stats[layer])):
+      stat = stats[layer][i]
+      name = stat["name"]
+      messages = stat["messages"]
+      for message in messages:
+        process_request(message, dependencies, request_to_file, name, layer)
+        process_report(message, dependencies, request_to_file, name, layer)
+        process_invoke(message, dependencies, request_to_file, name, layer)
+        process_write(message, file_writes, dependencies, name)
+        process_read(message, file_writes, dependencies, request_to_file, name, layer)
+
+  for key in dependencies:
+    dependencies[key].duration = float(dependencies[key].duration) / iterations
+
+  return dependencies
+
+
+def print_action(m, key, action, params):
+  print("TIMESTAMP {0:f} NONCE {1:d} {2:s} REQUEST ID {3:s} FILE NAME {4:s}".format(m["timestamp"], m["nonce"], action, params["request_id"], key))
+
+
 def run(params):
   print_run_information()
   process_params(params)
@@ -176,12 +285,10 @@ def run(params):
   # stats.append([])
 
   for i in range(iterations):
-    print("Iteration {0:d}".format(i), flush=True)
     process_iteration_params(params, i)
     results = benchmark(i, params)
-    print("stats", len(stats), "results", len(results))
-    for i in range(len(results)):
-      stats[i].append(results[i])
+    for j in range(len(results)):
+      stats[j].append(results[j])
 
     if params["check_output"]:
       check_output(params)
@@ -190,17 +297,17 @@ def run(params):
     print("--------------------------\n", flush=True)
 
   print("END RESULTS ({0:d} ITERATIONS)".format(iterations), flush=True)
+  dependencies = create_dependency_chain(stats, iterations)
 
-  avg_stats = []
-  for i in range(len(pipeline)):
-    step = pipeline[i]
-    print("AVERAGE {0:s} RESULTS".format(step["name"]), flush=True)
-    avg_stat = calculate_average_results(stats[i], iterations)
-    print_stats(avg_stat)
-    avg_stats.append(avg_stat)
-    print("", flush=True)
+  #for i in range(len(pipeline)):
+  #  step = pipeline[i]
+  #  print("AVERAGE {0:s} RESULTS".format(step["name"]), flush=True)
+  #  avg_stat = calculate_average_results(stats[i], iterations)
+    #print_stats(avg_stat)
+ #   avg_stats.append(avg_stat)
+ #   print("", flush=True)
 
-  plot.plot(params["pipeline"], avg_stats[1:])
+  plot.plot(dependencies, pipeline, iterations, include_load=False)
 
 
 def calculate_total_stats(stats):
@@ -466,12 +573,12 @@ def wait_for_completion(start_time, params):
   last = params["pipeline"][-1]
   timeout = 6 * 60
   bucket_name = last["output_bucket"]
-  check_objects(client, bucket_name, "percolator.target", 2, timeout, params)
+  check_objects(client, bucket_name, "ssw", 54, timeout, params)
   print("")
   time.sleep(10)  # Wait a little to make sure percolator logs are on the server
 
 
-def fetch(client, num_events, log_name, timestamp, nonce, filter_pattern, extra_args={}):
+def fetch(client, log_name, timestamp, nonce, filter_pattern, extra_args={}):
   log_events = []
   next_token = None
   args = {
@@ -483,7 +590,6 @@ def fetch(client, num_events, log_name, timestamp, nonce, filter_pattern, extra_
   more = True
   while more:
     args["filterPattern"] = "TIMESTAMP {0:f} NONCE {1:d}".format(timestamp / 1000, nonce)
-  #  args["limit"] = num_events - len(log_events)
     if next_token:
       args["nextToken"] = next_token
     response = client.filter_log_events(**args)
@@ -492,19 +598,20 @@ def fetch(client, num_events, log_name, timestamp, nonce, filter_pattern, extra_
     log_events += response["events"]
     if "nextToken" not in response:
       more = False
-      # raise BenchmarkException("Token not found")
     else:
       next_token = response["nextToken"]
 
-  events = []
+  messages = list(map(lambda l: l["message"], log_events))
   args["filterPattern"] = filter_pattern
 
   les = {}
   for event in log_events:
     if event["logStreamName"] not in les:
       les[event["logStreamName"]] = 0
-    les[event["logStreamName"]] += 1
+    if "FILE" in event["message"]:
+      les[event["logStreamName"]] += 1
 
+  events = []
   for name in les.keys():
     count = les[name]
     args["logStreamNames"] = [name]
@@ -512,14 +619,14 @@ def fetch(client, num_events, log_name, timestamp, nonce, filter_pattern, extra_
     response = client.filter_log_events(**args)
     assert(response["ResponseMetadata"]["HTTPStatusCode"] == 200)
     es = response["events"]
+    messages += list(map(lambda e: e["message"], es))
     events += es
 
-  print(log_name, num_events, len(events))
-  return events
+  return [events, messages]
 
 
-def fetch_events(client, num_events, log_name, start_time, nonce, filter_pattern, extra_args={}):
-  events = fetch(client, num_events, log_name, start_time * 1000, nonce, filter_pattern, extra_args)
+def fetch_events(client, log_name, start_time, nonce, filter_pattern, extra_args={}):
+  events = fetch(client, log_name, start_time * 1000, nonce, filter_pattern, extra_args)
   if len(events) == 0:
     raise BenchmarkException("Could not find any events")
   return events
@@ -543,15 +650,7 @@ def file_count(bucket_name, params):
 
 
 def parse_mult_logs(client, params, lparams, num_lambdas=None):
-  if num_lambdas is None:
-    if "output_bucket" in lparams:
-      num_lambdas = file_count(lparams["output_bucket"], params)
-    elif lparams["file"] == "sort":
-      num_lambdas = 46 * lparams["num_bins"]
-    else:
-      num_lambdas = 1
-
-  events = fetch_events(client, num_lambdas, lparams["name"], params["now"], params["nonce"], "REPORT RequestId")
+  [events, messages] = fetch_events(client, lparams["name"], params["now"], params["nonce"], "REPORT RequestId")
   max_billed_duration = 0
   total_billed_duration = 0
   total_memory_used = 0
@@ -565,8 +664,8 @@ def parse_mult_logs(client, params, lparams, num_lambdas=None):
     min_timestamp = min(min_timestamp, event["timestamp"])
     max_timestamp = max(max_timestamp, event["timestamp"])
     m = REPORT.match(event["message"])
-    duration = int(m.group(2))
-    memory_used = int(m.group(4))
+    duration = int(m.group(3))
+    memory_used = int(m.group(5))
     min_memory = min(memory_used, min_memory)
     max_memory = max(memory_used, max_memory)
     max_billed_duration = max(max_billed_duration, duration)
@@ -587,10 +686,12 @@ def parse_mult_logs(client, params, lparams, num_lambdas=None):
   print("", flush=True)
 
   return {
+    "name": lparams["name"],
     "billed_duration": durations,
     "max_duration": max_billed_duration,
     "memory_used": total_memory_used,
-    "cost": cost
+    "cost": cost,
+    "messages": messages
   }
 
 
@@ -606,11 +707,6 @@ def parse_logs(params, upload_timestamp, upload_duration):
   for i in range(len(params["pipeline"])):
     step = params["pipeline"][i]
     stats.append(parse_mult_logs(client, params, step))
-
-#  total_stats = calculate_total_stats(stats)
-#  print("END RESULTS")
-#  print_stats(total_stats)
-#  stats.append(total_stats)
 
   return stats
 
