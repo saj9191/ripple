@@ -22,7 +22,9 @@ def graph(key, dependencies, runtimes, num_threads, parent_id, layer=0, thread_i
   parent_id = thread_id
   for i in range(len(children)):
     child = children[i]
-    if dependencies[child]["name"] in ["smith-waterman", "find-blast-pivots", "combine-blast-pivots"]:
+    if dependencies[child]["name"] in ["smith-waterman"]:
+      thread_id = parent_id + i * 100
+    elif dependencies[child]["name"] in ["combine-blast-pivots"]:
       thread_id = parent_id + i * 10
     thread_id = graph(child, dependencies, runtimes, num_threads, parent_id, layer + 1, thread_id)
     if i + 1 != len(children):
@@ -71,9 +73,9 @@ def plot(dependencies, pipeline, iterations, params):
     if pipeline[i]["name"] == "sort-blast-chunk":
       height = 10
     elif pipeline[i]["name"] in ["smith-waterman", "find-blast-pivots"]:
-      height = 4
+      height = 10
     elif pipeline[i]["name"] in ["map-fasta", "map-blast"]:
-      height = 20
+      height = 30
     else:
       height = 1
     p = ax.barh(threads, runtime, color=colors[i % len(colors)], left=left, height=height)
@@ -81,7 +83,6 @@ def plot(dependencies, pipeline, iterations, params):
     labels.append(pipeline[i]["name"])
 
   fig.legend(legends, labels)
-  plt.ylabel("Thread")
   plt.yticks([])
   plt.xlabel("Runtime (seconds)")
   plt.title("Runtime (Timestamp {0:f} Nonce {1:d})".format(params["now"], params["nonce"]))
