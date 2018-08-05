@@ -26,7 +26,6 @@ WRITE_REGEX = re.compile("TIMESTAMP [0-9\.]+ NONCE [0-9]+ WRITE REQUEST ID (.*) 
 READ_REGEX = re.compile("TIMESTAMP [0-9\.]+ NONCE [0-9]+ READ REQUEST ID (.*) FILE NAME (.*)")
 
 
-
 #############################
 #         COMMON            #
 #############################
@@ -172,6 +171,10 @@ def benchmark(i, params):
   return results
 
 
+def serialize(obj):
+  return obj.json()
+
+
 class Request:
   def __init__(self, name, request_id):
     self.name = name
@@ -179,7 +182,21 @@ class Request:
     self.parent_key = None
     self.duration = 0
     self.file_id = None
-    self.children = []
+    self.children = set()
+
+  def json(self):
+    s = {
+      "name": self.name,
+      "request_id": self.request_id,
+      "parent_key": self.parent_key,
+      "duration": self.duration,
+      "file_id": self.file_id,
+      "children": list(self.children),
+    }
+    return s
+
+  def __repr__(self):
+    return json.dumps(self.json())
 
 
 def process_request(message, dependencies, request_to_file, name, layer):
@@ -191,8 +208,12 @@ def process_request(message, dependencies, request_to_file, name, layer):
     if request_id not in dependencies:
       request = Request(name, request_id)
       dependencies[key] = request
-    dependencies[key].file_id = file_id
-    request_to_file[request_id] = file_id
+      dependencies[key].file_id = file_id
+      request_to_file[request_id] = file_id
+      if name == "map_blast":
+        dependencies[key].parent_key = "{0:d}:1".format(layer - 1)
+      elif name == "combine-pivot-files" and file_id == 1:
+        dependencies[key].children.add("{0:d}:1".format(layer + 1))
 
 
 def process_read(message, file_writes, dependencies, request_to_file, name, layer):
@@ -203,18 +224,27 @@ def process_read(message, file_writes, dependencies, request_to_file, name, laye
     file_name = m.group(2)
     parent_id = file_writes[file_name]
     key = "{0:d}:{1:d}".format(layer, file_id)
-    file_id = request_to_file[parent_id]
+    if name == "sort-blast-chunk":
+      file_id = 1
+    else:
+      file_id = request_to_file[parent_id]
     parent_key = "{0:d}:{1:d}".format(layer - 1, file_id)
-
+    # print(name, message)
+    # print("parent key", parent_key, "key", key)
+    # print("num children", len(dependencies[parent_key].children))
+    # print(dependencies[parent_key].name, "->", dependencies[key].name)
     dependencies[key].parent_key = parent_key
-    dependencies[parent_key].children.append(key)
+    dependencies[parent_key].children.add(key)
+    assert(dependencies[key].parent_key is not None)
 
 
-def process_write(message, file_writes, dependencies, name):
+def process_write(message, file_writes, dependencies, request_to_file, name):
   m = WRITE_REGEX.match(message)
   if m is not None:
     request_id = m.group(1)
     file_name = m.group(2)
+    request_to_file[request_id] = util.parse_file_name(file_name)["file-id"]
+    # print("RID", request_id, "name", file_name, "file_id", request_to_file[request_id])
     file_writes[file_name] = request_id
 
 
@@ -226,23 +256,28 @@ def process_invoke(message, dependencies, request_to_file, name, layer):
 
     file_id = request_to_file[request_id]
     key = "{0:d}:{1:d}".format(layer, file_id)
-    file_id = request_to_file[parent_id]
+    if name == "sort-blast-chunk":
+      file_id = 1
+    else:
+      file_id = request_to_file[parent_id]
     parent_key = "{0:d}:{1:d}".format(layer - 1, file_id)
-
+    # print(name, message)
+    # print("parent key", parent_key, "key", key)
+    # print(dependencies[parent_key].name, "->", dependencies[key].name)
+    # print("num children", len(dependencies[parent_key].children))
     dependencies[key].parent_key = parent_key
-    dependencies[parent_key].children.append(key)
+    dependencies[parent_key].children.add(key)
+    assert(dependencies[key].parent_key is not None)
 
 
 def process_report(message, dependencies, request_to_file, name, layer):
   m = REPORT.match(message)
   if m is not None:
+    print(name, message)
     request_id = m.group(1)
     file_id = request_to_file[request_id]
     duration = int(m.group(3))
     key = "{0:d}:{1:d}".format(layer, file_id)
-    if request_id not in dependencies:
-      request = Request(name, request_id)
-      dependencies[key] = request
     dependencies[key].duration += duration
 
 
@@ -258,19 +293,22 @@ def create_dependency_chain(stats, iterations):
       messages = stat["messages"]
       for message in messages:
         process_request(message, dependencies, request_to_file, name, layer)
+
+  for layer in range(len(stats)):
+    for i in range(len(stats[layer])):
+      stat = stats[layer][i]
+      name = stat["name"]
+      messages = stat["messages"]
+      for message in messages:
         process_report(message, dependencies, request_to_file, name, layer)
         process_invoke(message, dependencies, request_to_file, name, layer)
-        process_write(message, file_writes, dependencies, name)
+        process_write(message, file_writes, dependencies, request_to_file, name)
         process_read(message, file_writes, dependencies, request_to_file, name, layer)
 
   for key in dependencies:
     dependencies[key].duration = float(dependencies[key].duration) / iterations
 
   return dependencies
-
-
-def print_action(m, key, action, params):
-  print("TIMESTAMP {0:f} NONCE {1:d} {2:s} REQUEST ID {3:s} FILE NAME {4:s}".format(m["timestamp"], m["nonce"], action, params["request_id"], key))
 
 
 def run(params):
@@ -281,33 +319,34 @@ def run(params):
   setup.setup(params)
   pipeline = [{"name": "load"}] + params["pipeline"]
   stats = list(map(lambda s: [], pipeline))
-  # Total stats
-  # stats.append([])
 
   for i in range(iterations):
     process_iteration_params(params, i)
     results = benchmark(i, params)
     for j in range(len(results)):
       stats[j].append(results[j])
+#    if params["check_output"]:
+#      check_output(params)
 
-    if params["check_output"]:
-      check_output(params)
-
-    clear_buckets(params)
+    #clear_buckets(params)
     print("--------------------------\n", flush=True)
 
   print("END RESULTS ({0:d} ITERATIONS)".format(iterations), flush=True)
-  dependencies = create_dependency_chain(stats, iterations)
 
-  #for i in range(len(pipeline)):
-  #  step = pipeline[i]
-  #  print("AVERAGE {0:s} RESULTS".format(step["name"]), flush=True)
-  #  avg_stat = calculate_average_results(stats[i], iterations)
-    #print_stats(avg_stat)
- #   avg_stats.append(avg_stat)
- #   print("", flush=True)
+  f = open("results/stats-{0:f}-{1:d}".format(params["now"], params["nonce"]), "w+")
+  f.write(json.dumps({"stats": stats}, indent=2, sort_keys=True))
+  f.close()
 
-  plot.plot(dependencies, pipeline, iterations, include_load=False)
+  dependencies = create_dependency_chain(stats[1:], iterations)
+  for key in dependencies:
+    dependencies[key].duration = float(dependencies[key].duration) / iterations
+  dep_file = "results/dep-{0:f}-{1:d}".format(params["now"], params["nonce"])
+  f = open(dep_file, "w+")
+  f.write(json.dumps(dependencies, indent=2, sort_keys=True, default=serialize))
+  f.close()
+
+  dependencies = json.loads(open(dep_file).read())
+  plot.plot(dependencies, pipeline[1:], iterations, params)
 
 
 def calculate_total_stats(stats):
@@ -364,15 +403,20 @@ def clear_buckets(params):
   s3 = setup_connection("s3", params)
   id = "{0:f}-{1:d}".format(params["now"], params["nonce"])
 
+  def delete_objects(bucket_name):
+    bucket = s3.Bucket(bucket_name)
+    count = 0
+    for obj in bucket.objects.all():
+      if id in obj.key:
+        obj.delete()
+        count += 1
+    print("Deleted", count, bucket_name, "objects")
+
   for function in params["pipeline"]:
     for bucket_name in setup.function_buckets(function):
-      bucket = s3.Bucket(bucket_name)
-      count = 0
-      for obj in bucket.objects.all():
-        if id in obj.key:
-          obj.delete()
-          count += 1
-      print("Deleted", count, bucket_name, "objects")
+      delete_objects(bucket_name)
+
+  delete_objects(params["pipeline"][-1]["output_bucket"])
 
 #############################
 #       COORDINATOR         #
@@ -573,7 +617,7 @@ def wait_for_completion(start_time, params):
   last = params["pipeline"][-1]
   timeout = 6 * 60
   bucket_name = last["output_bucket"]
-  check_objects(client, bucket_name, "ssw", 54, timeout, params)
+  check_objects(client, bucket_name, "ssw", params["num_bins"], timeout, params)
   print("")
   time.sleep(10)  # Wait a little to make sure percolator logs are on the server
 
@@ -652,6 +696,7 @@ def file_count(bucket_name, params):
 def parse_mult_logs(client, params, lparams, num_lambdas=None):
   [events, messages] = fetch_events(client, lparams["name"], params["now"], params["nonce"], "REPORT RequestId")
   max_billed_duration = 0
+  min_billed_duration = 5*60*1000
   total_billed_duration = 0
   total_memory_used = 0
   min_timestamp = events[0]["timestamp"]
@@ -668,6 +713,7 @@ def parse_mult_logs(client, params, lparams, num_lambdas=None):
     memory_used = int(m.group(5))
     min_memory = min(memory_used, min_memory)
     max_memory = max(memory_used, max_memory)
+    min_billed_duration = min(min_billed_duration, duration)
     max_billed_duration = max(max_billed_duration, duration)
     total_billed_duration += duration
     total_memory_used += memory_used
@@ -676,10 +722,12 @@ def parse_mult_logs(client, params, lparams, num_lambdas=None):
   cost = calculate_cost(total_billed_duration, lparams["memory_size"])
 
   print(lparams["name"])
+  print("num events", len(events))
   print("Min Timestamp", min_timestamp)
   print("Max Timestamp", max_timestamp)
   print("Min Memory", min_memory)
   print("Max Memory", max_memory)
+  print("Min Billed Duration", min_billed_duration, "milliseconds")
   print("Max Billed Duration", max_billed_duration, "milliseconds")
   print("Total Billed Duration", total_billed_duration, "milliseconds")
   print("Cost", cost)
