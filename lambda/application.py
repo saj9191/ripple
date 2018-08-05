@@ -7,7 +7,7 @@ import util
 def run_application(bucket_name, key, params):
   util.clear_tmp()
   m = util.parse_file_name(key)
-  util.print_request(m, params)
+#  util.print_request(m, params)
 
   s3 = boto3.resource('s3')
   input_bucket = s3.Bucket(bucket_name)
