@@ -14,7 +14,7 @@ def map_file(bucket_name, key, params):
   bucket = s3.Bucket(params["map_bucket"])
 
   if "bucket_prefix" in params:
-    [_, _, ranges] = pivot.get_pivot_ranges(bucket_name, key, params["bucket_prefix"])
+    [_, _, ranges] = pivot.get_pivot_ranges(bucket_name, key, params["bucket_prefix"], params["num_buckets"])
     prefix = util.key_prefix(key)
     objects = bucket.objects.filter(Prefix=prefix)
   else:
