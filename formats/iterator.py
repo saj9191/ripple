@@ -49,11 +49,9 @@ class Iterator:
 
   @classmethod
   def combine(cls, bucket_name, keys, temp_name, params):
-    print("wtf combine")
     s3 = boto3.resource("s3")
     iterators = []
     values = []
-    print("keys", len(keys))
     for key in keys:
       obj = s3.Object(bucket_name, key)
       iterator = cls(obj, params["batch_size"], params["chunk_size"])
@@ -66,8 +64,6 @@ class Iterator:
         while more:
           [s, more] = iterator.next(identifier=False)
           values += s
-    print("after")
-    print("keys", len(keys))
 
     last = None
     with open(temp_name, "w+") as f:
