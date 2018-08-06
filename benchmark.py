@@ -105,6 +105,9 @@ def process_params(params):
   params["input"] = params["input_name"]
   params["input_bucket"] = params["pipeline"][0]["input_bucket"]
   params["output_bucket"] = params["pipeline"][-1]["output_bucket"]
+  for i in range(len(params["pipeline"])):
+    params["pipeline"][i]["num_bins"] = params["num_bins"]
+    params["pipeline"][i]["num_buckets"] = params["num_buckets"]
 
 
 def process_iteration_params(params, iteration):
@@ -115,6 +118,7 @@ def process_iteration_params(params, iteration):
     "prefix": "spectra",
     "timestamp": params["now"],
     "nonce": params["nonce"],
+    "bin": 1,
     "file-id": 1,
     "last": True,
     "ext": params["ext"]
@@ -602,7 +606,7 @@ def check_objects(client, bucket_name, prefix, count, timeout, params):
     end = datetime.datetime.now()
     now = end.strftime("%H:%M:%S")
     if not done:
-      print("{0:s}: Waiting for {1:s} function{2:s}.".format(now, prefix, suffix), flush=True)
+      print("{0:s}: Waiting for {1:s} function{2:s}. Timeout is {3:d} seconds".format(now, prefix, suffix, timeout), flush=True)
       if (end - start).total_seconds() > timeout:
         raise BenchmarkException("Could not find bucket {0:s} prefix {1:s}".format(bucket_name, prefix))
       time.sleep(30)
