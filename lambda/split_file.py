@@ -21,7 +21,7 @@ def split_file(bucket_name, key, params):
   file_id = 0
 
   if "bucket_prefix" in params:
-    [input_bucket, input_key, ranges] = pivot.get_pivot_ranges(bucket_name, key, params["bucket_prefix"])
+    [input_bucket, input_key, ranges] = pivot.get_pivot_ranges(bucket_name, key, params["bucket_prefix"], params["num_buckets"])
   else:
     input_bucket = bucket_name
     input_key = key

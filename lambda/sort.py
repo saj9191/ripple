@@ -21,6 +21,7 @@ def bin_input(s3, sorted_input, format_lib, m, bin_ranges, params):
   iterator_class = getattr(format_lib, "Iterator")
   for i in range(len(binned_input)):
     content = iterator_class.fromArray(binned_input[i])
+    m["bin"] = bin_ranges[i]["bin"]
     bin_key = util.file_name(m)
     util.print_write(m, bin_key, params)
     s3.Object(bin_ranges[i]["bucket"], bin_key).put(Body=str.encode(content))

@@ -21,33 +21,26 @@ def combine(bucket_name, key, params):
   nonce = m["nonce"]
 
   if params["sort"]:
-    m["file-id"] = int(bucket_name.split("-")[-1])
+    m["file-id"] = m["bin"]
     m["last"] = m["file-id"] == params["num_bins"]
 
   util.print_request(m, params)
   util.print_read(m, key, params)
 
-  p = {
-    "timestamp": ts,
-    "nonce": nonce,
-    "ext": m["ext"]
-  }
-
   s3 = boto3.resource("s3")
-  key_regex = util.get_key_regex(p)
-
   have_all_files = False
   keys = []
+  prefix = util.key_prefix(key)
   while not have_all_files and (len(keys) == 0 or current_last_file(bucket_name, key)):
-    [have_all_files, keys] = util.have_all_files(bucket_name, key_regex)
+    [have_all_files, keys] = util.have_all_files(bucket_name, prefix)
 
   if have_all_files and current_last_file(bucket_name, key):
     print("Combining TIMESTAMP {0:f} NONCE {1:d} FILE {2:d}".format(ts, nonce, m["file-id"]))
     format_lib = importlib.import_module(params["format"])
     iterator = getattr(format_lib, "Iterator")
     if not params["sort"]:
-      m["file-id"] = 1
       m["last"] = True
+    m["bin"] = 1
     file_name = util.file_name(m)
     temp_name = "/tmp/{0:s}".format(file_name)
     # Make this deterministic and combine in the same order

@@ -18,6 +18,9 @@ FILE_FORMAT = [{
   "name": "nonce",
   "type": "int",
 }, {
+  "name": "bin",
+  "type": "int",
+}, {
   "name": "file-id",
   "type": "int",
 }, {
@@ -60,7 +63,7 @@ def setup_client(service, params):
 
 
 def key_prefix(key):
-  return "-".join(key.split("-")[:3])
+  return "-".join(key.split("-")[:4])
 
 
 def run(event, context, func):
@@ -168,22 +171,21 @@ def clear_tmp():
   subprocess.call("rm -rf /tmp/*", shell=True)
 
 
-def have_all_files(bucket_name, key_regex):
+def have_all_files(bucket_name, prefix):
   s3 = boto3.resource("s3")
   bucket = s3.Bucket(bucket_name)
 
   num_files = None
   ids_to_keys = {}
-  for key in bucket.objects.all():
-    if key_regex.match(key.key):
-      m = parse_file_name(key.key)
-      if m["file-id"] in ids_to_keys:
-        if key.key < ids_to_keys[m["file-id"]]:
-          ids_to_keys[m["file-id"]] = key.key
-      else:
+  for key in bucket.objects.filter(Prefix=prefix):
+    m = parse_file_name(key.key)
+    if m["file-id"] in ids_to_keys:
+      if key.key < ids_to_keys[m["file-id"]]:
         ids_to_keys[m["file-id"]] = key.key
-      if m["last"]:
-        num_files = m["file-id"]
+    else:
+      ids_to_keys[m["file-id"]] = key.key
+    if m["last"]:
+      num_files = m["file-id"]
 
   matching_keys = list(ids_to_keys.values())
   return (len(matching_keys) == num_files, matching_keys)

@@ -38,7 +38,7 @@ class Iterator(iterator.Iterator):
     return [Iterator.get(self.obj, start_byte, end_byte, identifier), more]
 
 
-def get_pivot_ranges(bucket_name, key, bucket_prefix):
+def get_pivot_ranges(bucket_name, key, bucket_prefix, num_buckets):
   s3 = boto3.resource("s3")
   ranges = []
 
@@ -51,7 +51,8 @@ def get_pivot_ranges(bucket_name, key, bucket_prefix):
     end_range = pivots[i + 1]
     ranges.append({
       "range": [pivots[i], end_range],
-      "bucket": "{0:s}-{1:d}".format(bucket_prefix, i+1)
+      "bucket": "{0:s}-{1:d}".format(bucket_prefix, (i % num_buckets) + 1),
+      "bin": i + 1,
     })
 
   return file_bucket, file_key, ranges
