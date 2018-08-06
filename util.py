@@ -63,7 +63,7 @@ def setup_client(service, params):
 
 
 def key_prefix(key):
-  return "-".join(key.split("-")[:4])
+  return "-".join(key.split("-")[:4]) + "-"
 
 
 def run(event, context, func):

@@ -599,25 +599,34 @@ def check_objects(client, bucket_name, prefix, count, timeout, params):
   # There's apparently a stupid bug where str(timestamp) has more significant
   # digits than "{0:f}:.format(timestmap)
   # eg. spectra-1530978873.960075-1-0-58670073.txt 1530978873.9600754
-  ts = "{0:f}".format(params["now"])
-
+  m = {
+    "prefix": prefix,
+    "timestamp": params["now"],
+    "nonce": params["nonce"],
+    "bin": 1,
+    "file-id": 1,
+    "last": True,
+    "ext": "test"
+  }
+  prefix = util.key_prefix(util.file_name(m))
   start = datetime.datetime.now()
   s3 = setup_connection("s3", params)
   bucket = s3.Bucket(bucket_name)
   while not done:
     c = 0
     now = time.time()
-    for obj in bucket.objects.all():
-      # print(obj.key, ts, obj.key.startswith(prefix), ts in obj.key)
-      if obj.key.startswith(prefix) and ts in obj.key:
-        c += 1
-    # print("count", c, count)
+    found = set()
+    for obj in bucket.objects.filter(Prefix=prefix):
+      found.add(int(util.parse_file_name(obj.key)["file-id"]))
+      c += 1
     done = (c == count)
     end = datetime.datetime.now()
     now = end.strftime("%H:%M:%S")
     if not done:
-      print("{0:s}: Waiting for {1:s} function{2:s}. Timeout is {3:d} seconds".format(now, prefix, suffix, timeout), flush=True)
+      print("{0:s}: Waiting for {1:s} function{2:s}. Timeout is {3:d} seconds. Count is {4:d}".format(now, prefix, suffix, timeout, c), flush=True)
       if (end - start).total_seconds() > timeout:
+        expected = set(range(1, count + 1))
+        print("Could not find", expected.difference(found))
         raise BenchmarkException("Could not find bucket {0:s} prefix {1:s}".format(bucket_name, prefix))
       time.sleep(30)
     else:
