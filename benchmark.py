@@ -204,9 +204,16 @@ class Request:
 
 
 def process_request(message, dependencies, request_to_file, name, layer):
+  if name == "map-blast":
+    print(name, message)
   m = REQUEST_REGEX.match(message)
+  if name == "map-blast":
+    print(name, m)
   if m is not None:
-    file_id = int(m.group(1))
+    if name in ["map-blast", "map-fasta"]:
+      file_id = 1
+    else:
+      file_id = int(m.group(1))
     key = "{0:d}:{1:d}".format(layer, file_id)
     request_id = m.group(2)
     if request_id not in dependencies:
@@ -221,6 +228,8 @@ def process_request(message, dependencies, request_to_file, name, layer):
 
 
 def process_read(message, file_writes, dependencies, request_to_file, name, layer):
+  if name == "map-blast":
+    print(message)
   m = READ_REGEX.match(message)
   if m is not None:
     request_id = m.group(1)
@@ -228,6 +237,8 @@ def process_read(message, file_writes, dependencies, request_to_file, name, laye
     file_name = m.group(2)
     parent_id = file_writes[file_name]
     key = "{0:d}:{1:d}".format(layer, file_id)
+    if name == "map-blast":
+      print("key", key)
     if name == "sort-blast-chunk":
       file_id = 1
     else:
@@ -277,7 +288,6 @@ def process_invoke(message, dependencies, request_to_file, name, layer):
 def process_report(message, dependencies, request_to_file, name, layer):
   m = REPORT.match(message)
   if m is not None:
-    print(name, message)
     request_id = m.group(1)
     file_id = request_to_file[request_id]
     duration = int(m.group(3))
@@ -332,7 +342,7 @@ def run(params):
 #    if params["check_output"]:
 #      check_output(params)
 
-    #clear_buckets(params)
+    clear_buckets(params)
     print("--------------------------\n", flush=True)
 
   print("END RESULTS ({0:d} ITERATIONS)".format(iterations), flush=True)
