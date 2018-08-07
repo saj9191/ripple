@@ -1,6 +1,7 @@
 import boto3
 import os
 import subprocess
+import util
 
 
 def run(file, params, m):
@@ -32,6 +33,16 @@ def run(file, params, m):
     "--overwrite", "T"
   ]
 
+  print("COUNT", "file", m["file_id"], "bin", m["bin"], subprocess.check_output("cat {0:s} | wc -l".format(file), shell=True))
   command = "cd /tmp; ./crux tide-search {0:s} HUMAN.fasta.20170123.index {1:s}".format(file, " ".join(arguments))
   subprocess.check_output(command, stderr=subprocess.STDOUT, shell=True)
-  return ["{0:s}/tide-search.txt".format(output_dir)]
+  input_file = "{0:s}/tide-search.txt".format(output_dir)
+  p = dict(m)
+  p["prefix"] = "tide-search"
+  p["ext"] = "txt"
+  print("m", m)
+  print("p", p)
+  output_file = "{0:s}/{1:s}".format(output_dir, util.file_name(p))
+  os.rename(input_file, output_file)
+
+  return [output_file]
