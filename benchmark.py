@@ -325,7 +325,7 @@ def run(params):
 
   if params["setup"]:
     setup.setup(params)
-  pipeline = [{"name": "load"}] + params["pipeline"]
+  pipeline = [{"name": "load"}] + params["pipeline"] + [{"name": "total"}]
   stats = list(map(lambda s: [], pipeline))
 
   for i in range(iterations):
@@ -342,8 +342,6 @@ def run(params):
   print("END RESULTS ({0:d} ITERATIONS)".format(iterations), flush=True)
 
   dir_path = "results/{0:f}-{1:d}".format(params["now"], params["nonce"])
-  print("Directory:", dir_path)
-  return
   os.mkdir(dir_path)
   f = open("{0:s}/params".format(dir_path), "w+")
   f.write(json.dumps(params, indent=2, sort_keys=True))
@@ -353,7 +351,7 @@ def run(params):
   f.write(json.dumps({"stats": stats}, indent=2, sort_keys=True))
   f.close()
 
-  dependencies = create_dependency_chain(stats[1:], iterations)
+  dependencies = create_dependency_chain(stats[1:-1], iterations)
   for key in dependencies:
     dependencies[key].duration = float(dependencies[key].duration) / iterations
   dep_file = "{0:s}/dep".format(dir_path)
@@ -364,6 +362,8 @@ def run(params):
   if params["plot"]:
     dependencies = json.loads(open(dep_file).read())
     plot.plot(dependencies, pipeline[1:], iterations, params)
+  print("Directory:", dir_path)
+  return
 
 
 def calculate_total_stats(stats):
@@ -628,7 +628,7 @@ def check_objects(client, bucket_name, prefix, count, timeout, params):
         expected = set(range(1, count + 1))
         print("Could not find", expected.difference(found))
         raise BenchmarkException("Could not find bucket {0:s} prefix {1:s}".format(bucket_name, prefix))
-      time.sleep(30)
+      time.sleep(10)
     else:
       print("{0:s}: Found {1:s} function{2:s}".format(now, prefix, suffix), flush=True)
 
@@ -770,7 +770,7 @@ def parse_analyze_logs(client, params):
   return parse_mult_logs(client, params, "analyze_spectra")
 
 
-def parse_logs(params, upload_timestamp, upload_duration):
+def parse_logs(params, upload_timestamp, upload_duration, total_duration):
   client = util.setup_client("logs", params)
 
   stats = []
@@ -779,13 +779,24 @@ def parse_logs(params, upload_timestamp, upload_duration):
     step = params["pipeline"][i]
     stats.append(parse_mult_logs(client, params, step))
 
+  return {
+    "name": "total",
+    "billed_duration": [total_duration],
+    "max_duration": total_duration,
+    "memory_used": 0,
+    "cost": 0,
+    "messages": [],
+  }
   return stats
 
 
 def lambda_benchmark(params):
   [upload_timestamp, upload_duration] = upload_input(params)
+  start_time = time.time()
   wait_for_completion(upload_timestamp, params)
-  return parse_logs(params, upload_timestamp, upload_duration)
+  end_time = time.time()
+  total_duration = end_time - start_time
+  return parse_logs(params, upload_timestamp, upload_duration, total_duration)
 
 
 #############################
