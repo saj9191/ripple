@@ -12,7 +12,7 @@ class Iterator(iterator.Iterator):
     self.identifier = Iterator.IDENTIFIER
     self.offsets = [0]
 
-  def fromArray(items):
+  def fromArray(items, includeHeader=False):
     return Iterator.IDENTIFIER.join(items)
 
   def getScore(b):

@@ -32,7 +32,7 @@ class Iterator:
   def createContent(self, content):
     raise Exception("Not Implemented")
 
-  def fromArray(items):
+  def fromArray(items, includeHeader=False):
     raise Exception("Not Implemented")
 
   def getCount(self):
@@ -40,30 +40,28 @@ class Iterator:
 
   @classmethod
   def write(cls, f, values, first):
-    content = cls.fromArray(values)
+    content = cls.fromArray(values, includeHeader=first)
     if first:
-      f.write(content)
+      f.write(content.strip())
     else:
       f.write(cls.IDENTIFIER)
-      f.write(content)
+      f.write(content.strip())
 
   @classmethod
   def combine(cls, bucket_name, keys, temp_name, params):
+    print("Combining", len(keys))
     s3 = boto3.resource("s3")
     iterators = []
     values = []
-    for key in keys:
-      obj = s3.Object(bucket_name, key)
-      iterator = cls(obj, params["batch_size"], params["chunk_size"])
-      if params["sort"]:
+    if params["sort"]:
+      for key in keys:
+        obj = s3.Object(bucket_name, key)
+        iterator = cls(obj, params["batch_size"], params["chunk_size"])
         [s, more] = iterator.next(identifier=True)
         if len(s) > 0:
           heapq.heappush(iterators, Element(s, more, iterator))
-      else:
-        more = True
-        while more:
-          [s, more] = iterator.next(identifier=False)
-          values += s
+    else:
+      raise Exception("Not implementeD")
 
     last = None
     with open(temp_name, "w+") as f:
@@ -102,7 +100,6 @@ class Iterator:
   def nextOffsets(self):
     if self.content_length == 0:
       return (-1, -1, False)
-
     # Plus one is so we get end byte of value
     while len(self.offsets) < (self.batch_size + 1) and self.current_offset < self.content_length:
       self.updateOffsets()
@@ -115,7 +112,6 @@ class Iterator:
       end_offset = self.offsets[self.batch_size] - 1
     else:
       end_offset = self.current_offset
-
     self.seen_count += min(len(self.offsets), self.batch_size)
     self.offsets = self.offsets[self.batch_size:]
     return (start_offset, end_offset, self.more())

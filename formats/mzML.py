@@ -28,8 +28,6 @@ class Iterator(iterator.Iterator):
     ET.register_namespace("", Iterator.XML_NAMESPACE)
     self.footer_offset = 235
     self.remainder = ""
-    self.offsets = []
-    self.seen_count = 0
     self.findOffsets()
 
   def getCount(self):
@@ -47,7 +45,7 @@ class Iterator(iterator.Iterator):
     end_byte = start_byte + self.INDEX_CHUNK_SIZE
     stream = iterator.Iterator.getBytes(self.obj, start_byte, end_byte)
     self.spectra_list_offset += stream.find("<offset")
-    self.current_spectra_offset = self.spectra_list_offset
+    self.current_offset = self.spectra_list_offset
 
     self.updateOffsets()
     if len(self.offsets) == 0:
@@ -61,7 +59,7 @@ class Iterator(iterator.Iterator):
       self.total_count = int(m.group(1))
 
   def updateOffsets(self):
-    start_byte = self.current_spectra_offset
+    start_byte = self.current_offset
     end_byte = min(self.content_length, start_byte + self.chunk_size)
     stream = Iterator.getBytes(self.obj, start_byte, end_byte)
     stream = self.remainder + stream
@@ -69,10 +67,11 @@ class Iterator(iterator.Iterator):
     self.offsets += list(map(lambda r: int(r.group(1)), offset_regex))
     if len(offset_regex) > 0:
       regex_offset = offset_regex[-1].span(0)[1]
-      self.remainder = stream[regex_offset:]
+      stream = stream[regex_offset:]
+      self.remainder = stream
     else:
       self.remainder = ""
-    self.current_spectra_offset = end_byte + 1
+    self.current_offset = end_byte + 1
 
   def getMass(spectrum):
     for cvParam in spectrum.iter("cvParam"):
@@ -94,8 +93,9 @@ class Iterator(iterator.Iterator):
       spectra = list(spectra)
     return spectra
 
-  def fromArray(spectra):
+  def fromArray(spectra, includeHeader=False):
     content = open("header.mzML").read()
+    print("adding", len(spectra), "spectra")
     content = content.replace("-123456789", str(len(spectra)))
     offset = len(content)
     offsets = []

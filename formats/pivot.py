@@ -15,7 +15,7 @@ class Iterator(iterator.Iterator):
       obj = s3.Object(bucket_name, key)
       content = obj.get()["Body"].read().decode("utf8")
       [file_bucket, file_key, pivot_content] = content.split("\n")
-      new_pivots = list(map(lambda p: int(p), pivot_content.split("\t")))
+      new_pivots = list(map(lambda p: float(p), pivot_content.split("\t")))
       pivots += new_pivots
     assert(file_key is not None)
 
@@ -45,12 +45,12 @@ def get_pivot_ranges(bucket_name, key, bucket_prefix, num_buckets):
   obj = s3.Object(bucket_name, key)
   content = obj.get()["Body"].read().decode("utf-8")
   [file_bucket, file_key, pivot_content] = content.split("\n")
-  pivots = list(map(lambda p: int(p), pivot_content.split("\t")))
+  pivots = list(map(lambda p: float(p), pivot_content.split("\t")))
 
   for i in range(len(pivots) - 1):
-    end_range = pivots[i + 1]
+    end_range = int(pivots[i + 1])
     ranges.append({
-      "range": [pivots[i], end_range],
+      "range": [int(pivots[i]), end_range],
       "bucket": "{0:s}-{1:d}".format(bucket_prefix, (i % num_buckets) + 1),
       "bin": i + 1,
     })
