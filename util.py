@@ -2,6 +2,7 @@ import boto3
 from botocore.client import Config
 import json
 import os
+import random
 import re
 import subprocess
 import sys
@@ -21,7 +22,7 @@ FILE_FORMAT = [{
   "name": "bin",
   "type": "int",
 }, {
-  "name": "file-id",
+  "name": "file_id",
   "type": "int",
 }, {
   "name": "last",
@@ -32,10 +33,32 @@ FILE_FORMAT = [{
 SPECTRA = re.compile("^\S[A-Ya-y0-9\s\.\+]+Z\s[0-9]+\s([0-9\.e\+]+)\n+([0-9\.\se\+]+)", re.MULTILINE)
 
 
+def lambda_setup(event, context):
+  s3 = event["Records"][0]["s3"]
+  bucket_name = s3["bucket"]["name"]
+  key = s3["object"]["key"]
+  params = json.loads(open("params.json").read())
+  params["token"] = random.randint(1, 100*1000*1000)
+  params["request_id"] = context.aws_request_id
+  if "extra_params" in s3:
+    params["extra_params"] = s3["extra_params"]
+  return [bucket_name, key, params]
+
+
+def show_duration(context, m, params):
+  duration = params["timeout"] * 1000 - context.get_remaining_time_in_millis()
+  msg = "TIMESTAMP {0:f} NONCE {1:d} BIN {2:d} FILE {3:d} REQUEST ID {4:s} TOKEN {5:d} DURATION {6:d}"
+  msg = msg.format(m["timestamp"], m["nonce"], m["bin"], m["file_id"], params["request_id"], params["token"], duration)
+  print(msg)
+
+
 def print_request(m, params):
-  print("TIMESTAMP {0:f} NONCE {1:d} FILE {2:d} REQUEST ID {3:s}".format(m["timestamp"], m["nonce"], m["file-id"], params["request_id"]))
-  if "extra_params" in params and "request_id" in params["extra_params"]:
-    print("TIMESTAMP {0:f} NONCE {1:d} REQUEST ID {2:s} INVOKED BY REQUEST ID {3:s}".format(m["timestamp"], m["nonce"], params["request_id"], params["extra_params"]["request_id"]))
+  msg = "TIMESTAMP {0:f} NONCE {1:d} BIN {2:d} FILE {3:d} REQUEST ID {4:s} TOKEN {5:d}"
+  msg = msg.format(m["timestamp"], m["nonce"], m["bin"], m["file_id"], params["request_id"], params["token"])
+  print(msg)
+  if "extra_params" in params and "token" in params["extra_params"]:
+    msg += " INVOKED BY TOKEN {0:d}".format(params["extra_params"]["token"])
+    print(msg)
 
 
 def print_read(m, key, params):
@@ -47,7 +70,8 @@ def print_write(m, key, params):
 
 
 def print_action(m, key, action, params):
-  print("TIMESTAMP {0:f} NONCE {1:d} {2:s} REQUEST ID {3:s} FILE NAME {4:s}".format(m["timestamp"], m["nonce"], action, params["request_id"], key))
+  msg = "TIMESTAMP {0:f} NONCE {1:d} BIN {2:d} {3:s} REQUEST ID {4:s} TOKEN {5:d} FILE NAME {6:s}"
+  print(msg.format(m["timestamp"], m["nonce"], m["bin"], action, params["request_id"], params["token"], key))
 
 
 def setup_client(service, params):
@@ -179,13 +203,13 @@ def have_all_files(bucket_name, prefix):
   ids_to_keys = {}
   for key in bucket.objects.filter(Prefix=prefix):
     m = parse_file_name(key.key)
-    if m["file-id"] in ids_to_keys:
-      if key.key < ids_to_keys[m["file-id"]]:
-        ids_to_keys[m["file-id"]] = key.key
+    if m["file_id"] in ids_to_keys:
+      if key.key < ids_to_keys[m["file_id"]]:
+        ids_to_keys[m["file_id"]] = key.key
     else:
-      ids_to_keys[m["file-id"]] = key.key
+      ids_to_keys[m["file_id"]] = key.key
     if m["last"]:
-      num_files = m["file-id"]
+      num_files = m["file_id"]
 
   matching_keys = list(ids_to_keys.values())
   return (len(matching_keys) == num_files, matching_keys)

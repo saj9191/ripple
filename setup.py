@@ -83,7 +83,6 @@ def upload_format_file(client, functions, fparams):
   shutil.copyfile("../formats/pivot.py", "pivot.py")
   files.append("pivot.py")
 
-  print(files, fparams["name"])
   upload_lambda(client, functions, fparams, files)
   os.remove(format_file)
   os.remove("pivot.py")
@@ -223,7 +222,7 @@ def function_buckets(params):
   if "input_bucket" in params:
     buckets.append(params["input_bucket"])
   elif "bucket_prefix" in params:
-    for i in range(params["num_bins"]):
+    for i in range(params["num_buckets"]):
       buckets.append("{0:s}-{1:d}".format(params["bucket_prefix"], i + 1))
   return buckets
 

@@ -20,10 +20,11 @@ CHECKS = json.loads(open("json/checks.json").read())
 REPORT = re.compile(".*RequestId:\s([^\s]*)\tDuration:\s([0-9\.]+)\sms.*Billed Duration:\s([0-9\.]+)\sms.*Size:\s([0-9]+)\sMB.*Used:\s([0-9]+)\sMB.*")
 SPECTRA = re.compile("S\s+([0-9\.]+)\s+([0-9\.]+)\s+([0-9\.]+)*")
 STAT_FIELDS = ["cost", "max_duration", "memory_used"]
-INVOKED_REGEX = re.compile("TIMESTAMP [0-9\.]+ NONCE [0-9]+ REQUEST ID (.*) INVOKED BY REQUEST ID (.*)")
-REQUEST_REGEX = re.compile("TIMESTAMP [0-9\.]+ NONCE [0-9]+ FILE ([0-9]+) REQUEST ID (.*)")
-WRITE_REGEX = re.compile("TIMESTAMP [0-9\.]+ NONCE [0-9]+ WRITE REQUEST ID (.*) FILE NAME (.*)")
-READ_REGEX = re.compile("TIMESTAMP [0-9\.]+ NONCE [0-9]+ READ REQUEST ID (.*) FILE NAME (.*)")
+INVOKED_REGEX = re.compile("TIMESTAMP [0-9\.]+ NONCE [0-9]+ BIN ([0-9]+) FILE ([0-9]+) REQUEST ID (.*) TOKEN ([0-9]+) INVOKED BY TOKEN ([0-9]+)")
+REQUEST_REGEX = re.compile("TIMESTAMP [0-9\.]+ NONCE [0-9]+ BIN ([0-9]+) FILE ([0-9]+) REQUEST ID (.*) TOKEN ([0-9]+)$")
+WRITE_REGEX = re.compile("TIMESTAMP [0-9\.]+ NONCE [0-9]+ BIN ([0-9]+) WRITE REQUEST ID (.*) TOKEN ([0-9]+) FILE NAME (.*)")
+READ_REGEX = re.compile("TIMESTAMP [0-9\.]+ NONCE [0-9]+ BIN ([0-9]+) READ REQUEST ID (.*) TOKEN ([0-9]+) FILE NAME (.*)")
+DURATION_REGEX = re.compile("TIMESTAMP [0-9\.]+ NONCE [0-9]+ BIN [0-9]+ FILE [0-9]+ REQUEST ID (.*) TOKEN ([0-9]+) DURATION ([0-9]+)")
 
 
 #############################
@@ -119,7 +120,7 @@ def process_iteration_params(params, iteration):
     "timestamp": params["now"],
     "nonce": params["nonce"],
     "bin": 1,
-    "file-id": 1,
+    "file_id": 1,
     "last": True,
     "ext": params["ext"]
   }
@@ -180,12 +181,13 @@ def serialize(obj):
 
 
 class Request:
-  def __init__(self, name, request_id):
+  def __init__(self, name, token, request_id, file_id):
     self.name = name
     self.request_id = request_id
+    self.token = token
     self.parent_key = None
     self.duration = 0
-    self.file_id = None
+    self.file_id = file_id
     self.children = set()
 
   def json(self):
@@ -203,110 +205,84 @@ class Request:
     return json.dumps(self.json())
 
 
-def process_request(message, dependencies, request_to_file, name, layer):
-  if name == "map-blast":
-    print(name, message)
+def process_request(message, dependencies, token_to_file, name, layer):
   m = REQUEST_REGEX.match(message)
-  if name == "map-blast":
-    print(name, m)
-  if m is not None:
-    if name in ["map-blast", "map-fasta"]:
-      file_id = 1
-    else:
-      file_id = int(m.group(1))
-    key = "{0:d}:{1:d}".format(layer, file_id)
-    request_id = m.group(2)
-    if request_id not in dependencies:
-      request = Request(name, request_id)
+  n = INVOKED_REGEX.match(message)
+  if m is not None and n is None:
+    file_id = int(m.group(2))
+    request_id = m.group(3)
+    token = m.group(4)
+    key = "{0:d}:{1:s}".format(layer, token)
+    file_id = int(m.group(2))
+    if key not in dependencies:
+      request = Request(name, key, request_id, file_id)
       dependencies[key] = request
-      dependencies[key].file_id = file_id
-      request_to_file[request_id] = file_id
-      if name == "map_blast":
-        dependencies[key].parent_key = "{0:d}:1".format(layer - 1)
-      elif name == "combine-pivot-files" and file_id == 1:
-        dependencies[key].children.add("{0:d}:1".format(layer + 1))
 
 
-def process_read(message, file_writes, dependencies, request_to_file, name, layer):
-  if name == "map-blast":
-    print(message)
+def process_read(message, file_writes, dependencies, token_to_file, name, layer):
   m = READ_REGEX.match(message)
   if m is not None:
-    request_id = m.group(1)
-    file_id = request_to_file[request_id]
-    file_name = m.group(2)
-    parent_id = file_writes[file_name]
-    key = "{0:d}:{1:d}".format(layer, file_id)
-    if name == "map-blast":
-      print("key", key)
+    key = "{0:d}:{1:s}".format(layer, m.group(3))
+    file_name = m.group(4)
     if name == "sort-blast-chunk":
-      file_id = 1
+      parent_key = list(filter(lambda k: k.startswith("{0:d}:".format(layer - 1)), dependencies.keys()))[0]
     else:
-      file_id = request_to_file[parent_id]
-    parent_key = "{0:d}:{1:d}".format(layer - 1, file_id)
-    # print(name, message)
-    # print("parent key", parent_key, "key", key)
-    # print("num children", len(dependencies[parent_key].children))
-    # print(dependencies[parent_key].name, "->", dependencies[key].name)
+      fkey = "{0:d}:{1:s}".format(layer-1, file_name)
+      if fkey in file_writes:
+        parent_key = file_writes[fkey]
+      else:
+        print("I hate everythign")
+        parent_key = list(filter(lambda k: k.startswith("{0:d}:".format(layer - 1)), dependencies.keys()))[0]
     dependencies[key].parent_key = parent_key
     dependencies[parent_key].children.add(key)
     assert(dependencies[key].parent_key is not None)
 
 
-def process_write(message, file_writes, dependencies, request_to_file, name):
+def process_write(message, file_writes, dependencies, token_to_file, name, layer):
   m = WRITE_REGEX.match(message)
   if m is not None:
-    request_id = m.group(1)
-    file_name = m.group(2)
-    request_to_file[request_id] = util.parse_file_name(file_name)["file-id"]
-    # print("RID", request_id, "name", file_name, "file_id", request_to_file[request_id])
-    file_writes[file_name] = request_id
+    key = "{0:d}:{1:s}".format(layer, m.group(3))
+    file_name = m.group(4)
+    fkey = "{0:d}:{1:s}".format(layer, file_name)
+    file_writes[fkey] = key
 
 
-def process_invoke(message, dependencies, request_to_file, name, layer):
+def process_invoke(message, dependencies, token_to_file, name, layer):
   m = INVOKED_REGEX.match(message)
   if m is not None:
-    request_id = m.group(1)
-    parent_id = m.group(2)
-
-    file_id = request_to_file[request_id]
-    key = "{0:d}:{1:d}".format(layer, file_id)
-    if name == "sort-blast-chunk":
-      file_id = 1
-    else:
-      file_id = request_to_file[parent_id]
-    parent_key = "{0:d}:{1:d}".format(layer - 1, file_id)
-    # print(name, message)
-    # print("parent key", parent_key, "key", key)
-    # print(dependencies[parent_key].name, "->", dependencies[key].name)
-    # print("num children", len(dependencies[parent_key].children))
+    key = "{0:d}:{1:s}".format(layer, m.group(4))
+    parent_key = "{0:d}:{1:s}".format(layer - 1, m.group(5))
     dependencies[key].parent_key = parent_key
     dependencies[parent_key].children.add(key)
     assert(dependencies[key].parent_key is not None)
 
 
-def process_report(message, dependencies, request_to_file, name, layer):
-  m = REPORT.match(message)
+def process_report(message, dependencies, token_to_file, name, layer):
+  m = DURATION_REGEX.match(message)
   if m is not None:
-    request_id = m.group(1)
-    file_id = request_to_file[request_id]
+    key = "{0:d}:{1:s}".format(layer, m.group(2))
     duration = int(m.group(3))
-    key = "{0:d}:{1:d}".format(layer, file_id)
     dependencies[key].duration += duration
+    if name == "smith-waterman":
+      print(name, layer, key, duration)
 
 
 def create_dependency_chain(stats, iterations):
   stats = stats
   dependencies = {}
   file_writes = {}
-  request_to_file = {}
+  token_to_file = {}
   for layer in range(len(stats)):
     for i in range(len(stats[layer])):
       stat = stats[layer][i]
       name = stat["name"]
       messages = stat["messages"]
       for message in messages:
-        process_request(message, dependencies, request_to_file, name, layer)
+        process_request(message, dependencies, token_to_file, name, layer)
+
+      for message in messages:
+        process_write(message, file_writes, dependencies, token_to_file, name, layer)
+
 
   for layer in range(len(stats)):
     for i in range(len(stats[layer])):
@@ -314,10 +290,11 @@ def create_dependency_chain(stats, iterations):
       name = stat["name"]
       messages = stat["messages"]
       for message in messages:
-        process_report(message, dependencies, request_to_file, name, layer)
-        process_invoke(message, dependencies, request_to_file, name, layer)
-        process_write(message, file_writes, dependencies, request_to_file, name)
-        process_read(message, file_writes, dependencies, request_to_file, name, layer)
+        message = message.strip()
+        process_report(message, dependencies, token_to_file, name, layer)
+        process_invoke(message, dependencies, token_to_file, name, layer)
+#        process_write(message, file_writes, dependencies, token_to_file, name, layer)
+        process_read(message, file_writes, dependencies, token_to_file, name, layer)
 
   for key in dependencies:
     dependencies[key].duration = float(dependencies[key].duration) / iterations
@@ -330,7 +307,8 @@ def run(params):
   process_params(params)
   iterations = params["iterations"]
 
-  setup.setup(params)
+  if params["setup"]:
+    setup.setup(params)
   pipeline = [{"name": "load"}] + params["pipeline"]
   stats = list(map(lambda s: [], pipeline))
 
@@ -342,7 +320,6 @@ def run(params):
 #    if params["check_output"]:
 #      check_output(params)
 
-    clear_buckets(params)
     print("--------------------------\n", flush=True)
 
   print("END RESULTS ({0:d} ITERATIONS)".format(iterations), flush=True)
@@ -351,6 +328,7 @@ def run(params):
   f.write(json.dumps({"stats": stats}, indent=2, sort_keys=True))
   f.close()
 
+  clear_buckets(params)
   dependencies = create_dependency_chain(stats[1:], iterations)
   for key in dependencies:
     dependencies[key].duration = float(dependencies[key].duration) / iterations
@@ -359,8 +337,9 @@ def run(params):
   f.write(json.dumps(dependencies, indent=2, sort_keys=True, default=serialize))
   f.close()
 
-  dependencies = json.loads(open(dep_file).read())
-  plot.plot(dependencies, pipeline[1:], iterations, params)
+  if params["plot"]:
+    dependencies = json.loads(open(dep_file).read())
+    plot.plot(dependencies, pipeline[1:], iterations, params)
 
 
 def calculate_total_stats(stats):
@@ -415,22 +394,19 @@ def setup_connection(service, params):
 
 def clear_buckets(params):
   s3 = setup_connection("s3", params)
-  id = "{0:f}-{1:d}".format(params["now"], params["nonce"])
+  prefix = "ssw-{0:f}-{1:d}-".format(params["now"], params["nonce"])
 
   def delete_objects(bucket_name):
     bucket = s3.Bucket(bucket_name)
-    count = 0
-    for obj in bucket.objects.all():
-      if id in obj.key:
-        obj.delete()
-        count += 1
-    print("Deleted", count, bucket_name, "objects")
+    bucket.objects.filter(Prefix=prefix).delete()
+    print("Cleared bucket", bucket_name)
 
   for function in params["pipeline"]:
     for bucket_name in setup.function_buckets(function):
       delete_objects(bucket_name)
 
-  delete_objects(params["pipeline"][-1]["output_bucket"])
+  for i in range(params["num_buckets"]):
+    delete_objects("shjoyner-blast-sort-{0:d}".format(i+1))
 
 #############################
 #       COORDINATOR         #
@@ -604,7 +580,7 @@ def check_objects(client, bucket_name, prefix, count, timeout, params):
     "timestamp": params["now"],
     "nonce": params["nonce"],
     "bin": 1,
-    "file-id": 1,
+    "file_id": 1,
     "last": True,
     "ext": "test"
   }
@@ -617,7 +593,7 @@ def check_objects(client, bucket_name, prefix, count, timeout, params):
     now = time.time()
     found = set()
     for obj in bucket.objects.filter(Prefix=prefix):
-      found.add(int(util.parse_file_name(obj.key)["file-id"]))
+      found.add(int(util.parse_file_name(obj.key)["file_id"]))
       c += 1
     done = (c == count)
     end = datetime.datetime.now()
