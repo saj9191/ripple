@@ -47,6 +47,9 @@ def split_file(bucket_name, key, params):
             "start_byte": start_byte,
             "end_byte": end_byte,
             "more": more
+          },
+          "extra_params": {
+            "token": params["token"],
           }
         }
       }]
@@ -63,7 +66,5 @@ def split_file(bucket_name, key, params):
 
 
 def handler(event, context):
-  bucket_name = event["Records"][0]["s3"]["bucket"]["name"]
-  key = event["Records"][0]["s3"]["object"]["key"]
-  params = json.loads(open("params.json").read())
+  [bucket_name, key, params] = util.lambda_setup(event, context)
   split_file(bucket_name, key, params)

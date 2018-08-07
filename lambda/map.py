@@ -15,6 +15,7 @@ def map_file(bucket_name, key, params):
 
   if "bucket_prefix" in params:
     [_, _, ranges] = pivot.get_pivot_ranges(bucket_name, key, params["bucket_prefix"], params["num_buckets"])
+    # TODO: Fix
     prefix = util.key_prefix(key)
     objects = bucket.objects.filter(Prefix=prefix)
   else:
@@ -31,7 +32,7 @@ def map_file(bucket_name, key, params):
             "key": key,
           },
           "extra_params": {
-            "request_id": params["request_id"],
+            "token": params["token"],
             "target_bucket": params["map_bucket"],
             "target_file": obj.key,
           }
@@ -48,12 +49,10 @@ def map_file(bucket_name, key, params):
     )
     assert(response["ResponseMetadata"]["HTTPStatusCode"] == 202)
 
+  return m
+
 
 def handler(event, context):
-  s3 = event["Records"][0]["s3"]
-  bucket_name = s3["bucket"]["name"]
-  key = s3["object"]["key"]
-
-  params = json.loads(open("params.json").read())
-  params["request_id"] = context.aws_request_id
-  map_file(bucket_name, key, params)
+  [bucket_name, key, params] = util.lambda_setup(event, context)
+  m = map_file(bucket_name, key, params)
+  util.show_duration(context, m, params)

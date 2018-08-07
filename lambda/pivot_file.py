@@ -1,6 +1,5 @@
 import boto3
 import importlib
-import json
 import util
 
 
@@ -8,7 +7,7 @@ def create_pivots(s3, sorted_input, params):
   max_identifier = int(sorted_input[-1][0] + 1)
   pivots = list(map(lambda p: p[0], sorted_input))
   num_bins = 2 * params["num_bins"] * params["num_bins"]
-  increment = int(len(sorted_input) / num_bins)
+  increment = int((len(sorted_input) + num_bins - 1) / num_bins)
   pivots = pivots[0::increment]
   if pivots[-1] == max_identifier - 1:
     pivots[-1] = max_identifier
@@ -28,7 +27,6 @@ def handle_pivots(bucket_name, key, m, start_byte, end_byte, params):
   pivots = create_pivots(s3, sorted_input, params)
 
   p = dict(m)
-  p["name"] = "pivot"
   p["ext"] = "pivot"
   pivot_key = util.file_name(p)
 
@@ -51,7 +49,7 @@ def find_pivots(bucket_name, key, params, eparams):
     more = rparams["more"]
 
     m["last"] = not more
-    m["file-id"] = file_id
+    m["file_id"] = file_id
     handle_pivots(bucket_name, key, m, start_byte, end_byte, params)
   else:
     util.print_read(m, key, params)
@@ -59,10 +57,10 @@ def find_pivots(bucket_name, key, params, eparams):
     obj = s3.Object(bucket_name, key)
     handle_pivots(bucket_name, key, m, 0, obj.content_length, params)
 
+  return m
+
 
 def handler(event, context):
-  bucket_name = event["Records"][0]["s3"]["bucket"]["name"]
-  key = event["Records"][0]["s3"]["object"]["key"]
-  params = json.loads(open("params.json").read())
-  params["request_id"] = context.aws_request_id
-  find_pivots(bucket_name, key, params, event["Records"][0]["s3"])
+  [bucket_name, key, params] = util.lambda_setup(event, context)
+  m = find_pivots(bucket_name, key, params, event["Records"][0]["s3"])
+  util.show_duration(context, m, params)

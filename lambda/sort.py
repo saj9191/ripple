@@ -1,6 +1,5 @@
 import boto3
 import importlib
-import json
 import util
 
 
@@ -31,7 +30,8 @@ def sort(bucket_name, key, m, start_byte, end_byte, pivots, params):
   util.clear_tmp()
   m = util.parse_file_name(key)
   util.print_request(m, params)
-  util.print_read(m, key, params)
+  if "extra_params" not in params or "token" not in params["extra_params"]:
+    util.print_read(m, key, params)
 
   s3 = boto3.resource("s3")
   obj = s3.Object(bucket_name, key)
@@ -61,9 +61,11 @@ def handle_sort(bucket_name, key, params, eparams, pivots):
     s3 = boto3.resource('s3')
     obj = s3.Object(bucket_name, key)
     sort(bucket_name, key, m, 0, obj.content_length, pivots, params)
+  return m
 
 
 def handler(event, context):
+  [bucket_name, key, params] = util.lambda_setup(event, context)
   s3 = event["Records"][0]["s3"]
   if "extra_params" in s3:
     bucket_name = s3["extra_params"]["target_bucket"]
@@ -71,6 +73,5 @@ def handler(event, context):
   else:
     bucket_name = s3["bucket"]["name"]
     key = s3["object"]["key"]
-  params = json.loads(open("params.json").read())
-  params["request_id"] = context.aws_request_id
-  handle_sort(bucket_name, key, params, s3, event["pivots"])
+  m = handle_sort(bucket_name, key, params, s3, event["pivots"])
+  util.show_duration(context, m, params)

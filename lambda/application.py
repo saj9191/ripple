@@ -1,13 +1,11 @@
 import boto3
 import importlib
-import json
 import util
 
 
 def run_application(bucket_name, key, params):
   util.clear_tmp()
   m = util.parse_file_name(key)
-#  util.print_request(m, params)
 
   s3 = boto3.resource('s3')
   input_bucket = s3.Bucket(bucket_name)
@@ -39,13 +37,10 @@ def run_application(bucket_name, key, params):
     util.print_write(m, new_key, params)
     output_bucket.put_object(Key=new_key, Body=open(output_file, "rb"))
 
+  return m
+
 
 def handler(event, context):
-  s3 = event["Records"][0]["s3"]
-  bucket_name = s3["bucket"]["name"]
-  key = s3["object"]["key"]
-  params = json.loads(open("params.json").read())
-  params["request_id"] = context.aws_request_id
-  if "extra_params" in s3:
-    params["extra_params"] = s3["extra_params"]
-  run_application(bucket_name, key, params)
+  [bucket_name, key, params] = util.lambda_setup(event, context)
+  m = run_application(bucket_name, key, params)
+  util.show_duration(context, m, params)

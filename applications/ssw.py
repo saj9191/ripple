@@ -16,7 +16,7 @@ def run(query_fasta, params, m):
   target_fasta = params["extra_params"]["target_file"]
   file_id = int(target_fasta.split("-")[-1])
   m["prefix"] = "ssw"
-  m["file-id"] = file_id
+  m["file_id"] = file_id
   util.print_request(m, params)
   num_files = sum(1 for _ in target_bucket.objects.all())
   m["last"] = (file_id == num_files)

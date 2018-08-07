@@ -1,6 +1,5 @@
 import boto3
 import importlib
-import json
 import util
 
 
@@ -16,16 +15,18 @@ def current_last_file(bucket_name, current_key):
 
 def combine(bucket_name, key, params):
   util.clear_tmp()
-  m = util.parse_file_name(key)
-  ts = m["timestamp"]
-  nonce = m["nonce"]
+  p = util.parse_file_name(key)
+  util.print_request(p, params)
+  util.print_read(p, key, params)
+  m = dict(p)
 
   if params["sort"]:
-    m["file-id"] = m["bin"]
-    m["last"] = m["file-id"] == params["num_bins"]
-
-  util.print_request(m, params)
-  util.print_read(m, key, params)
+    m["file_id"] = m["bin"]
+    m["last"] = m["file_id"] == params["num_bins"]
+  else:
+    m["last"] = True
+    m["file-id"] = 1
+  m["bin"] = 1
 
   s3 = boto3.resource("s3")
   have_all_files = False
@@ -35,12 +36,8 @@ def combine(bucket_name, key, params):
     [have_all_files, keys] = util.have_all_files(bucket_name, prefix)
 
   if have_all_files and current_last_file(bucket_name, key):
-    print("Combining TIMESTAMP {0:f} NONCE {1:d} FILE {2:d}".format(ts, nonce, m["file-id"]))
     format_lib = importlib.import_module(params["format"])
     iterator = getattr(format_lib, "Iterator")
-    if not params["sort"]:
-      m["last"] = True
-    m["bin"] = 1
     file_name = util.file_name(m)
     temp_name = "/tmp/{0:s}".format(file_name)
     # Make this deterministic and combine in the same order
@@ -48,11 +45,10 @@ def combine(bucket_name, key, params):
     iterator.combine(bucket_name, keys, temp_name, params)
     util.print_write(m, file_name, params)
     s3.Object(params["output_bucket"], file_name).put(Body=open(temp_name, "rb"))
+  return p
 
 
 def handler(event, context):
-  bucket_name = event["Records"][0]["s3"]["bucket"]["name"]
-  key = event["Records"][0]["s3"]["object"]["key"]
-  params = json.loads(open("params.json").read())
-  params["request_id"] = context.aws_request_id
-  combine(bucket_name, key, params)
+  [bucket_name, key, params] = util.lambda_setup(event, context)
+  m = combine(bucket_name, key, params)
+  util.show_duration(context, m, params)
