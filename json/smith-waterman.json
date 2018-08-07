@@ -1,10 +1,17 @@
 {
-  "input_name": "small.fasta",
-  "iterations": 1,
-  "model": "lambda",
-  "region": "us-west-2",
-  "check_output": false,
+	"input_name": "small.fasta",
+	"input_prefix": "ssw",
+	"setup": true,
+	"plot": true,
+	"num_bins": 500,
+	"num_buckets": 50,
+	"iterations": 1,
+	"model": "lambda",
+	"region": "us-west-2",
+	"sample_input": false,
+	"check_output": false,
 	"timeout": 300,
+	"num_output_files": 500,
 	"pipeline": [{
 		"file": "map",
 		"memory_size": 1024,
@@ -13,59 +20,61 @@
 		"input_bucket": "shjoyner-fasta-input",
 		"output_function": "smith-waterman",
 		"timeout": 300
-	}, {
+	},
+	{
 		"file": "application",
 		"application": "ssw",
-		"memory_size":1024,
+		"memory_size": 1024,
 		"name": "smith-waterman",
 		"program_bucket": "shjoyner-fasta",
 		"output_bucket": "shjoyner-ssw-scores",
 		"timeout": 300
-	}, {
+	},
+	{
 		"file": "pivot_file",
 		"format": "blast",
 		"memory_size": 1024,
 		"name": "find-blast-pivots",
-		"num_bins": 54,
 		"input_bucket": "shjoyner-ssw-scores",
 		"output_bucket": "shjoyner-blast-pivot",
 		"timeout": 300
-	}, {
+	},
+	{
 		"file": "combine_files",
 		"format": "pivot",
 		"memory_size": 1024,
 		"name": "combine-pivot-files",
-		"num_bins": 54,
 		"input_bucket": "shjoyner-blast-pivot",
 		"output_bucket": "shjoyner-blast-super-pivot",
 		"sort": false,
 		"timeout": 300
-	}, {
+	},
+	{
 		"file": "map",
 		"memory_size": 1024,
 		"name": "map-blast",
 		"map_bucket": "shjoyner-ssw-scores",
 		"input_bucket": "shjoyner-blast-super-pivot",
 		"bucket_prefix": "shjoyner-blast-sort",
-		"num_bins": 54,
 		"output_function": "sort-blast-chunk",
 		"timeout": 300
-	}, {
+	},
+	{
 		"file": "sort",
 		"format": "blast",
 		"memory_size": 1024,
 		"name": "sort-blast-chunk",
-		"num_bins": 54,
+		"output_bucket": "shjoyner-blast-sort-1",
 		"timeout": 300
-	},{
+	},
+	{
 		"file": "combine_files",
 		"format": "blast",
-		"batch_size": 5000,
-		"chunk_size": 250000,
-		"memory_size": 3008,
+		"batch_size": 100,
+		"chunk_size": 5000,
+		"memory_size": 1024,
 		"name": "combine-blast-files",
-		"bucket_prefix": "shjoyner-blast-sort",
-		"num_bins": 54,
+		"input_bucket": "shjoyner-blast-sort-1",
 		"output_bucket": "shjoyner-blast-output",
 		"sort": true,
 		"timeout": 300

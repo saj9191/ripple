@@ -24,7 +24,7 @@ INVOKED_REGEX = re.compile("TIMESTAMP [0-9\.]+ NONCE [0-9]+ BIN ([0-9]+) FILE ([
 REQUEST_REGEX = re.compile("TIMESTAMP [0-9\.]+ NONCE [0-9]+ BIN ([0-9]+) FILE ([0-9]+) REQUEST ID (.*) TOKEN ([0-9]+)$")
 WRITE_REGEX = re.compile("TIMESTAMP [0-9\.]+ NONCE [0-9]+ BIN ([0-9]+) WRITE REQUEST ID (.*) TOKEN ([0-9]+) FILE NAME (.*)")
 READ_REGEX = re.compile("TIMESTAMP [0-9\.]+ NONCE [0-9]+ BIN ([0-9]+) READ REQUEST ID (.*) TOKEN ([0-9]+) FILE NAME (.*)")
-DURATION_REGEX = re.compile("TIMESTAMP [0-9\.]+ NONCE [0-9]+ BIN [0-9]+ FILE [0-9]+ REQUEST ID (.*) TOKEN ([0-9]+) DURATION ([0-9]+)")
+DURATION_REGEX = re.compile("TIMESTAMP [0-9\.]+ NONCE [0-9]+ BIN [0-9]+ FILE ([0-9]+) REQUEST ID (.*) TOKEN ([0-9]+) DURATION ([0-9]+)")
 
 
 #############################
@@ -107,8 +107,11 @@ def process_params(params):
   params["input_bucket"] = params["pipeline"][0]["input_bucket"]
   params["output_bucket"] = params["pipeline"][-1]["output_bucket"]
   for i in range(len(params["pipeline"])):
-    params["pipeline"][i]["num_bins"] = params["num_bins"]
-    params["pipeline"][i]["num_buckets"] = params["num_buckets"]
+    for p in ["num_bins", "num_buckets", "timeout"]:
+      if p in params:
+        params["pipeline"][i][p] = params[p]
+        params["pipeline"][i][p] = params[p]
+        params["pipeline"][i][p] = params[p]
 
 
 def process_iteration_params(params, iteration):
@@ -116,7 +119,7 @@ def process_iteration_params(params, iteration):
   params["now"] = now
   params["nonce"] = random.randint(1, 1000)
   m = {
-    "prefix": "spectra",
+    "prefix": params["input_prefix"],
     "timestamp": params["now"],
     "nonce": params["nonce"],
     "bin": 1,
@@ -133,8 +136,12 @@ def upload_input(params):
   key = params["key"]
 
   start = time.time()
-  print("Uploading {0:s} to s3://{1:s}".format(params["input"], bucket_name), flush=True)
-  s3.Object(bucket_name, key).put(Body=open("data/{0:s}".format(params["input"]), 'rb'))
+  if params["sample_input"]:
+    print("Moving {0:s} to s3:://{1:s}".format(params["input"], bucket_name), flush=True)
+    s3.Object(bucket_name, key).copy_from("shjoyner-sample-input", params["input_name"])
+  else:
+    print("Uploading {0:s} to s3://{1:s}".format(params["input"], bucket_name), flush=True)
+    s3.Object(bucket_name, key).put(Body=open("data/{0:s}".format(params["input"]), 'rb'))
   end = time.time()
 
   obj = s3.Object(bucket_name, key)
@@ -234,6 +241,9 @@ def process_read(message, file_writes, dependencies, token_to_file, name, layer)
         print("I hate everythign")
         parent_key = list(filter(lambda k: k.startswith("{0:d}:".format(layer - 1)), dependencies.keys()))[0]
     dependencies[key].parent_key = parent_key
+    if parent_key not in dependencies:
+      print("process request", name, "Cannot find parent", parent_key, "for key", key)
+      parent_key = list(filter(lambda k: k.startswith("{0:d}:".format(layer - 1)), dependencies.keys()))[0]
     dependencies[parent_key].children.add(key)
     assert(dependencies[key].parent_key is not None)
 
@@ -251,7 +261,14 @@ def process_invoke(message, dependencies, token_to_file, name, layer):
   m = INVOKED_REGEX.match(message)
   if m is not None:
     key = "{0:d}:{1:s}".format(layer, m.group(4))
+    if key not in dependencies:
+      print("process invoke", name, "Cannot find key", key)
+      key = list(filter(lambda k: k.startswith("{0:d}:".format(layer)), dependencies.keys()))[0]
     parent_key = "{0:d}:{1:s}".format(layer - 1, m.group(5))
+    if parent_key not in dependencies:
+      print("process invoke", name, "Cannot find parent", parent_key, "for key", key)
+      parent_key = list(filter(lambda k: k.startswith("{0:d}:".format(layer - 1)), dependencies.keys()))[0]
+
     dependencies[key].parent_key = parent_key
     dependencies[parent_key].children.add(key)
     assert(dependencies[key].parent_key is not None)
@@ -260,19 +277,19 @@ def process_invoke(message, dependencies, token_to_file, name, layer):
 def process_report(message, dependencies, token_to_file, name, layer):
   m = DURATION_REGEX.match(message)
   if m is not None:
-    key = "{0:d}:{1:s}".format(layer, m.group(2))
-    duration = int(m.group(3))
+    key = "{0:d}:{1:s}".format(layer, m.group(3))
+    duration = int(m.group(4))
     dependencies[key].duration += duration
-    if name == "smith-waterman":
-      print(name, layer, key, duration)
 
 
 def create_dependency_chain(stats, iterations):
+  print("Creating dependencies")
   stats = stats
   dependencies = {}
   file_writes = {}
   token_to_file = {}
   for layer in range(len(stats)):
+    print("Layer", layer)
     for i in range(len(stats[layer])):
       stat = stats[layer][i]
       name = stat["name"]
@@ -282,7 +299,6 @@ def create_dependency_chain(stats, iterations):
 
       for message in messages:
         process_write(message, file_writes, dependencies, token_to_file, name, layer)
-
 
   for layer in range(len(stats)):
     for i in range(len(stats[layer])):
@@ -316,23 +332,31 @@ def run(params):
     process_iteration_params(params, i)
     results = benchmark(i, params)
     for j in range(len(results)):
-      stats[j].append(results[j])
-#    if params["check_output"]:
-#      check_output(params)
+      stats[j].append(results[0])
+    if params["check_output"]:
+      check_output(params)
 
+    clear_buckets(params)
     print("--------------------------\n", flush=True)
 
   print("END RESULTS ({0:d} ITERATIONS)".format(iterations), flush=True)
 
-  f = open("results/stats-{0:f}-{1:d}".format(params["now"], params["nonce"]), "w+")
+  dir_path = "results/{0:f}-{1:d}".format(params["now"], params["nonce"])
+  print("Directory:", dir_path)
+  return
+  os.mkdir(dir_path)
+  f = open("{0:s}/params".format(dir_path), "w+")
+  f.write(json.dumps(params, indent=2, sort_keys=True))
+  f.close()
+
+  f = open("{0:s}/stats".format(dir_path), "w+")
   f.write(json.dumps({"stats": stats}, indent=2, sort_keys=True))
   f.close()
 
-  clear_buckets(params)
   dependencies = create_dependency_chain(stats[1:], iterations)
   for key in dependencies:
     dependencies[key].duration = float(dependencies[key].duration) / iterations
-  dep_file = "results/dep-{0:f}-{1:d}".format(params["now"], params["nonce"])
+  dep_file = "{0:s}/dep".format(dir_path)
   f = open(dep_file, "w+")
   f.write(json.dumps(dependencies, indent=2, sort_keys=True, default=serialize))
   f.close()
@@ -394,7 +418,7 @@ def setup_connection(service, params):
 
 def clear_buckets(params):
   s3 = setup_connection("s3", params)
-  prefix = "ssw-{0:f}-{1:d}-".format(params["now"], params["nonce"])
+  prefix = "{0:s}-{1:f}-{2:d}-".format(params["input_prefix"], params["now"], params["nonce"])
 
   def delete_objects(bucket_name):
     bucket = s3.Bucket(bucket_name)
@@ -616,7 +640,7 @@ def wait_for_completion(start_time, params):
   last = params["pipeline"][-1]
   timeout = 6 * 60
   bucket_name = last["output_bucket"]
-  check_objects(client, bucket_name, "ssw", params["num_bins"], timeout, params)
+  check_objects(client, bucket_name, params["input_prefix"], params["num_output_files"], timeout, params)
   print("")
   time.sleep(10)  # Wait a little to make sure percolator logs are on the server
 

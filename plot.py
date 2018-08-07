@@ -22,7 +22,7 @@ def graph(key, dependencies, runtimes, num_threads, parent_id, layer=0, thread_i
   for i in range(len(children)):
     child = children[i]
     if dependencies[child]["name"] in ["smith-waterman"]:
-      thread_id = parent_id + i * 100
+      thread_id = parent_id + i * 150
     elif dependencies[child]["name"] in ["combine-blast-pivots"]:
       thread_id = parent_id + i * 10
     thread_id = graph(child, dependencies, runtimes, num_threads, parent_id, layer + 1, thread_id)
@@ -56,6 +56,7 @@ def offsets(pipeline, runtimes, lefts):
 
 def plot(dependencies, pipeline, iterations, params):
   num_layers = len(pipeline)
+
   num_threads = params["num_bins"] * 75
   lefts = list(map(lambda l: [0] * num_threads, range(num_layers)))
   runtimes = list(map(lambda l: [0] * num_threads, range(num_layers)))
@@ -64,6 +65,7 @@ def plot(dependencies, pipeline, iterations, params):
   threads = range(1, num_threads + 1)
   graph(root_map_fasta_key, dependencies, runtimes, num_threads, -1, layer=0, thread_id=0)
 
+  print("Graphing")
   root_map_blast_key = list(filter(lambda k: k.startswith("4:"), dependencies.keys()))[0]
   graph(root_map_blast_key, dependencies, runtimes, num_threads, 0, layer=4, thread_id=0)
 
@@ -73,6 +75,7 @@ def plot(dependencies, pipeline, iterations, params):
   labels = []
   legends = []
   for i in range(num_layers):
+    print("Layer", i)
     left = list(map(lambda r: float(r) / 1000, lefts[i]))
     runtime = list(map(lambda r: float(r) / 1000, runtimes[i]))
     if pipeline[i]["name"] in ["sort-blast-chunk", "smith-waterman", "find-blast-pivots", "combine-pivot-files"]:
@@ -81,7 +84,7 @@ def plot(dependencies, pipeline, iterations, params):
       height = 400
     else:
       height = 2
-    print(pipeline[i]["name"], height, runtime[0:20])
+    print(pipeline[i]["name"], runtime[:20])
     p = ax.barh(threads, runtime, color=colors[i % len(colors)], left=left, height=height, align="edge")
     legends.append(p[0])
     labels.append(pipeline[i]["name"])
