@@ -25,7 +25,7 @@ def combine(bucket_name, key, params):
     m["last"] = m["file_id"] == params["num_bins"]
   else:
     m["last"] = True
-    m["file-id"] = 1
+    m["file_id"] = 1
   m["bin"] = 1
 
   s3 = boto3.resource("s3")
@@ -33,9 +33,11 @@ def combine(bucket_name, key, params):
   keys = []
   prefix = util.key_prefix(key)
   while not have_all_files and (len(keys) == 0 or current_last_file(bucket_name, key)):
+    print("have all", have_all_files, "num", len(keys), "prefix", prefix)
     [have_all_files, keys] = util.have_all_files(bucket_name, prefix)
 
   if have_all_files and current_last_file(bucket_name, key):
+    print("Combining TIMESTAMP {0:f} NONCE {1:d} BIN {2:d}".format(m["timestamp"], m["nonce"], m["bin"]))
     format_lib = importlib.import_module(params["format"])
     iterator = getattr(format_lib, "Iterator")
     file_name = util.file_name(m)
