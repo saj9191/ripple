@@ -1,3 +1,4 @@
+import boto3
 import hashlib
 import re
 import iterator
@@ -143,3 +144,51 @@ class Iterator(iterator.Iterator):
 
   def endByte(self):
     return self.end_byte
+
+  @classmethod
+  def combine(cls, bucket_name, keys, temp_name, params):
+    iterators = []
+    count = 0
+    s3 = boto3.resource("s3")
+    for key in keys:
+      obj = s3.Object(bucket_name, key)
+      iterator = Iterator(obj, params["batch_size"], params["chunk_size"])
+      iterators.append(iterator)
+      count += iterator.getCount()
+
+    spectra = []
+    for iterator in iterators:
+      more = True
+      while more:
+        print(iterator.obj)
+        [s, more] = iterator.next(identifier=False)
+        spectra += s
+
+    content = open("header.mzML").read()
+    content = content.replace("-123456789", str(count))
+    offset = len(content)
+    offsets = []
+
+    for i in range(len(spectra)):
+      xml = spectra[i]
+      xml.set("index", str(i))
+      offsets.append((xml.get("id"), offset))
+      spectrum = ET.tostring(xml).decode()
+      offset += len(spectrum)
+      content += spectrum
+
+    content += "</spectrumList></run></mzML>\n"
+    list_offset = len(content)
+    content += '<indexList count="2">\n'
+    content += '<index name="spectrum">\n'
+    for offset in offsets:
+      content += '<offset idRef="controllerType=0 controllerNumber=1 scan={0:s}">{1:d}</offset>\n'.format(offset[0], offset[1])
+    content += "</index>\n"
+    content += "</indexList>\n"
+    content += "<indexListOffset>{0:d}</indexListOffset>\n".format(list_offset)
+    content += "<fileChecksum>"
+
+    content += str(hashlib.sha1(content.encode("utf-8")).hexdigest())
+    content += "</fileChecksum>\n</indexedmzML>"
+    with open(temp_name, "w+") as f:
+      f.write(content)
