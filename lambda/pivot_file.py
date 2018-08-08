@@ -6,7 +6,7 @@ import util
 def create_pivots(s3, sorted_input, params):
   max_identifier = int(sorted_input[-1][0] + 1)
   pivots = list(map(lambda p: p[0], sorted_input))
-  num_bins = 2 * params["num_bins"] * params["num_bins"]
+  num_bins = 2 * params["num_bins"]
   increment = int((len(sorted_input) + num_bins - 1) / num_bins)
   pivots = pivots[0::increment]
   if pivots[-1] == max_identifier - 1:
