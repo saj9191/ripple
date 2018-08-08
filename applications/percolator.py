@@ -1,8 +1,13 @@
 import boto3
+import os
 import subprocess
+import util
 
 
 def run(file, params, m):
+  util.print_request(m, params)
+  util.print_read(m, file, params)
+
   s3 = boto3.resource('s3')
   database_bucket = s3.Bucket("maccoss-human-fasta")
 
@@ -22,6 +27,15 @@ def run(file, params, m):
   subprocess.check_output(command, shell=True)
 
   output_files = []
+  m["file_id"] = 1
+  m["bin"] = 1
+  m["more"] = False
   for item in ["target.psms", "decoy.psms", "target.peptides", "decoy.peptides"]:
-    output_files.append("{0:s}/percolator.{1:s}.txt".format(output_dir, item))
+    input_file = "{0:s}/percolator.{1:s}.txt".format(output_dir, item)
+    prefix = "percolator.{0:s}".format(item)
+    m["prefix"] = prefix
+    output_file = "{0:s}/{1:s}".format(output_dir, util.file_name(m))
+    os.rename(input_file, output_file)
+    output_files.append(output_file)
+
   return output_files

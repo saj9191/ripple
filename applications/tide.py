@@ -5,6 +5,9 @@ import util
 
 
 def run(file, params, m):
+  util.print_request(m, params)
+  util.print_read(m, file, params)
+
   s3 = boto3.resource('s3')
   database_bucket = s3.Bucket("maccoss-human-fasta")
 
@@ -33,16 +36,17 @@ def run(file, params, m):
     "--overwrite", "T"
   ]
 
-  print("COUNT", "file", m["file_id"], "bin", m["bin"], subprocess.check_output("cat {0:s} | wc -l".format(file), shell=True))
   command = "cd /tmp; ./crux tide-search {0:s} HUMAN.fasta.20170123.index {1:s}".format(file, " ".join(arguments))
   subprocess.check_output(command, stderr=subprocess.STDOUT, shell=True)
   input_file = "{0:s}/tide-search.txt".format(output_dir)
   p = dict(m)
   p["prefix"] = "tide-search"
   p["ext"] = "txt"
-  print("m", m)
-  print("p", p)
   output_file = "{0:s}/{1:s}".format(output_dir, util.file_name(p))
-  os.rename(input_file, output_file)
+  with open(input_file) as inf:
+    with open(output_file, "w+") as outf:
+      content = inf.read()
+      index = content.find("\n")
+      outf.write(content[index + 1:])
 
   return [output_file]

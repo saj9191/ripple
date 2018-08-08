@@ -33,11 +33,10 @@ def combine(bucket_name, key, params):
   keys = []
   prefix = util.key_prefix(key)
   while not have_all_files and (len(keys) == 0 or current_last_file(bucket_name, key)):
-    print("have all", have_all_files, "num", len(keys), "prefix", prefix)
     [have_all_files, keys] = util.have_all_files(bucket_name, prefix)
 
   if have_all_files and current_last_file(bucket_name, key):
-    print("Combining TIMESTAMP {0:f} NONCE {1:d} BIN {2:d}".format(m["timestamp"], m["nonce"], m["bin"]))
+    print("Combining TIMESTAMP {0:f} NONCE {1:d} BIN {2:d} FILE {3:d}".format(m["timestamp"], m["nonce"], m["bin"], m["file_id"]))
     format_lib = importlib.import_module(params["format"])
     iterator = getattr(format_lib, "Iterator")
     file_name = util.file_name(m)
@@ -45,7 +44,7 @@ def combine(bucket_name, key, params):
     # Make this deterministic and combine in the same order
     keys.sort()
     iterator.combine(bucket_name, keys, temp_name, params)
-    util.print_write(m, file_name, params)
+    util.print_write(m, temp_name, params)
     s3.Object(params["output_bucket"], file_name).put(Body=open(temp_name, "rb"))
   return p
 
