@@ -70,21 +70,12 @@ class Iterator(iterator.Iterator):
 
   @classmethod
   def combine(cls, bucket_name, keys, temp_name, params):
-    print("Combining", len(keys))
     s3 = boto3.resource("s3")
     if params["sort"]:
       raise Exception("Not implement")
 
-    with open(temp_name, "w+") as f:
-      first = True
+    with open(temp_name, "wb+") as f:
+      f.write(str.encode("\t".join(Iterator.HEADER_ITEMS)))
       for key in keys:
         obj = s3.Object(bucket_name, key)
-        print("content length", obj.content_length)
-        content = obj.get()["Body"].read().decode("utf-8")
-        print("length", len(content))
-        # TODO: Unhardcode
-        if first:
-          f.write(content)
-          first = False
-        else:
-          f.write("\n".join(content.split("\n")[1:]))
+        f.write(obj.get()["Body"].read())
