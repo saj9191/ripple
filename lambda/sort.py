@@ -6,8 +6,6 @@ import util
 def bin_input(s3, sorted_input, format_lib, m, bin_ranges, params):
   bin_index = 0
   binned_input = list(map(lambda r: [], bin_ranges))
-  print("WTF")
-  print(m["timestamp"], m["nonce"], "Item count", len(sorted_input))
   count = 0
   for sinput in sorted_input:
     identifier = sinput[0]
@@ -20,7 +18,6 @@ def bin_input(s3, sorted_input, format_lib, m, bin_ranges, params):
         bin_index += 1
     binned_input[bin_index].append(sinput[1])
     count += 1
-  print("Binned count", count)
 
   count = 0
   iterator_class = getattr(format_lib, "Iterator")
@@ -29,14 +26,12 @@ def bin_input(s3, sorted_input, format_lib, m, bin_ranges, params):
     content = iterator_class.fromArray(binned_input[i])
     m["bin"] = bin_ranges[i]["bin"]
     bin_key = util.file_name(m)
-#    util.print_write(m, bin_key, params)
+    util.print_write(m, bin_key, params)
     s3.Object(bin_ranges[i]["bucket"], bin_key).put(Body=str.encode(content))
-  print(m["timestamp"], m["nonce"], m["bin"], "Written count", count)
 
 
 def sort(bucket_name, key, m, start_byte, end_byte, pivots, params):
   util.clear_tmp()
-  m = util.parse_file_name(key)
   util.print_request(m, params)
   if "extra_params" not in params or "token" not in params["extra_params"]:
     util.print_read(m, key, params)
@@ -64,6 +59,7 @@ def handle_sort(bucket_name, key, params, eparams, pivots):
 
     m["last"] = not more
     m["file_id"] = file_id
+    print("FILE ID", file_id)
     sort(bucket_name, key, m, start_byte, end_byte, pivots, params)
   else:
     s3 = boto3.resource('s3')
