@@ -111,7 +111,7 @@ class Iterator:
     if len(self.offsets) > self.batch_size:
       end_offset = self.offsets[self.batch_size] - 1
     else:
-      end_offset = self.current_offset
+      end_offset = self.endByte()
     self.seen_count += min(len(self.offsets), self.batch_size)
     self.offsets = self.offsets[self.batch_size:]
     return (start_offset, end_offset, self.more())
@@ -142,3 +142,6 @@ class Iterator:
 
   def more(self):
     return self.seen_count < self.total_count
+
+  def endByte(self):
+    return self.current_offset

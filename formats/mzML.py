@@ -47,6 +47,13 @@ class Iterator(iterator.Iterator):
     self.spectra_list_offset += stream.find("<offset")
     self.current_offset = self.spectra_list_offset
 
+    start_byte = self.spectra_list_offset - self.INDEX_CHUNK_SIZE
+    end_byte = self.spectra_list_offset
+    stream = iterator.Iterator.getBytes(self.obj, start_byte, end_byte)
+
+    index = stream.rfind(Iterator.SPECTRUM_CLOSE_TAG)
+    self.end_byte = start_byte + index + len(Iterator.SPECTRUM_CLOSE_TAG) - 1
+
     self.updateOffsets()
     if len(self.offsets) == 0:
       self.total_count = 0
@@ -133,3 +140,6 @@ class Iterator(iterator.Iterator):
     [spectra, more] = self.next()
     content = Iterator.fromArray(spectra)
     return [content, more]
+
+  def endByte(self):
+    return self.end_byte
