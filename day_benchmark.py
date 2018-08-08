@@ -1,5 +1,6 @@
 import argparse
 import benchmark
+import boto3
 from dateutil import parser
 import json
 import queue
@@ -22,12 +23,6 @@ class Request(threading.Thread):
     self.thread_id = thread_id
 
   def run(self):
-  s3 = boto3.resource("s3")
-  program_bucket = s3.Bucket(params["program_bucket"])
-
-  with open("/tmp/ssw_test", "wb") as f:
-    program_bucket.download_fileobj("ssw_test", f)
-
     print("Thread {0:d}: Sleeping for {1:d} seconds".format(self.thread_id, self.time))
     time.sleep(self.time)
     [access_key, secret_key] = util.get_credentials("default")
@@ -35,8 +30,8 @@ class Request(threading.Thread):
     self.params["access_key"] = access_key
     self.params["secret_key"] = secret_key
     print("Thread {0:d}: Processing file {1:s}".format(self.thread_id, self.file_name))
-    benchmark.run(self.params)
-    self.queue.put((self.params["now"], self.params["nonce"]))
+    [directory, failed_attempts] = benchmark.run(self.params)
+    self.queue.put((self.params["now"], self.params["nonce"], directory, failed_attempts))
     print("Thread {0:d}: Done".format(self.thread_id))
 
 
@@ -57,6 +52,7 @@ def parse_csv(file_name, num_requests):
     datetimes[parts[0]].append(date.hour * 60 * 60 + date.minute * 60 + date.second)
 
   for date in datetimes:
+    print(date, len(datetimes[date]))
     if len(datetimes[date]) == num_requests:
       return datetimes[date]
 
@@ -80,8 +76,16 @@ def launch_threads(requests, file_names, params):
 
 def run(args, params):
   requests = parse_csv(args.file, args.num_requests)
-  file_names = ["a", "b", "c"]
-  requests = [0, 100, 200]
+  requests = [0]
+  requests = list(filter(lambda r: r < 1*60*60, requests))
+  print("Number of requests", len(requests))
+  session = boto3.Session(
+           aws_access_key_id=params["access_key"],
+           aws_secret_access_key=params["secret_key"],
+           region_name=params["region"]
+  )
+  s3 = session.resource("s3")
+  file_names = list(map(lambda o: o.key, s3.Bucket("shjoyner-sample-input").objects.all()))
   launch_threads(requests, file_names, params)
 
 

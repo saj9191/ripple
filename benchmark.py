@@ -137,8 +137,8 @@ def upload_input(params):
 
   start = time.time()
   if params["sample_input"]:
-    print("Moving {0:s} to s3:://{1:s}".format(params["input"], bucket_name), flush=True)
-    s3.Object(bucket_name, key).copy_from("shjoyner-sample-input", params["input_name"])
+    print("Moving {0:s} to s3://{1:s}".format(params["input_name"], bucket_name), flush=True)
+    s3.Object(bucket_name, key).copy_from(CopySource={"Bucket": "shjoyner-sample-input", "Key": params["input_name"]})
   else:
     print("Uploading {0:s} to s3://{1:s}".format(params["input"], bucket_name), flush=True)
     s3.Object(bucket_name, key).put(Body=open("data/{0:s}".format(params["input"]), 'rb'))
@@ -166,6 +166,7 @@ def load_stats(upload_duration):
 
 def benchmark(i, params):
   done = False
+  failed_attempts = 0
   while not done:
     try:
       if params["model"] == "lambda":
@@ -177,10 +178,11 @@ def benchmark(i, params):
 
       done = True
     except BenchmarkException as e:
+      failed_attempts += 1
       print("Error during iteration {0:d}".format(i), e, flush=True)
       clear_buckets(params)
 
-  return results
+  return [results, failed_attempts]
 
 
 def serialize(obj):
@@ -327,12 +329,13 @@ def run(params):
     setup.setup(params)
   pipeline = [{"name": "load"}] + params["pipeline"] + [{"name": "total"}]
   stats = list(map(lambda s: [], pipeline))
-
+  failed_attempts = 0
   for i in range(iterations):
     process_iteration_params(params, i)
-    results = benchmark(i, params)
+    [results, failed] = benchmark(i, params)
+    failed_attempts += failed
     for j in range(len(results)):
-      stats[j].append(results[0])
+      stats[j].append(results[j])
     if params["check_output"]:
       check_output(params)
 
@@ -362,8 +365,9 @@ def run(params):
   if params["plot"]:
     dependencies = json.loads(open(dep_file).read())
     plot.plot(dependencies, pipeline[1:], iterations, params)
+
   print("Directory:", dir_path)
-  return
+  return [dir_path, failed_attempts]
 
 
 def calculate_total_stats(stats):
@@ -599,16 +603,8 @@ def check_objects(client, bucket_name, prefix, count, timeout, params):
   # There's apparently a stupid bug where str(timestamp) has more significant
   # digits than "{0:f}:.format(timestmap)
   # eg. spectra-1530978873.960075-1-0-58670073.txt 1530978873.9600754
-  m = {
-    "prefix": prefix,
-    "timestamp": params["now"],
-    "nonce": params["nonce"],
-    "bin": 1,
-    "file_id": 1,
-    "last": True,
-    "ext": "test"
-  }
-  prefix = util.key_prefix(util.file_name(m))
+  token = "{0:f}-{1:d}".format(params["now"], params["nonce"])
+  #prefix = util.key_prefix(util.file_name(m))
   start = datetime.datetime.now()
   s3 = setup_connection("s3", params)
   bucket = s3.Bucket(bucket_name)
@@ -617,8 +613,9 @@ def check_objects(client, bucket_name, prefix, count, timeout, params):
     now = time.time()
     found = set()
     for obj in bucket.objects.filter(Prefix=prefix):
-      found.add(int(util.parse_file_name(obj.key)["file_id"]))
-      c += 1
+      if token in obj.key:
+        found.add(int(util.parse_file_name(obj.key)["file_id"]))
+        c += 1
     done = (c == count)
     end = datetime.datetime.now()
     now = end.strftime("%H:%M:%S")
@@ -640,7 +637,7 @@ def wait_for_completion(start_time, params):
   last = params["pipeline"][-1]
   timeout = 6 * 60
   bucket_name = last["output_bucket"]
-  check_objects(client, bucket_name, params["input_prefix"], params["num_output_files"], timeout, params)
+  check_objects(client, bucket_name, params["output_prefix"], params["num_output_files"], timeout, params)
   print("")
   time.sleep(10)  # Wait a little to make sure percolator logs are on the server
 
@@ -718,6 +715,8 @@ def file_count(bucket_name, params):
 
 def parse_mult_logs(client, params, lparams, num_lambdas=None):
   [events, messages] = fetch_events(client, lparams["name"], params["now"], params["nonce"], "REPORT RequestId")
+  if len(events) == 0:
+    raise BenchmarkException("Can't find events for", lparams["name"])
   max_billed_duration = 0
   min_billed_duration = 5*60*1000
   total_billed_duration = 0
@@ -779,14 +778,14 @@ def parse_logs(params, upload_timestamp, upload_duration, total_duration):
     step = params["pipeline"][i]
     stats.append(parse_mult_logs(client, params, step))
 
-  return {
+  stats.append({
     "name": "total",
     "billed_duration": [total_duration],
     "max_duration": total_duration,
     "memory_used": 0,
     "cost": 0,
     "messages": [],
-  }
+  })
   return stats
 
 
