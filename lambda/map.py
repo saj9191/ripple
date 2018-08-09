@@ -38,7 +38,7 @@ def map_file(bucket_name, key, params):
             "token": params["token"],
             "target_bucket": params["map_bucket"],
             "target_file": obj.key,
-            "prefix": params["key_fields"]["prefix"] + 1,
+            "prefix": params["prefix"] + 1,
           }
         }
       }]

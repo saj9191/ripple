@@ -43,12 +43,15 @@ def lambda_setup(event, context):
     prefix = s3["extra_params"]["prefix"]
   else:
     prefix = key_fields["prefix"]
+
   params = json.loads(open("{0:d}.json".format(prefix)).read())
+  params["prefix"] = prefix
   params["token"] = random.randint(1, 100*1000*1000)
   params["request_id"] = context.aws_request_id
   params["key_fields"] = key_fields
   if "extra_params" in s3:
     params["extra_params"] = s3["extra_params"]
+
   return [bucket_name, key, params]
 
 

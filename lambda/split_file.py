@@ -50,6 +50,7 @@ def split_file(bucket_name, key, params):
           },
           "extra_params": {
             "token": params["token"],
+            "prefix": params["prefix"] + 1,
           }
         }
       }]

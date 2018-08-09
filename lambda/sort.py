@@ -59,7 +59,6 @@ def handle_sort(bucket_name, key, params, eparams, pivots):
 
     m["last"] = not more
     m["file_id"] = file_id
-    print("FILE ID", file_id)
     sort(bucket_name, key, m, start_byte, end_byte, pivots, params)
   else:
     s3 = boto3.resource('s3')

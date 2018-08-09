@@ -40,7 +40,8 @@ def run(file, params, m):
   subprocess.check_output(command, stderr=subprocess.STDOUT, shell=True)
   input_file = "{0:s}/tide-search.txt".format(output_dir)
   p = dict(m)
-  p["prefix"] = m["prefix"] + 1
+  print(params["key_fields"])
+  p["prefix"] = params["prefix"] + 1
   p["ext"] = "txt"
   output_file = "{0:s}/{1:s}".format(output_dir, util.file_name(p))
   with open(input_file) as inf:

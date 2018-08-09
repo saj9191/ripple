@@ -103,8 +103,8 @@ def process_params(params):
   _, ext = os.path.splitext(params["input_name"])
   params["ext"] = ext[1:]
   params["input"] = params["input_name"]
-  params["input_bucket"] = params["pipeline"][0]["input_bucket"]
-  params["output_bucket"] = params["pipeline"][-1]["output_bucket"]
+  params["input_bucket"] = params["bucket"]
+  params["output_bucket"] = params["bucket"]
   for i in range(len(params["pipeline"])):
     for p in ["num_bins", "num_buckets", "timeout"]:
       if p in params:
@@ -118,7 +118,7 @@ def process_iteration_params(params, iteration):
   params["now"] = now
   params["nonce"] = random.randint(1, 1000)
   m = {
-    "prefix": params["input_prefix"],
+    "prefix": "0",
     "timestamp": params["now"],
     "nonce": params["nonce"],
     "bin": 1,
@@ -135,7 +135,7 @@ def upload_input(params, thread_id=0):
   key = params["key"]
 
   start = time.time()
-  if params["sample_input"]:
+  if "sample_input" in params and params["sample_input"]:
     print("Thread {0:d}: Moving {1:s} to s3://{2:s}".format(thread_id, params["input_name"], bucket_name), flush=True)
     s3.Object(bucket_name, key).copy_from(CopySource={"Bucket": "shjoyner-sample-input", "Key": params["input_name"]})
   else:
@@ -323,8 +323,8 @@ def run(params, thread_id):
   print_run_information()
   process_params(params)
 
-  if params["setup"]:
-    setup.setup(params)
+  #if params["setup"]:
+  setup.setup(params)
   i = 0
   process_iteration_params(params, i)
   return benchmark(i, params, thread_id)
@@ -749,6 +749,7 @@ def parse_logs(params, upload_timestamp, upload_duration, total_duration):
 
 def lambda_benchmark(params, thread_id):
   [upload_timestamp, upload_duration] = upload_input(params, thread_id)
+  raise Exception("")
   start_time = time.time()
   wait_for_completion(upload_timestamp, params, thread_id)
   end_time = time.time()
@@ -1062,7 +1063,7 @@ def main():
   params["access_key"] = access_key
   params["secret_key"] = secret_key
   print(params)
-  run(params)
+  run(params, 0)
 
 
 if __name__ == "__main__":
