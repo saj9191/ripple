@@ -1,12 +1,13 @@
 import boto3
 
-num_entries_per_file = 1*1000*1000
+num_entries_per_file = 4*1000*1000
 num_entries = 370261379
 num_files = (num_entries + num_entries_per_file - 1) / num_entries_per_file
 
 s3 = boto3.resource("s3")
 bucket_name = "maccoss-smith-waterman-fasta"
-
+bucket = s3.Bucket(bucket_name)
+bucket.objects.all().delete()
 
 def add(file_id, content):
   key = "uniprot-fasta-{0:d}".format(file_id)
