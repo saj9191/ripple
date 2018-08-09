@@ -109,6 +109,9 @@ class Iterator(iterator.Iterator):
     root = ET.fromstring("<data>" + content.strip() + "</data>")
     spectra = root.iter("spectrum")
 
+    # Filter out MS1
+    spectra = list(filter(lambda s: Iterator.cvParam(s, "ms level") == 2.0, spectra))
+
     if identifier:
       spectra = list(map(lambda s: (Iterator.getIdentifier(s, identifier), s), spectra))
     else:
