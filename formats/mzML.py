@@ -172,39 +172,38 @@ class Iterator(iterator.Iterator):
       iterators.append(iterator)
       count += iterator.getCount()
 
-    spectra = []
-    for iterator in iterators:
-      more = True
-      while more:
-        print(iterator.obj)
-        [s, more] = iterator.next(identifier=False)
-        spectra += s
-
-    content = open("header.mzML").read()
-    content = content.replace("-123456789", str(count))
-    offset = len(content)
-    offsets = []
-
-    for i in range(len(spectra)):
-      xml = spectra[i]
-      xml.set("index", str(i))
-      offsets.append((xml.get("id"), offset))
-      spectrum = ET.tostring(xml).decode()
-      offset += len(spectrum)
-      content += spectrum
-
-    content += "</spectrumList></run></mzML>\n"
-    list_offset = len(content)
-    content += '<indexList count="2">\n'
-    content += '<index name="spectrum">\n'
-    for offset in offsets:
-      content += '<offset idRef="controllerType=0 controllerNumber=1 scan={0:s}">{1:d}</offset>\n'.format(offset[0], offset[1])
-    content += "</index>\n"
-    content += "</indexList>\n"
-    content += "<indexListOffset>{0:d}</indexListOffset>\n".format(list_offset)
-    content += "<fileChecksum>"
-
-    content += str(hashlib.sha1(content.encode("utf-8")).hexdigest())
-    content += "</fileChecksum>\n</indexedmzML>"
     with open(temp_name, "w+") as f:
+      content = open("header.mzML").read()
+      content = content.replace("-123456789", str(count))
+      f.write(content)
+      offset = len(content)
+      offsets = []
+      index = 0
+
+      for iterator in iterators:
+        more = True
+        while more:
+          [spectra, more] = iterator.next(identifier=False)
+          content = ""
+          for i in range(len(spectra)):
+            xml = spectra[i]
+            xml.set("index", str(index))
+            offsets.append((xml.get("id"), offset))
+            spectrum = ET.tostring(xml).decode()
+            offset += len(spectrum)
+            content += spectrum
+            index += 1
+          f.write(content)
+
+      content = "</spectrumList></run></mzML>\n"
+      list_offset = len(content) + offset
+      content += '<indexList count="2">\n'
+      content += '<index name="spectrum">\n'
+      for offset in offsets:
+        content += '<offset idRef="controllerType=0 controllerNumber=1 scan={0:s}">{1:d}</offset>\n'.format(offset[0], offset[1])
+      content += "</index>\n"
+      content += "</indexList>\n"
+      content += "<indexListOffset>{0:d}</indexListOffset>\n".format(list_offset)
+      content += "<fileChecksum>"
+      content += "</fileChecksum>\n</indexedmzML>"
       f.write(content)
