@@ -20,7 +20,7 @@ def run(file, params, m):
   arguments = [
     "--subset-max-train", str(params["max_train"]),
     "--quick-validation", "T",
-    "--output-dir", output_dir
+    "--output-dir", output_dir,
   ]
 
   command = "cd /tmp; ./crux percolator {0:s} {1:s}".format(file, " ".join(arguments))
