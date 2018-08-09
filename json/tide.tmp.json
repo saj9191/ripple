@@ -79,8 +79,8 @@
 	},
 	"pipeline": [{
 		"name": "split-mzML",
-		"batch_size": 10000,
-		"chunk_size": 5000000,
+		"batch_size": 4000,
+		"chunk_size": 500000,
 		"output_function": "top-mzML"
 	}, {
 		"name": "top-mzML",

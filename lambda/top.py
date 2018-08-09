@@ -4,10 +4,7 @@ import importlib
 import util
 
 
-def find_top(bucket_name, key, params):
-  util.clear_tmp()
-  m = util.parse_file_name(key)
-
+def find_top(bucket_name, key, m, start_byte, end_byte, params):
   s3 = boto3.resource("s3")
   obj = s3.Object(bucket_name, key)
   format_lib = importlib.import_module(params["format"])
@@ -18,7 +15,12 @@ def find_top(bucket_name, key, params):
   more = True
   identifier = params["identifier"] if "identifier" in params else None
   while more:
-    [spectra, more] = it.next(identifier=identifier)
+    if start_byte == 0 and end_byte == obj.content_length:
+      [spectra, more] = it.next(identifier=identifier)
+    else:
+      it.get(obj, start_byte, end_byte, identifier=identifier)
+      more = False
+
     for spectrum in spectra:
       heapq.heappush(top, spectrum)
       if len(top) > params["number"]:
@@ -35,7 +37,7 @@ def find_top(bucket_name, key, params):
   return m
 
 
-def run(bucket_name, key, params):
+def run(bucket_name, key, params, func):
   util.clear_tmp()
   m = util.parse_file_name(key)
   if "range" in params["extra_params"]:
@@ -47,15 +49,15 @@ def run(bucket_name, key, params):
 
     m["last"] = not more
     m["file_id"] = file_id
-    sort(bucket_name, key, m, start_byte, end_byte, pivots, params)
+    func(bucket_name, key, m, start_byte, end_byte, params)
   else:
     s3 = boto3.resource('s3')
     obj = s3.Object(bucket_name, key)
-    sort(bucket_name, key, m, 0, obj.content_length, pivots, params)
+    func(bucket_name, key, m, 0, obj.content_length, params)
   return m
 
 
 def handler(event, context):
   [bucket_name, key, params] = util.lambda_setup(event, context)
-  m = find_top(bucket_name, key, params)
+  m = run(bucket_name, key, params, find_top)
   util.show_duration(context, m, params)
