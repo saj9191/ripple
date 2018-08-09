@@ -79,17 +79,19 @@
 	},
 	"pipeline": [{
 		"name": "split-mzML",
-		"batch_size": 4000,
+		"batch_size": 8000,
 		"chunk_size": 500000,
 		"output_function": "top-mzML"
 	}, {
 		"name": "top-mzML",
 		"identifier": "tic",
 		"number": 1000,
-		"batch_size": 10000,
-		"chunk_size": 100000000
+		"batch_size": 1000,
+		"chunk_size": 1000000
 	}, {
 	  "name": "combine-mzML-files",
+		"batch_size": 1000,
+		"chunk_size": 1000000,
 		"sort": false
 	}, {
 		"name": "top-mzML",
