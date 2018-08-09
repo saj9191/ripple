@@ -81,12 +81,26 @@ class Iterator(iterator.Iterator):
       self.remainder = ""
     self.current_offset = end_byte + 1
 
-  def getMass(spectrum):
+  def getIdentifier(spectrum, identifier):
+    if identifier == "mass":
+      return Iterator.getMass(spectrum)
+    elif identifier == "tic":
+      return Iterator.getTIC(spectrum)
+    else:
+      raise Exception("Unknown identifier", identifier)
+
+  def cvParam(spectrum, name):
     for cvParam in spectrum.iter("cvParam"):
-      if cvParam.get("name") == "base peak m/z":
+      if cvParam.get("name") == name:
         return float(cvParam.get("value"))
 
-  def get(obj, start_byte, end_byte, identifier=False):
+  def getMass(spectrum):
+    return Iterator.cvParam(spectrum, "base peak m/z")
+
+  def getTIC(spectrum):
+    return Iterator.cvParam(spectrum, "total ion current")
+
+  def get(obj, start_byte, end_byte, identifier):
     content = Iterator.getBytes(obj, start_byte, end_byte)
     index = content.rfind(Iterator.SPECTRUM_LIST_CLOSE_TAG)
     if index != -1:
@@ -96,14 +110,13 @@ class Iterator(iterator.Iterator):
     spectra = root.iter("spectrum")
 
     if identifier:
-      spectra = list(map(lambda s: (Iterator.getMass(s), s), spectra))
+      spectra = list(map(lambda s: (Iterator.getIdentifier(s, identifier), s), spectra))
     else:
       spectra = list(spectra)
     return spectra
 
   def fromArray(spectra, includeHeader=False):
     content = open("header.mzML").read()
-    print("adding", len(spectra), "spectra")
     content = content.replace("-123456789", str(len(spectra)))
     offset = len(content)
     offsets = []
