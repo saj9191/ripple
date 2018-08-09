@@ -1,47 +1,32 @@
 import boto3
-import s3
-import util
 
-def split_spectra(key, bucket_name, batch_size, chunk_size):
-  s3 = boto3.resource("s3")
-  obj = s3.Object(bucket_name, key)
-  num_bytes = obj.content_length
+num_entries_per_file = 4*1000*1000
+num_entries = 370261379
+num_files = (num_entries + num_entries_per_file - 1) / num_entries_per_file
 
-  m = util.parse_file_name(key)
-  ts = m["timestamp"]
-  _, ext = os.path.splitext(key)
+s3 = boto3.resource("s3")
+bucket_name = "maccoss-smith-waterman-fasta"
+bucket = s3.Bucket(bucket_name)
+bucket.objects.all().delete()
 
-  if ext == ".mzML":
-    iterator = spectra.mzMLSpectraIterator(obj, batch_size, chunk_size)
-  elif ext == ".ms2":
-    iterator = spectra.ms2SpectraIterator(obj, batch_size, chunk_size)
+def add(file_id, content):
+  key = "uniprot-fasta-{0:d}".format(file_id)
+  print("Adding key", key)
+  s3.Object(bucket_name, key).put(Body=str.encode(content))
 
-  client = botot3.client("lambda")
 
-  more = True:
-  while more:
-    [start_byte, end_byte, more] = iterator.nextOffsets(self)
-    payload = b"""{
-      Records: [{
-        "s3": {
-          "bucket": {
-            "name": {0:s}
-          },
-          "object": {
-            "key": {1:s}
-          },
-          "range": {
-            "start_byte": {2:d},
-            "end_byte": {3:d}
-          }
-        }
-      }]
-    }""".format(bucket_name, key, start_byte_end_byte)
+with open("data/uniprot-all.fasta", "r") as f:
+  count = 0
+  file_id = 1
+  content = ""
+  for line in f:
+    content += line
+    count += 1
+    if count == num_entries_per_file:
+      add(file_id, content)
+      file_id += 1
+      content = ""
+      count = 0
 
-    # TODO: Check responses?
-    client.invoke(
-      FunctionName="AnalyzeSpectra",
-      InvocationType="Event",
-      Payload=payload
-    )
-
+if len(content) > 0:
+  add(file_id, content)

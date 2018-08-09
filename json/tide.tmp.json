@@ -1,0 +1,114 @@
+{
+  "input_name": "ASH_20170314_HELA_90MIN_20170320042659.mzML",
+	"model": "lambda",
+	"iterations": 1,
+	"region": "us-west-2",
+	"timeout": 300,
+  "iterations": 1,
+	"num_buckets": 2,
+	"num_bins": 40,
+	"bucket": "shjoyner-tide",
+	"dependencies": {
+		"common": [
+		  "constants.py",
+			"formats/iterator.py",
+			"formats/pivot.py",
+		  "util.py"
+		],
+		"formats": {
+			"mzML": [
+				"header.mzML"
+			]
+		}
+	},
+	"functions": {
+		"split-mzML": {
+		  "file": "split_file",
+		  "format": "mzML",
+		  "memory_size": 1024
+		},
+		"find-mzML-pivots": {
+		  "file": "pivot_file",
+		  "format": "mzML",
+		  "memory_size": 1024
+		},
+		"combine-pivot-files": {
+		  "file": "combine_files",
+		  "format": "pivot",
+		  "memory_size": 1024
+		},
+		"sort-mzML-chunk": {
+		  "file": "sort",
+		  "format": "mzML",
+		  "memory_size": 1024
+		},
+		"combine-mzML-files": {
+		  "file": "combine_files",
+		  "format": "mzML",
+		  "memory_size": 1024
+		},
+		"tide": {
+		  "file": "application",
+		  "application": "tide",
+		  "memory_size": 1024
+		},
+		"combine-tsv-files": {
+		  "file": "combine_files",
+		  "format": "tsv",
+		  "memory_size": 1024
+		},
+		"percolator": {
+		  "file": "application",
+		  "application": "percolator",
+		  "memory_size": 3008
+		},
+		"top-mzML": {
+	    "file": "top",
+		  "format": "mzML",
+		  "memory_size": 1024
+		},
+		"map-species": {
+	    "file": "map",
+		  "memory_size": 1024
+		},
+		"find-species-match": {
+	    "file": "match",
+		  "format": "percolator",
+		  "memory_size": 1024
+		}
+	},
+	"pipeline": [{
+		"name": "split-mzML",
+		"batch_size": 10000,
+		"chunk_size": 5000000,
+		"output_function": "top-mzML"
+	}, {
+		"name": "top-mzML",
+		"identifier": "tic",
+		"number": 1000,
+		"batch_size": 10000,
+		"chunk_size": 100000000
+	}, {
+	  "name": "combine-mzML-files",
+		"sort": false
+	}, {
+		"name": "top-mzML",
+		"identifier": "tic",
+		"number": 1000,
+		"batch_size": 4000,
+		"chunk_size": 100000000
+	}, {
+	  "name": "map-species",
+		"map_bucket": "shjoyner-fasta",
+		"ranges": false,
+		"directories": true,
+		"output_function": "tide",
+		"ranges": false
+	}, {
+    "name": "tide",
+		"num_threads": 0
+	}, {
+    "name": "percolator",
+		"max_train": 0
+	}]
+}
