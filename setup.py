@@ -1,4 +1,5 @@
 import argparse
+import botocore
 import json
 import os
 import shutil
@@ -6,42 +7,9 @@ import subprocess
 import util
 
 
-def upload_lambda(client, functions, fparams, files):
-  json_name = "params.json"
-  f = open(json_name, "w")
-  f.write(json.dumps(fparams))
-  f.close()
-
-  files.append(json_name)
-
-  subprocess.call("zip {0:s}.zip {1:s}".format(fparams["file"], " ".join(files)), shell=True)
-
-  with open("{0:s}.zip".format(fparams["file"]), "rb") as f:
-    zipped_code = f.read()
-
-  buckets = function_buckets(fparams)
-  if fparams["name"] in functions:
-    response = client.update_function_code(
-      FunctionName=fparams["name"],
-      ZipFile=zipped_code,
-    )
-    assert(response["ResponseMetadata"]["HTTPStatusCode"] == 200)
-    response = client.update_function_configuration(
-      FunctionName=fparams["name"],
-      Timeout=fparams["timeout"],
-      MemorySize=fparams["memory_size"]
-    )
-    assert(response["ResponseMetadata"]["HTTPStatusCode"] == 200)
-    for bucket in buckets:
-      try:
-        client.remove_permission(
-          FunctionName=fparams["name"],
-          StatementId=fparams["name"] + "-" + bucket
-        )
-      except Exception as e:
-        print("Cannot remove permissions for", fparams["name"], bucket)
-
-  else:
+def upload_function_code(client, zip_file, fparams, params, create):
+  zipped_code = open(zip_file, "rb").read()
+  if create:
     response = client.create_function(
       FunctionName=fparams["name"],
       Runtime="python3.6",
@@ -50,147 +18,72 @@ def upload_lambda(client, functions, fparams, files):
       Code={
         "ZipFile": zipped_code
       },
-      Timeout=fparams["timeout"],
+      Timeout=params["timeout"],
       MemorySize=fparams["memory_size"]
     )
     assert(response["ResponseMetadata"]["HTTPStatusCode"] == 201)
 
-  for bucket in buckets:
-    client.add_permission(
+  else:
+    response = client.update_function_code(
       FunctionName=fparams["name"],
-      StatementId=fparams["name"] + "-" + bucket,
-      Action="lambda:InvokeFunction",
-      Principal="s3.amazonaws.com",
-      SourceArn="arn:aws:s3:::{0:s}".format(bucket)
+      ZipFile=zipped_code
     )
-
-  os.remove("{0:s}.zip".format(fparams["file"]))
-  os.remove(json_name)
-
-
-def upload_format_file(client, functions, fparams):
-  print(fparams)
-  format_file = "{0:s}.py".format(fparams["format"])
-  shutil.copyfile("../formats/{0:s}".format(format_file), format_file)
-  files = [
-    format_file,
-    "header.{0:s}".format(fparams["format"]),
-    "iterator.py",
-    "{0:s}.py".format(fparams["file"]),
-    "util.py"
-  ]
-
-  shutil.copyfile("../formats/pivot.py", "pivot.py")
-  files.append("pivot.py")
-
-  upload_lambda(client, functions, fparams, files)
-  os.remove(format_file)
-  os.remove("pivot.py")
+    assert(response["ResponseMetadata"]["HTTPStatusCode"] == 200)
+    response = client.update_function_configuration(
+      FunctionName=fparams["name"],
+      Timeout=params["timeout"],
+      MemorySize=fparams["memory_size"]
+    )
+    assert(response["ResponseMetadata"]["HTTPStatusCode"] == 200)
+    try:
+      client.remove_permission(
+        FunctionName=fparams["name"],
+        StatementId=fparams["name"] + "-" + params["bucket"]
+      )
+    except Exception as e:
+      print("Cannot remove permissions for", fparams["name"], params["bucket"])
 
 
-def upload_format_file_chunk_file(client, functions, fparams):
-  format_file = "{0:s}.py".format(fparams["format"])
-  shutil.copyfile("../formats/{0:s}".format(format_file), format_file)
-  files = [
-    format_file,
-    "format_file_chunk.py",
-    "header.{0:s}".format(fparams["format"]),
-    "iterator.py",
-    "util.py",
-  ]
-  upload_lambda(client, functions, fparams, files)
-  os.remove(format_file)
-
-
-def upload_application_file(client, functions, fparams):
-  files = [
-    "application.py",
-    "util.py",
-  ]
-
-  file = "{0:s}.py".format(fparams["application"])
-  shutil.copyfile("../applications/{0:s}".format(file), file)
-
-  files.append(file)
-  upload_lambda(client, functions, fparams, files)
-  os.remove(file)
-
-
-def upload_map_file(client, functions, fparams):
-  files = [
-    "pivot.py",
-    "iterator.py",
-    "map.py",
-    "util.py",
-  ]
-  shutil.copyfile("../formats/pivot.py", "pivot.py")
-
-  upload_lambda(client, functions, fparams, files)
-  os.remove("pivot.py")
-
-
-def upload_combine_files(client, functions, fparams):
-  format_file = "{0:s}.py".format(fparams["format"])
-  shutil.copyfile("../formats/{0:s}".format(format_file), format_file)
-  shutil.copyfile("../formats/iterator.py", "iterator.py")
-  files = [
-    format_file,
-    "header.{0:s}".format(fparams["format"]),
-    "iterator.py",
-    "combine_files.py",
-    "util.py",
-  ]
-  upload_lambda(client, functions, fparams, files)
-  os.remove(format_file)
-
-
-def upload_pivot_file(client, functions, fparams):
-  format_file = "{0:s}.py".format(fparams["format"])
-  shutil.copyfile("../formats/{0:s}".format(format_file), format_file)
-  files = [
-    format_file,
-    "iterator.py",
-    "util.py",
-    "pivot_file.py",
-  ]
-
-  upload_lambda(client, functions, fparams, files)
-  os.remove(format_file)
+def create_parameter_files(zip_directory, function_name, params):
+  for i in range(len(params["pipeline"])):
+    pparams = params["pipeline"][i]
+    if pparams["name"] == function_name:
+      json_name = "{0:s}/{1:d}.json".format(zip_directory, i)
+      f = open(json_name, "w")
+      f.write(json.dumps(pparams))
+      f.close()
 
 
 def upload_functions(client, params):
-  common_files = [
-    "constants.py",
-    "header.mzML",
-    "util.py",
-  ]
-  for file in common_files:
-    shutil.copyfile(file, "lambda/{0:s}".format(file))
-
-  shutil.copyfile("formats/iterator.py", "lambda/iterator.py")
+  zip_directory = "lambda_dependencies"
+  zip_file = "lambda.zip"
 
   response = client.list_functions()
   functions = set(list(map(lambda f: f["FunctionName"], response["Functions"])))
 
-  os.chdir("lambda")
-  for fparams in params["pipeline"]:
-    if fparams["file"] == "format_file_chunk":
-      upload_format_file_chunk_file(client, functions, fparams)
-    elif fparams["file"] == "combine_files":
-      upload_combine_files(client, functions, fparams)
-    elif fparams["file"] == "application":
-      upload_application_file(client, functions, fparams)
-    elif fparams["file"] == "pivot_file":
-      upload_pivot_file(client, functions, fparams)
-    elif fparams["file"] == "map":
-      upload_map_file(client, functions, fparams)
-    else:
-      upload_format_file(client, functions, fparams)
+  for fparams in params["functions"]:
+    os.makedirs(zip_directory)
+    files = []
+    file = "{0:s}.py".format(fparams["file"])
+    shutil.copyfile("lambda/{0:s}".format(file), "{0:s}/{1:s}".format(zip_directory, file))
+    files.append(file)
+    for file in params["dependencies"]["common"]:
+      index = file.rfind("/")
+      name = file[index + 1:]
+      files.append(name)
+      shutil.copyfile(file, "{0:s}/{1:s}".format(zip_directory, name))
 
-  os.chdir("..")
-  for file in common_files:
-    os.remove("lambda/{0:s}".format(file))
-  os.remove("lambda/iterator.py")
+    if "format" in fparams:
+      name = "{0:s}.py".format(fparams["format"])
+      shutil.copyfile("formats/{0:s}".format(name),  name)
+
+    create_parameter_files(zip_directory, fparams["name"], params)
+    os.chdir(zip_directory)
+    subprocess.call("zip ../{0:s} {1:s}".format(zip_file, " ".join(files)), shell=True)
+    os.chdir("..")
+
+    upload_function_code(client, zip_file, fparams, params, fparams["name"] not in functions)
+    shutil.rmtree(zip_directory)
 
 
 def setup_notifications(client, bucket, config):
@@ -201,20 +94,22 @@ def setup_notifications(client, bucket, config):
   assert(response["ResponseMetadata"]["HTTPStatusCode"] == 200)
 
 
-def clear_triggers(client, buckets, params):
-  for bucket in buckets:
-    setup_notifications(client, bucket, {})
+def clear_triggers(client, bucket, params):
+  setup_notifications(client, bucket, {})
 
 
 def create_bucket(client, bucket_name, params):
-  print("Creating bucket", bucket_name)
-  client.create_bucket(
-    ACL="public-read-write",
-    Bucket=bucket_name,
-    CreateBucketConfiguration={
-      "LocationConstraint": params["region"],
-    }
-  )
+  try:
+    client.create_bucket(
+      ACL="public-read-write",
+      Bucket=bucket_name,
+      CreateBucketConfiguration={
+        "LocationConstraint": params["region"],
+      }
+    )
+  except botocore.exceptions.ClientError as ex:
+    if "BucketAlreadyOwnedByYou" not in str(ex):
+      raise ex
 
 
 def function_buckets(params):
@@ -234,41 +129,64 @@ def get_needed_buckets(params):
   return set(buckets)
 
 
-def setup_triggers(params):
+def function_arns(params):
   name_to_arn = {}
-  client = util.setup_client("lambda", params)
+  client = util.lambda_client(params)
   for function in client.list_functions()["Functions"]:
     name_to_arn[function["FunctionName"]] = function["FunctionArn"]
+  return name_to_arn
+
+
+def setup_triggers(params):
+  name_to_arn = function_arns(params)
+
+  prefixes = {}
+  for fparams in params["functions"]:
+    prefixes[fparams["name"]] = []
+
+  for i in range(len(params["pipeline"])):
+    pparams = params["pipeline"][i]
+    if i == 0 or "output_function" not in params["pipeline"][i - 1]:
+      prefixes[pparams["name"]].append(i)
 
   client = util.setup_client("s3", params)
-  for function in params["pipeline"]:
-    buckets = function_buckets(function)
-    for bucket in buckets:
-      config = {
-        "LambdaFunctionConfigurations": [{
-          "Id": function["name"],
-          "LambdaFunctionArn": name_to_arn[function["name"]],
-          "Events": ["s3:ObjectCreated:*"]
-        }]
-      }
-      setup_notifications(client, bucket, config)
+  lambda_client = util.lambda_client(params)
+  configurations = []
+  for fparams in params["functions"]:
+    args = {
+      "FunctionName": fparams["name"],
+      "StatementId": fparams["name"] + "-" + params["bucket"],
+      "Action": "lambda:InvokeFunction",
+      "Principal": "s3.amazonaws.com",
+      "SourceAccount": "469290334000",
+      "SourceArn": "arn:aws:s3:::shjoyner-tide",
+    }
+    lambda_client.add_permission(**args)
+
+    for prefix in prefixes[fparams["name"]]:
+      configurations.append({
+        "LambdaFunctionArn": name_to_arn[fparams["name"]],
+        "Events": ["s3:ObjectCreated:*"],
+        "Filter": {
+          "Key": {
+            "FilterRules": [{"Name": "prefix", "Value": "{0:d}-".format(prefix)}]
+          }
+        }
+      })
+
+  config = {
+    "LambdaFunctionConfigurations": configurations,
+  }
+  setup_notifications(client, params["bucket"], config)
 
 
 def setup(params):
-  client = util.setup_client("s3", params)
-  client_buckets = client.list_buckets()["Buckets"]
-  existing_buckets = set(list(map(lambda b: b["Name"], client_buckets)))
+  s3 = util.setup_client("s3", params)
+  create_bucket(s3, params["bucket"], params)
+  clear_triggers(s3, params["bucket"], params)
 
-  needed_buckets = get_needed_buckets(params)
-  clear_triggers(client, existing_buckets.intersection(needed_buckets), params)
-  for bucket in needed_buckets:
-    if bucket not in existing_buckets:
-      create_bucket(client, bucket, params)
-      existing_buckets.add(bucket)
-
-  client = util.create_client(params)
+  client = util.lambda_client(params)
   upload_functions(client, params)
-
   setup_triggers(params)
 
 

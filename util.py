@@ -104,7 +104,7 @@ def run(event, context, func):
   s3.Object("shjoyner-logs", stdout_file).put(Body=open(temp_file))
 
 
-def create_client(params):
+def lambda_client(params):
   client = setup_client("lambda", params)
   # https://github.com/boto/boto3/issues/1104#issuecomment-305136266
   # boto3 by default retries even if max timeout is set. This is a workaround.
