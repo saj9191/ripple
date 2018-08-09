@@ -18,7 +18,7 @@ def find_top(bucket_name, key, m, start_byte, end_byte, params):
     if start_byte == 0 and end_byte == obj.content_length:
       [spectra, more] = it.next(identifier=identifier)
     else:
-      it.get(obj, start_byte, end_byte, identifier=identifier)
+      spectra = iterator.get(obj, start_byte, end_byte, identifier)
       more = False
 
     for spectrum in spectra:
@@ -29,7 +29,7 @@ def find_top(bucket_name, key, m, start_byte, end_byte, params):
   content = iterator.fromArray(list(map(lambda t: t[1], top)))
 
   p = dict(m)
-  p["prefix"] = m["prefix"] + 1
+  p["prefix"] = params["prefix"] + 1
   file_name = util.file_name(p)
   util.print_write(m, file_name, params)
   s3.Object(bucket_name, file_name).put(Body=str.encode(content))
@@ -40,8 +40,8 @@ def find_top(bucket_name, key, m, start_byte, end_byte, params):
 def run(bucket_name, key, params, func):
   util.clear_tmp()
   m = util.parse_file_name(key)
-  if "range" in params["extra_params"]:
-    rparams = params["extra_params"]["range"]
+  if "range" in params:
+    rparams = params["range"]
     start_byte = rparams["start_byte"]
     end_byte = rparams["end_byte"]
     file_id = rparams["file_id"]

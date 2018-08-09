@@ -39,13 +39,14 @@ def combine(bucket_name, key, params):
     print("Combining TIMESTAMP {0:f} NONCE {1:d} BIN {2:d} FILE {3:d}".format(m["timestamp"], m["nonce"], m["bin"], m["file_id"]))
     format_lib = importlib.import_module(params["format"])
     iterator = getattr(format_lib, "Iterator")
+    m["prefix"] = params["prefix"] + 1
     file_name = util.file_name(m)
     temp_name = "/tmp/{0:s}".format(file_name)
     # Make this deterministic and combine in the same order
     keys.sort()
     iterator.combine(bucket_name, keys, temp_name, params)
     util.print_write(m, temp_name, params)
-    s3.Object(params["output_bucket"], file_name).put(Body=open(temp_name, "rb"))
+    s3.Object(params["bucket"], file_name).put(Body=open(temp_name, "rb"))
   return p
 
 

@@ -49,8 +49,10 @@ def lambda_setup(event, context):
   params["token"] = random.randint(1, 100*1000*1000)
   params["request_id"] = context.aws_request_id
   params["key_fields"] = key_fields
-  if "extra_params" in s3:
-    params["extra_params"] = s3["extra_params"]
+
+  for value in ["extra_params", "range"]:
+    if value in s3:
+      params[value] = s3[value]
 
   return [bucket_name, key, params]
 
