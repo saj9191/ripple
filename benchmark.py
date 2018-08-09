@@ -6,7 +6,6 @@ from enum import Enum
 import json
 import os
 import paramiko
-import plot
 import random
 import re
 import setup
@@ -130,14 +129,14 @@ def process_iteration_params(params, iteration):
   params["key"] = util.file_name(m)
 
 
-def upload_input(params):
+def upload_input(params, thread_id=0):
   bucket_name = params["input_bucket"]
   s3 = setup_connection("s3", params)
   key = params["key"]
 
   start = time.time()
   if params["sample_input"]:
-    print("Moving {0:s} to s3://{1:s}".format(params["input_name"], bucket_name), flush=True)
+    print("Thread {0:d}: Moving {1:s} to s3://{2:s}".format(thread_id, params["input_name"], bucket_name), flush=True)
     s3.Object(bucket_name, key).copy_from(CopySource={"Bucket": "shjoyner-sample-input", "Key": params["input_name"]})
   else:
     print("Uploading {0:s} to s3://{1:s}".format(params["input"], bucket_name), flush=True)
@@ -146,7 +145,7 @@ def upload_input(params):
 
   obj = s3.Object(bucket_name, key)
   timestamp = obj.last_modified.timestamp() * 1000
-  print(key, "last modified", timestamp, flush=True)
+  print("Thread {0:d}: Handling key {1:s}. Last modified {2:f}".format(thread_id, key, timestamp), flush=True)
   seconds = end - start
   milliseconds = seconds * 1000
 
@@ -164,13 +163,13 @@ def load_stats(upload_duration):
   }
 
 
-def benchmark(i, params):
+def benchmark(i, params, thread_id=0):
   done = False
   failed_attempts = 0
   while not done:
     try:
       if params["model"] == "lambda":
-        results = lambda_benchmark(params)
+        results = lambda_benchmark(params, thread_id)
       elif params["model"] == "ec2":
         results = ec2_benchmark(params)
       elif params["model"] == "coordinator":
@@ -182,7 +181,7 @@ def benchmark(i, params):
       print("Error during iteration {0:d}".format(i), e, flush=True)
       clear_buckets(params)
 
-  return [results, failed_attempts]
+  return results + [failed_attempts]
 
 
 def serialize(obj):
@@ -320,54 +319,15 @@ def create_dependency_chain(stats, iterations):
   return dependencies
 
 
-def run(params):
+def run(params, thread_id):
   print_run_information()
   process_params(params)
-  iterations = params["iterations"]
 
   if params["setup"]:
     setup.setup(params)
-  pipeline = [{"name": "load"}] + params["pipeline"] + [{"name": "total"}]
-  stats = list(map(lambda s: [], pipeline))
-  failed_attempts = 0
-  for i in range(iterations):
-    process_iteration_params(params, i)
-    [results, failed] = benchmark(i, params)
-    failed_attempts += failed
-    for j in range(len(results)):
-      stats[j].append(results[j])
-    if params["check_output"]:
-      check_output(params)
-
-    clear_buckets(params)
-    print("--------------------------\n", flush=True)
-
-  print("END RESULTS ({0:d} ITERATIONS)".format(iterations), flush=True)
-
-  dir_path = "results/{0:f}-{1:d}".format(params["now"], params["nonce"])
-  os.mkdir(dir_path)
-  f = open("{0:s}/params".format(dir_path), "w+")
-  f.write(json.dumps(params, indent=2, sort_keys=True))
-  f.close()
-
-  f = open("{0:s}/stats".format(dir_path), "w+")
-  f.write(json.dumps({"stats": stats}, indent=2, sort_keys=True))
-  f.close()
-
-  dependencies = create_dependency_chain(stats[1:-1], iterations)
-  for key in dependencies:
-    dependencies[key].duration = float(dependencies[key].duration) / iterations
-  dep_file = "{0:s}/dep".format(dir_path)
-  f = open(dep_file, "w+")
-  f.write(json.dumps(dependencies, indent=2, sort_keys=True, default=serialize))
-  f.close()
-
-  if params["plot"]:
-    dependencies = json.loads(open(dep_file).read())
-    plot.plot(dependencies, pipeline[1:], iterations, params)
-
-  print("Directory:", dir_path)
-  return [dir_path, failed_attempts]
+  i = 0
+  process_iteration_params(params, i)
+  return benchmark(i, params, thread_id)
 
 
 def calculate_total_stats(stats):
@@ -594,7 +554,7 @@ class MergeLambdaStage(Enum):
   TOTAL = 7
 
 
-def check_objects(client, bucket_name, prefix, count, timeout, params):
+def check_objects(client, bucket_name, prefix, count, timeout, params, thread_id):
   done = False
   suffix = ""
   if count > 1:
@@ -620,25 +580,23 @@ def check_objects(client, bucket_name, prefix, count, timeout, params):
     end = datetime.datetime.now()
     now = end.strftime("%H:%M:%S")
     if not done:
-      print("{0:s}: Waiting for {1:s} function{2:s}. Timeout is {3:d} seconds. Count is {4:d}".format(now, prefix, suffix, timeout, c), flush=True)
       if (end - start).total_seconds() > timeout:
         expected = set(range(1, count + 1))
         print("Could not find", expected.difference(found))
         raise BenchmarkException("Could not find bucket {0:s} prefix {1:s}".format(bucket_name, prefix))
       time.sleep(10)
     else:
-      print("{0:s}: Found {1:s} function{2:s}".format(now, prefix, suffix), flush=True)
+      print("{0:s}: Thread {1:d}. Found {2:s}".format(now, thread_id, prefix), flush=True)
 
 
-def wait_for_completion(start_time, params):
+def wait_for_completion(start_time, params, thread_id):
   client = util.setup_client("s3", params)
 
   # Give ourselves time as we need to wait for each part of the pipeline
   last = params["pipeline"][-1]
-  timeout = 6 * 60
+  timeout = 2 * 60 * len(params["pipeline"])
   bucket_name = last["output_bucket"]
-  check_objects(client, bucket_name, params["output_prefix"], params["num_output_files"], timeout, params)
-  print("")
+  check_objects(client, bucket_name, params["output_prefix"], params["num_output_files"], timeout, params, thread_id)
   time.sleep(10)  # Wait a little to make sure percolator logs are on the server
 
 
@@ -789,13 +747,13 @@ def parse_logs(params, upload_timestamp, upload_duration, total_duration):
   return stats
 
 
-def lambda_benchmark(params):
-  [upload_timestamp, upload_duration] = upload_input(params)
+def lambda_benchmark(params, thread_id):
+  [upload_timestamp, upload_duration] = upload_input(params, thread_id)
   start_time = time.time()
-  wait_for_completion(upload_timestamp, params)
+  wait_for_completion(upload_timestamp, params, thread_id)
   end_time = time.time()
   total_duration = end_time - start_time
-  return parse_logs(params, upload_timestamp, upload_duration, total_duration)
+  return [upload_duration, total_duration]
 
 
 #############################

@@ -3,7 +3,6 @@ import benchmark
 import boto3
 from dateutil import parser
 import json
-import queue
 import threading
 import time
 import util
@@ -14,13 +13,15 @@ BINS = 60 * 60
 
 
 class Request(threading.Thread):
-  def __init__(self, thread_id, time, file_name, q, params):
+  def __init__(self, thread_id, time, file_name, params):
     super(Request, self).__init__()
     self.time = time
     self.file_name = file_name
     self.params = dict(params)
-    self.queue = q
     self.thread_id = thread_id
+    self.duration = 0
+    self.upload_duration = 0
+    self.failed_attempts = 0
 
   def run(self):
     print("Thread {0:d}: Sleeping for {1:d} seconds".format(self.thread_id, self.time))
@@ -30,9 +31,11 @@ class Request(threading.Thread):
     self.params["access_key"] = access_key
     self.params["secret_key"] = secret_key
     print("Thread {0:d}: Processing file {1:s}".format(self.thread_id, self.file_name))
-    [directory, failed_attempts] = benchmark.run(self.params)
-    self.queue.put((self.params["now"], self.params["nonce"], directory, failed_attempts))
-    print("Thread {0:d}: Done".format(self.thread_id))
+    [upload_duration, duration, failed_attempts] = benchmark.run(self.params, self.thread_id)
+    self.upload_duration = upload_duration
+    self.duration = duration
+    self.failed_attempts = failed_attempts
+    print("Thread {0:d}: Done in {1:f}".format(self.thread_id, duration))
 
 
 def parse_csv(file_name, num_requests):
@@ -52,33 +55,35 @@ def parse_csv(file_name, num_requests):
     datetimes[parts[0]].append(date.hour * 60 * 60 + date.minute * 60 + date.second)
 
   for date in datetimes:
-    print(date, len(datetimes[date]))
     if len(datetimes[date]) == num_requests:
       return datetimes[date]
 
 
 def launch_threads(requests, file_names, params):
   requests.sort()
-  q = queue.Queue()
 
   threads = []
   for i in range(len(requests)):
-    thread = Request(i, requests[i], file_names[i % len(file_names)], q, params)
+    thread = Request(i, requests[i], file_names[i % len(file_names)], params)
     thread.start()
     threads.append(thread)
 
   for thread in threads:
     thread.join()
 
-  with not q.empty:
-    print(q.get())
+  for thread in threads:
+    msg = "Thread {0:d}: Upload Duration {1:f}. Duration {2:f}.  Failed Attempts {3:d}"
+    msg = msg.format(thread.thread_id, thread.upload_duration, thread.duration, thread.failed_attempts)
+
+  with open("long_benchmark.csv", "w+") as f:
+    for thread in threads:
+      msg = "{0:d},{1:f},{2:f},{3:d},{4:d}\n".format(thread.thread_id, thread.upload_duration, thread.duration, thread.failed_attempts, thread.time)
+      f.write(msg)
 
 
 def run(args, params):
   requests = parse_csv(args.file, args.num_requests)
-  requests = [0]
   requests = list(filter(lambda r: r < 1*60*60, requests))
-  print("Number of requests", len(requests))
   session = boto3.Session(
            aws_access_key_id=params["access_key"],
            aws_secret_access_key=params["secret_key"],
