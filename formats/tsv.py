@@ -4,6 +4,7 @@ import iterator
 
 class Iterator(iterator.Iterator):
   IDENTIFIER = "\n"
+  COLUMN_SEPARATOR = "\t"
   HEADER_ITEMS = [
     "file",
     "scan",
@@ -61,7 +62,7 @@ class Iterator(iterator.Iterator):
       content = "\t".join(Iterator.HEADER_ITEMS) + "\n" + content
     return content
 
-  def get(obj, start_byte, end_byte, identifier=False):
+  def get(obj, start_byte, end_byte, identifier=""):
     content = Iterator.getBytes(obj, start_byte, end_byte)
     items = list(content.split(Iterator.IDENTIFIER))
     if identifier:

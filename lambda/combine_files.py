@@ -3,16 +3,6 @@ import importlib
 import util
 
 
-def current_last_file(bucket_name, current_key):
-  prefix = util.key_prefix(current_key)
-  s3 = boto3.resource("s3")
-  bucket = s3.Bucket(bucket_name)
-  objects = list(bucket.objects.filter(Prefix=prefix))
-  keys = set(list(map(lambda o: o.key, objects)))
-  objects = sorted(objects, key=lambda o: [o.last_modified, o.key])
-  return ((current_key not in keys) or (objects[-1].key == current_key))
-
-
 def combine(bucket_name, key, params):
   util.clear_tmp()
   p = util.parse_file_name(key)
@@ -29,13 +19,8 @@ def combine(bucket_name, key, params):
   m["bin"] = 1
 
   s3 = boto3.resource("s3")
-  have_all_files = False
-  keys = []
-  prefix = util.key_prefix(key)
-  while not have_all_files and (len(keys) == 0 or current_last_file(bucket_name, key)):
-    [have_all_files, keys] = util.have_all_files(bucket_name, prefix)
-
-  if have_all_files and current_last_file(bucket_name, key):
+  [combine, keys] = util.combine_instance(bucket_name, key)
+  if combine:
     print("Combining TIMESTAMP {0:f} NONCE {1:d} BIN {2:d} FILE {3:d}".format(m["timestamp"], m["nonce"], m["bin"], m["file_id"]))
     format_lib = importlib.import_module(params["format"])
     iterator = getattr(format_lib, "Iterator")

@@ -37,27 +37,7 @@ def find_top(bucket_name, key, m, start_byte, end_byte, params):
   return m
 
 
-def run(bucket_name, key, params, func):
-  util.clear_tmp()
-  m = util.parse_file_name(key)
-  if "range" in params:
-    rparams = params["range"]
-    start_byte = rparams["start_byte"]
-    end_byte = rparams["end_byte"]
-    file_id = rparams["file_id"]
-    more = rparams["more"]
-
-    m["last"] = not more
-    m["file_id"] = file_id
-    func(bucket_name, key, m, start_byte, end_byte, params)
-  else:
-    s3 = boto3.resource('s3')
-    obj = s3.Object(bucket_name, key)
-    func(bucket_name, key, m, 0, obj.content_length, params)
-  return m
-
-
 def handler(event, context):
   [bucket_name, key, params] = util.lambda_setup(event, context)
-  m = run(bucket_name, key, params, find_top)
+  m = util.run(bucket_name, key, params, find_top)
   util.show_duration(context, m, params)

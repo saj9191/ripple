@@ -5,16 +5,6 @@ import iterator
 import xml.etree.ElementTree as ET
 
 
-class Element():
-  def __init__(self, spectra, more, iterator):
-    self.spectra = spectra
-    self.more = more
-    self.iterator = iterator
-
-  def __lt__(self, other):
-    return self.spectra[0][0] < other.spectra[0][0]
-
-
 class Iterator(iterator.Iterator):
   INDEX_LIST_OFFSET_REGEX = re.compile("[\s\S]*<indexListOffset>(\d+)</indexListOffset>")
   OFFSET_REGEX = re.compile("<offset[^>]*>(\d+)</offset>")
@@ -152,11 +142,6 @@ class Iterator(iterator.Iterator):
     content = content[:index + len(Iterator.SPECTRUM_CLOSE_TAG)]
     root = ET.fromstring("<data>" + content + "</data>")
     return str.encode(Iterator.fromArray(list(root.iter("spectrum"))))
-
-  def nextFile(self):
-    [spectra, more] = self.next()
-    content = Iterator.fromArray(spectra)
-    return [content, more]
 
   def endByte(self):
     return self.end_byte

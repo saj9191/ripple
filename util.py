@@ -5,7 +5,6 @@ import os
 import random
 import re
 import subprocess
-import sys
 import time
 
 
@@ -30,7 +29,44 @@ FILE_FORMAT = [{
 }]
 
 
-SPECTRA = re.compile("^\S[A-Ya-y0-9\s\.\+]+Z\s[0-9]+\s([0-9\.e\+]+)\n+([0-9\.\se\+]+)", re.MULTILINE)
+def combine_instance(bucket_name, key):
+  done = False
+  keys = []
+  prefix = key_prefix(key)
+  while not done and (len(keys) == 0 or current_last_file(bucket_name, key)):
+    [done, keys] = have_all_files(bucket_name, prefix)
+
+  return [done and current_last_file(bucket_name, key), keys]
+
+
+def run(bucket_name, key, params, func):
+  clear_tmp()
+  m = parse_file_name(key)
+  if "range" in params:
+    rparams = params["range"]
+    start_byte = rparams["start_byte"]
+    end_byte = rparams["end_byte"]
+    file_id = rparams["file_id"]
+    more = rparams["more"]
+
+    m["last"] = not more
+    m["file_id"] = file_id
+    func(bucket_name, key, m, start_byte, end_byte, params)
+  else:
+    s3 = boto3.resource('s3')
+    obj = s3.Object(bucket_name, key)
+    func(bucket_name, key, m, 0, obj.content_length, params)
+  return m
+
+
+def current_last_file(bucket_name, current_key):
+  prefix = key_prefix(current_key)
+  s3 = boto3.resource("s3")
+  bucket = s3.Bucket(bucket_name)
+  objects = list(bucket.objects.filter(Prefix=prefix))
+  keys = set(list(map(lambda o: o.key, objects)))
+  objects = sorted(objects, key=lambda o: [o.last_modified, o.key])
+  return ((current_key not in keys) or (objects[-1].key == current_key))
 
 
 def lambda_setup(event, context):
@@ -100,20 +136,6 @@ def setup_client(service, params):
 
 def key_prefix(key):
   return "-".join(key.split("-")[:4]) + "-"
-
-
-def run(event, context, func):
-  s3 = event["Records"][0]["s3"]
-  bucket_name = s3["bucket"]["name"]
-  key = s3["object"]["key"]
-
-  params = json.loads(open("params.json").read())
-  stdout_file = "{0:s}-{1:s}".format(params["name"], key)
-  temp_file = "/tmp/{0:s}".format(stdout_file)
-  sys.stdout = open(temp_file, "w")
-  func(s3, bucket_name, key, params)
-  s3 = boto3.resource("s3")
-  s3.Object("shjoyner-logs", stdout_file).put(Body=open(temp_file))
 
 
 def lambda_client(params):

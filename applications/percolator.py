@@ -30,10 +30,10 @@ def run(file, params, m):
   m["file_id"] = 1
   m["bin"] = 1
   m["more"] = False
-  for item in ["target.psms", "decoy.psms", "target.peptides", "decoy.peptides"]:
+  for item in ["target.peptides"]:  # ["target.psms", "decoy.psms", "target.peptides", "decoy.peptides"]:
     input_file = "{0:s}/percolator.{1:s}.txt".format(output_dir, item)
-    prefix = "percolator.{0:s}".format(item)
-    m["prefix"] = prefix
+    m["prefix"] = params["prefix"] + 1
+    m["suffix"] = "percolator"
     output_file = "{0:s}/{1:s}".format(output_dir, util.file_name(m))
     os.rename(input_file, output_file)
     output_files.append(output_file)

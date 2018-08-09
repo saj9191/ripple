@@ -18,6 +18,9 @@
 		"formats": {
 			"mzML": [
 				"header.mzML"
+			],
+			"percolator": [
+				"formats/tsv.py"
 			]
 		}
 	},
@@ -112,5 +115,11 @@
 	}, {
     "name": "percolator",
 		"max_train": 0
+	}, {
+		"name": "find-species-match",
+		"identifier": "q-value",
+    "find": "max sum",
+		"batch_size": 1000,
+		"chunk_size": 100000
 	}]
 }
