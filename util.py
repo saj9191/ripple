@@ -11,7 +11,7 @@ import time
 
 FILE_FORMAT = [{
   "name": "prefix",
-  "type": "any",
+  "type": "int",
 }, {
   "name": "timestamp",
   "type": "float",
@@ -37,9 +37,16 @@ def lambda_setup(event, context):
   s3 = event["Records"][0]["s3"]
   bucket_name = s3["bucket"]["name"]
   key = s3["object"]["key"]
-  params = json.loads(open("params.json").read())
+  key_fields = parse_file_name(key)
+
+  if "extra_params" in s3 and "prefix" in s3["extra_params"]:
+    prefix = s3["extra_params"]["prefix"]
+  else:
+    prefix = key_fields["prefix"]
+  params = json.loads(open("{0:d}.json".format(prefix)).read())
   params["token"] = random.randint(1, 100*1000*1000)
   params["request_id"] = context.aws_request_id
+  params["key_fields"] = key_fields
   if "extra_params" in s3:
     params["extra_params"] = s3["extra_params"]
   return [bucket_name, key, params]
