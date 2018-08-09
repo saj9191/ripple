@@ -13,7 +13,7 @@ def map_file(bucket_name, key, params):
   s3 = boto3.resource("s3")
   bucket = s3.Bucket(params["map_bucket"])
 
-  if "bucket_prefix" in params:
+  if params["ranges"]:
     [_, _, ranges] = pivot.get_pivot_ranges(bucket_name, key, params["bucket_prefix"], params["num_buckets"])
     # TODO: Fix
     prefix = util.key_prefix(key)
@@ -22,6 +22,9 @@ def map_file(bucket_name, key, params):
     objects = bucket.objects.all()
 
   for obj in objects:
+    if not (params["directories"] == obj.key.endswith("/")):
+      continue
+
     payload = {
       "Records": [{
         "s3": {
@@ -35,11 +38,13 @@ def map_file(bucket_name, key, params):
             "token": params["token"],
             "target_bucket": params["map_bucket"],
             "target_file": obj.key,
+            "prefix": params["key_fields"]["prefix"] + 1,
           }
         }
       }]
     }
-    if "bucket_prefix" in params:
+
+    if params["ranges"]:
       payload["pivots"] = ranges
 
     response = client.invoke(
