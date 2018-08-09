@@ -18,8 +18,7 @@ def run_application(bucket_name, key, params):
   application_method = getattr(application_lib, "run")
   output_files = application_method(temp_file, params, m)
 
-  output_bucket = s3.Bucket(params["output_bucket"])
-
+  output_bucket = s3.Bucket(params["bucket"])
   for output_file in output_files:
     index = output_file.rfind("/")
     file_name = output_file[index + 1:] if index != -1 else output_file
