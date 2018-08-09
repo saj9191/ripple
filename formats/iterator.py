@@ -91,7 +91,7 @@ class Iterator:
   def getBytes(obj, start_byte, end_byte):
     return obj.get(Range="bytes={0:d}-{1:d}".format(start_byte, end_byte))["Body"].read().decode("utf-8")
 
-  def next(self, identifier=False):
+  def next(self, identifier=""):
     [start_byte, end_byte, more] = self.nextOffsets()
     if start_byte == -1:
       return [[], more]
