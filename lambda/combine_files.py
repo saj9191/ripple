@@ -3,39 +3,35 @@ import importlib
 import util
 
 
-def combine(bucket_name, key, params):
-  util.clear_tmp()
-  p = util.parse_file_name(key)
-  util.print_request(p, params)
-  util.print_read(p, key, params)
-  m = dict(p)
+def combine(bucket_name, key, input_format, output_format, start_byte, end_byte, params):
+  util.print_read(input_format, key, params)
 
   if params["sort"]:
-    m["file_id"] = m["bin"]
-    m["last"] = m["file_id"] == params["num_bins"]
+    output_format["file_id"] = input_format["bin"]
+    output_format["last"] = output_format["file_id"] == params["num_bins"]
   else:
-    m["last"] = True
-    m["file_id"] = 1
-  m["bin"] = 1
+    output_format["last"] = True
+    output_format["file_id"] = 1
 
   s3 = boto3.resource("s3")
   [combine, keys] = util.combine_instance(bucket_name, key)
   if combine:
-    print("Combining TIMESTAMP {0:f} NONCE {1:d} BIN {2:d} FILE {3:d}".format(m["timestamp"], m["nonce"], m["bin"], m["file_id"]))
+    msg = "Combining TIMESTAMP {0:f} NONCE {1:d} BIN {2:d} FILE {3:d}"
+    msg = msg.format(input_format["timestamp"], input_format["nonce"], input_format["bin"], input_format["file_id"])
+    print(msg)
+
     format_lib = importlib.import_module(params["format"])
     iterator = getattr(format_lib, "Iterator")
-    m["prefix"] = params["prefix"] + 1
-    file_name = util.file_name(m)
+    file_name = util.file_name(output_format)
     temp_name = "/tmp/{0:s}".format(file_name)
     # Make this deterministic and combine in the same order
     keys.sort()
     iterator.combine(bucket_name, keys, temp_name, params)
-    util.print_write(m, temp_name, params)
+    util.print_write(output_format, temp_name, params)
     s3.Object(params["bucket"], file_name).put(Body=open(temp_name, "rb"))
-  return p
 
 
 def handler(event, context):
   [bucket_name, key, params] = util.lambda_setup(event, context)
-  m = combine(bucket_name, key, params)
+  m = util.run(bucket_name, key, params, combine)
   util.show_duration(context, m, params)

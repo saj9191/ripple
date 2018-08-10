@@ -26,37 +26,52 @@ FILE_FORMAT = [{
 }, {
   "name": "last",
   "type": "bool",
+}, {
+  "name": "suffix",
+  "type": "alpha",
 }]
 
 
 def combine_instance(bucket_name, key):
   done = False
+  num_attempts = 20
   keys = []
   prefix = key_prefix(key)
+  count = 0
   while not done and (len(keys) == 0 or current_last_file(bucket_name, key)):
     [done, keys] = have_all_files(bucket_name, prefix)
+    count += 1
+    if count == num_attempts and not done:
+      return [False, keys]
 
   return [done and current_last_file(bucket_name, key), keys]
 
 
 def run(bucket_name, key, params, func):
   clear_tmp()
-  m = parse_file_name(key)
+  input_format = parse_file_name(key)
+  output_format = dict(input_format)
+  output_format["prefix"] = params["prefix"] + 1
+
+  print_request(input_format, params)
+
   if "range" in params:
     rparams = params["range"]
     start_byte = rparams["start_byte"]
     end_byte = rparams["end_byte"]
-    file_id = rparams["file_id"]
-    more = rparams["more"]
-
-    m["last"] = not more
-    m["file_id"] = file_id
-    func(bucket_name, key, m, start_byte, end_byte, params)
+    output_format["file_id"] = rparams["file_id"]
+    output_format["last"] = not rparams["more"]
   else:
     s3 = boto3.resource('s3')
     obj = s3.Object(bucket_name, key)
-    func(bucket_name, key, m, 0, obj.content_length, params)
-  return m
+    start_byte = 0
+    end_byte = obj.content_length
+    if "extra_params" in params and "file_id" in params["extra_params"]:
+      output_format["file_id"] = params["extra_params"]["file_id"]
+      output_format["last"] = not params["extra_params"]["more"]
+
+  func(bucket_name, key, input_format, output_format, start_byte, end_byte, params)
+  return output_format
 
 
 def current_last_file(bucket_name, current_key):
@@ -165,7 +180,7 @@ def file_format(m):
       name += "-"
     if part["name"] in m:
       value = m[part["name"]]
-      if part["type"] == "any":
+      if part["type"] == "alpha":
         name += value
       elif part["type"] == "bool":
         name += str(int(value))
@@ -174,8 +189,8 @@ def file_format(m):
       else:
         name += str(value)
     else:
-      if part["type"] == "any":
-        name += "(.*)"
+      if part["type"] == "alpha":
+        name += "([A-Za-z]+)"
       elif part["type"] == "float":
         name += "([0-9\.]+)"
       elif part["type"] == "int":

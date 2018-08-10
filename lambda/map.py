@@ -4,11 +4,7 @@ import pivot
 import util
 
 
-def map_file(bucket_name, key, params):
-  util.clear_tmp()
-  m = util.parse_file_name(key)
-  util.print_request(m, params)
-
+def map_file(bucket_name, key, input_format, output_format, start_byte, end_byte, params):
   client = boto3.client("lambda")
   s3 = boto3.resource("s3")
   bucket = s3.Bucket(params["map_bucket"])
@@ -21,9 +17,17 @@ def map_file(bucket_name, key, params):
   else:
     objects = bucket.objects.all()
 
-  for obj in objects:
-    if not (params["directories"] == obj.key.endswith("/")):
-      continue
+  file_id = 0
+  if params["directories"]:
+    objects = list(filter(lambda obj: obj.key.endswith("/"), objects))
+
+  for i in range(len(objects)):
+    obj = objects[i]
+    file_id += 1
+    if params["directories"]:
+      target_file = obj.key[:-1]
+    else:
+      target_file = obj.key
 
     payload = {
       "Records": [{
@@ -37,8 +41,10 @@ def map_file(bucket_name, key, params):
           "extra_params": {
             "token": params["token"],
             "target_bucket": params["map_bucket"],
-            "target_file": obj.key,
-            "prefix": params["prefix"] + 1,
+            "target_file": target_file,
+            "prefix": output_format["prefix"],
+            "file_id": file_id,
+            "more": (i + 1) != len(objects)
           }
         }
       }]
@@ -54,10 +60,8 @@ def map_file(bucket_name, key, params):
     )
     assert(response["ResponseMetadata"]["HTTPStatusCode"] == 202)
 
-  return m
-
 
 def handler(event, context):
   [bucket_name, key, params] = util.lambda_setup(event, context)
-  m = map_file(bucket_name, key, params)
+  m = util.run(bucket_name, key, params, map_file)
   util.show_duration(context, m, params)

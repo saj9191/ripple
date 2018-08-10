@@ -4,9 +4,8 @@ import subprocess
 import util
 
 
-def run(file, params, m):
-  util.print_request(m, params)
-  util.print_read(m, file, params)
+def run(file, params, input_format, output_format):
+  util.print_read(input_format, file, params)
 
   s3 = boto3.resource('s3')
   database_bucket = s3.Bucket("maccoss-human-fasta")
@@ -15,7 +14,7 @@ def run(file, params, m):
     database_bucket.download_fileobj("crux", f)
 
   subprocess.call("chmod 755 /tmp/crux", shell=True)
-  output_dir = "/tmp/percolator-crux-output-{0:f}-{1:d}".format(m["timestamp"], m["nonce"])
+  output_dir = "/tmp/percolator-crux-output-{0:f}-{1:d}".format(input_format["timestamp"], input_format["nonce"])
 
   arguments = [
     "--subset-max-train", str(params["max_train"]),
@@ -27,14 +26,10 @@ def run(file, params, m):
   subprocess.check_output(command, shell=True)
 
   output_files = []
-  m["file_id"] = 1
-  m["bin"] = 1
-  m["more"] = False
-  for item in ["target.peptides"]:  # ["target.psms", "decoy.psms", "target.peptides", "decoy.peptides"]:
+  for item in ["target.{0:s}".format(params["output"])]:
     input_file = "{0:s}/percolator.{1:s}.txt".format(output_dir, item)
-    m["prefix"] = params["prefix"] + 1
-    m["suffix"] = "percolator"
-    output_file = "{0:s}/{1:s}".format(output_dir, util.file_name(m))
+    output_format["ext"] = "percolator"
+    output_file = "{0:s}/{1:s}".format(output_dir, util.file_name(output_format))
     os.rename(input_file, output_file)
     output_files.append(output_file)
 

@@ -3,7 +3,7 @@ import importlib
 import util
 
 
-def find_match(bucket_name, key, m, start_byte, end_byte, params):
+def find_match(bucket_name, key, input_format, output_format, start_byte, end_byte, params):
   [combine, keys] = util.combine_instance(bucket_name, key)
   if combine:
     best_match = None
@@ -17,6 +17,7 @@ def find_match(bucket_name, key, m, start_byte, end_byte, params):
       it = iterator(obj, params["batch_size"], params["chunk_size"])
       if params["find"] == "max sum":
         score = it.sum(params["identifier"])
+        print(key, score)
       else:
         raise Exception("Not implemented", params["find"])
 
@@ -24,8 +25,7 @@ def find_match(bucket_name, key, m, start_byte, end_byte, params):
         best_match = key
         match_score = score
 
-  print("BEST MATCH IS", key)
-  return m
+    print("BEST MATCH IS", best_match)
 
 
 def handler(event, context):
