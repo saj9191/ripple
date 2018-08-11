@@ -10,16 +10,18 @@ def map_file(bucket_name, key, input_format, output_format, start_byte, end_byte
   bucket = s3.Bucket(params["map_bucket"])
 
   if params["ranges"]:
-    [_, _, ranges] = pivot.get_pivot_ranges(bucket_name, key, params["bucket_prefix"], params["num_buckets"])
+    [_, _, ranges] = pivot.get_pivot_ranges(bucket_name, key)
     # TODO: Fix
     prefix = util.key_prefix(key)
     objects = bucket.objects.filter(Prefix=prefix)
   else:
-    objects = bucket.objects.all()
+    if "map_bucket_key_prefix" in params:
+      objects = bucket.objects.filter(Prefix=params["map_bucket_key_prefix"] + "-")
+    else:
+      objects = bucket.objects.all()
 
   file_id = 0
-  if params["directories"]:
-    objects = list(filter(lambda obj: obj.key.endswith("/"), objects))
+  objects = list(filter(lambda obj: obj.key.endswith("/") == params["directories"], objects))
 
   for i in range(len(objects)):
     obj = objects[i]
@@ -36,7 +38,6 @@ def map_file(bucket_name, key, input_format, output_format, start_byte, end_byte
             "name": bucket_name,
           },
           "object": {
-            "key": key,
           },
           "extra_params": {
             "token": params["token"],
@@ -49,6 +50,15 @@ def map_file(bucket_name, key, input_format, output_format, start_byte, end_byte
         }
       }]
     }
+
+    if params["input_key_value"] == "key":
+      payload["Records"][0]["s3"]["object"]["key"] = key
+      payload["Records"][0]["s3"]["extra_params"][params["bucket_key_value"]] = target_file
+    elif params["bucket_key_value"] == "key":
+      payload["Records"][0]["s3"]["object"]["key"] = target_file
+      payload["Records"][0]["s3"]["extra_params"][params["input_key_value"]] = key
+    else:
+      raise Exception("Need to specify field for map key")
 
     if params["ranges"]:
       payload["pivots"] = ranges

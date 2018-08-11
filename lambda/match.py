@@ -17,7 +17,6 @@ def find_match(bucket_name, key, input_format, output_format, start_byte, end_by
       it = iterator(obj, params["batch_size"], params["chunk_size"])
       if params["find"] == "max sum":
         score = it.sum(params["identifier"])
-        print(key, score)
       else:
         raise Exception("Not implemented", params["find"])
 
@@ -25,7 +24,11 @@ def find_match(bucket_name, key, input_format, output_format, start_byte, end_by
         best_match = key
         match_score = score
 
-    print("BEST MATCH IS", best_match)
+    output_format["ext"] = "match"
+    output_format["suffix"] = "match"
+    file_name = util.file_name(output_format)
+    util.print_write(output_format, file_name, params)
+    s3.Object(bucket_name, file_name).put(Body=str.encode(best_match))
 
 
 def handler(event, context):

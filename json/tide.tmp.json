@@ -1,11 +1,10 @@
 {
-  "input_name": "ASH_20170314_HELA_90MIN_20170320042659.mzML",
+  "input_name": "10sep2013_yeast_control_1.mzML",
 	"model": "lambda",
 	"iterations": 1,
 	"region": "us-west-2",
 	"timeout": 300,
   "iterations": 1,
-	"num_buckets": 2,
 	"num_bins": 40,
 	"bucket": "shjoyner-tide",
 	"dependencies": {
@@ -21,6 +20,10 @@
 			],
 			"percolator": [
 				"formats/tsv.py"
+			],
+			"confidence": [
+				"formats/tsv.py",
+				"formats/percolator.py"
 			]
 		}
 	},
@@ -53,16 +56,24 @@
 		"tide": {
 		  "file": "application",
 		  "application": "tide",
-		  "memory_size": 1024
+		  "memory_size": 1024,
+			"database_bucket": "shjoyner-fasta"
 		},
 		"combine-tsv-files": {
 		  "file": "combine_files",
 		  "format": "tsv",
 		  "memory_size": 1024
 		},
+		"confidence": {
+		  "file": "application",
+		  "application": "confidence",
+			"database_bucket": "shjoyner-fasta",
+		  "memory_size": 1024
+		},
 		"percolator": {
 		  "file": "application",
 		  "application": "percolator",
+			"database_bucket": "shjoyner-fasta",
 		  "memory_size": 3008
 		},
 		"top-mzML": {
@@ -78,13 +89,23 @@
 	    "file": "match",
 		  "format": "percolator",
 		  "memory_size": 1024
+		},
+	  "handle-specie-match": {
+		  "file": "application",
+		  "application": "handle_specie_match",
+		  "memory_size": 1024
+		},
+		"initiate-split": {
+			"file": "initiate",
+			"memory_size": 1024
 		}
 	},
 	"pipeline": [{
 		"name": "split-mzML",
 		"batch_size": 8000,
 		"chunk_size": 500000,
-		"output_function": "top-mzML"
+		"output_function": "top-mzML",
+		"ranges": false
 	}, {
 		"name": "top-mzML",
 		"identifier": "tic",
@@ -105,6 +126,8 @@
 	}, {
 	  "name": "map-species",
 		"map_bucket": "shjoyner-fasta",
+		"input_key_value": "key",
+		"bucket_key_value": "species",
 		"ranges": false,
 		"directories": true,
 		"output_function": "tide",
@@ -113,13 +136,68 @@
     "name": "tide",
 		"num_threads": 0
 	}, {
-    "name": "percolator",
-		"max_train": 0
+    "name": "confidence",
+		"database_bucket": "shjoyner-fasta"
 	}, {
 		"name": "find-species-match",
 		"identifier": "q-value",
     "find": "max sum",
 		"batch_size": 1000,
 		"chunk_size": 100000
+	}, {
+	  "name": "initiate-split",
+	  "input_key_prefix": "0",
+		"output_function": "split-mzML"
+	}, {
+	  "name": "split-mzML",
+	  "ranges": false,
+	  "batch_size": 4000,
+	  "chunk_size": 10000000,
+	  "output_function": "find-mzML-pivots"
+	}, {
+	  "name": "find-mzML-pivots",
+ 	  "batch_size": 4000,
+	  "chunk_size": 10000000,
+	  "identifier": "mass",
+	  "sort": false
+	}, {
+	  "name": "combine-pivot-files",
+		"batch_size": 1000,
+		"chunk_size": 1000000,
+		"sort": false
+	}, {
+	  "name": "split-mzML",
+		"ranges": true,
+		"batch_size": 4000,
+		"chunk_size": 10000000,
+		"output_function": "sort-mzML-chunk"
+	}, {
+	  "name": "sort-mzML-chunk",
+		"batch_size": 4000,
+		"chunk_size": 10000000,
+		"identifier": "mass",
+		"sort": false
+	}, {
+	  "name": "combine-mzML-files",
+		"batch_size": 4000,
+		"chunk_size": 10000000,
+		"sort": false
+	}, {
+    "namme": "handle-specie-match",
+    "match_prefix": "7",
+    "output_function": "tide"
+  }, {
+    "name": "tide",
+    "num_threads": 0
+  }, {
+    "name": "combine-tsv-files",
+    "batch_size": 4000,
+    "chunk_size": 10000000,
+    "sort": false
+  }, {
+    "name": "percolator",
+    "max_train": 0,
+    "output": "peptides",
+    "database_bucket": "shjoyner-fasta"
 	}]
 }

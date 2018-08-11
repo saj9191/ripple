@@ -2,7 +2,7 @@ import tsv
 
 
 class Iterator(tsv.Iterator):
-  QVALUE_INDEX = 7
+  QVALUE_INDEX = 9
   THRESHOLD = 0.01
 
   def __init__(self, obj, batch_size, chunk_size):

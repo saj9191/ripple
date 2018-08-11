@@ -123,6 +123,7 @@ def process_iteration_params(params, iteration):
     "nonce": params["nonce"],
     "bin": 1,
     "file_id": 1,
+    "suffix": "tide",
     "last": True,
     "ext": params["ext"]
   }

@@ -43,7 +43,9 @@ def combine_instance(bucket_name, key):
     count += 1
     if count == num_attempts and not done:
       return [False, keys]
+    time.sleep(1)
 
+  print("Combine", done, len(keys))
   return [done and current_last_file(bucket_name, key), keys]
 
 
@@ -66,9 +68,9 @@ def run(bucket_name, key, params, func):
     obj = s3.Object(bucket_name, key)
     start_byte = 0
     end_byte = obj.content_length
-    if "extra_params" in params and "file_id" in params["extra_params"]:
-      output_format["file_id"] = params["extra_params"]["file_id"]
-      output_format["last"] = not params["extra_params"]["more"]
+    if "file_id" in params:
+      output_format["file_id"] = params["file_id"]
+      output_format["last"] = not params["more"]
 
   func(bucket_name, key, input_format, output_format, start_byte, end_byte, params)
   return output_format
@@ -81,6 +83,7 @@ def current_last_file(bucket_name, current_key):
   objects = list(bucket.objects.filter(Prefix=prefix))
   keys = set(list(map(lambda o: o.key, objects)))
   objects = sorted(objects, key=lambda o: [o.last_modified, o.key])
+  print("last", objects[-1])
   return ((current_key not in keys) or (objects[-1].key == current_key))
 
 
@@ -101,9 +104,12 @@ def lambda_setup(event, context):
   params["request_id"] = context.aws_request_id
   params["key_fields"] = key_fields
 
-  for value in ["extra_params", "range"]:
+  for value in ["range", "pivots"]:
     if value in s3:
       params[value] = s3[value]
+
+  if "extra_params" in s3:
+    params = {**params, **s3["extra_params"]}
 
   return [bucket_name, key, params]
 

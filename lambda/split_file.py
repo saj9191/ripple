@@ -14,7 +14,7 @@ def split_file(bucket_name, key, input_format, output_format, start_byte, end_by
   format_lib = importlib.import_module(params["format"])
 
   if params["ranges"]:
-    [input_bucket, input_key, ranges] = pivot.get_pivot_ranges(bucket_name, key, params["bucket_prefix"], params["num_buckets"])
+    [input_bucket, input_key, ranges] = pivot.get_pivot_ranges(bucket_name, key)
   else:
     input_bucket = bucket_name
     input_key = key
@@ -53,7 +53,7 @@ def split_file(bucket_name, key, input_format, output_format, start_byte, end_by
     }
 
     if params["ranges"]:
-      payload["pivots"] = ranges
+      payload["Records"][0]["s3"]["extra_params"]["pivots"] = ranges
 
     response = client.invoke(
       FunctionName=params["output_function"],

@@ -5,6 +5,7 @@ import util
 
 
 def run(file, params, input_format, output_format):
+  print("TIDE file", file)
   util.print_read(input_format, file, params)
 
   s3 = boto3.resource('s3')
@@ -12,9 +13,10 @@ def run(file, params, input_format, output_format):
 
   if "species" in params:
     species = params["species"]
-  elif "target_file" in params["extra_params"]:
-    species = params["extra_params"]["target_file"]
+  else:
+    raise Exception("Tide needs species parameter specified")
 
+  print("TIDE species", species)
   with open("/tmp/fasta", "wb") as f:
     database_bucket.download_fileobj("{0:s}/fasta".format(species), f)
 
@@ -38,9 +40,10 @@ def run(file, params, input_format, output_format):
     "--txt-output", "T",
     "--concat", "T",
     "--output-dir", output_dir,
-    "--overwrite", "T"
+    "--overwrite", "T",
   ]
 
+  print("TIDE ARGS", arguments)
   command = "cd /tmp; ./crux tide-search {0:s} fasta.index {1:s}".format(file, " ".join(arguments))
   subprocess.check_output(command, stderr=subprocess.STDOUT, shell=True)
   input_file = "{0:s}/tide-search.txt".format(output_dir)
@@ -48,4 +51,5 @@ def run(file, params, input_format, output_format):
   output_format["ext"] = "txt"
   output_file = "{0:s}/{1:s}".format(output_dir, util.file_name(output_format))
   os.rename(input_file, output_file)
+  print("TIDE OUTPUT", output_file)
   return [output_file]

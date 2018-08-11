@@ -6,12 +6,9 @@ import util
 def combine(bucket_name, key, input_format, output_format, start_byte, end_byte, params):
   util.print_read(input_format, key, params)
 
-  if params["sort"]:
-    output_format["file_id"] = input_format["bin"]
-    output_format["last"] = output_format["file_id"] == params["num_bins"]
-  else:
-    output_format["last"] = True
-    output_format["file_id"] = 1
+  output_format["file_id"] = input_format["bin"]
+  output_format["last"] = output_format["file_id"] == params["num_bins"]
+  output_format["bin"] = 1
 
   s3 = boto3.resource("s3")
   [combine, keys] = util.combine_instance(bucket_name, key)
