@@ -26,7 +26,7 @@ def run(file, params, input_format, output_format):
   output_files = []
   input_file = "{0:s}/assign-confidence.target.txt".format(output_dir)
   output_format["ext"] = "confidence"
-  output_file = "{0:s}/{1:s}".format(output_dir, util.file_name(output_format))
+  output_file = "/tmp/{0:s}".format(util.file_name(output_format))
   os.rename(input_file, output_file)
   output_files.append(output_file)
 

@@ -17,17 +17,14 @@ def run_application(bucket_name, key, input_format, output_format, start_byte, e
 
   output_bucket = s3.Bucket(params["bucket"])
   for output_file in output_files:
-    index = output_file.rfind("/")
-    file_name = output_file[index + 1:] if index != -1 else output_file
-
-    p = util.parse_file_name(file_name)
+    p = util.parse_file_name(output_file.replace("/tmp/", ""))
     if p is None:
-      index = file_name.rfind(".")
-      ext = file_name[index+1:]
+      index = output_file.rfind(".")
+      ext = output_file[index+1:]
       output_format["ext"] = ext
       new_key = util.file_name(output_format)
     else:
-      new_key = file_name
+      new_key = util.file_name(p)
 
     util.print_write(output_format, new_key, params)
     output_bucket.put_object(Key=new_key, Body=open(output_file, "rb"))

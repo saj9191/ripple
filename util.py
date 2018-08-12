@@ -11,24 +11,31 @@ import time
 FILE_FORMAT = [{
   "name": "prefix",
   "type": "int",
+  "folder": True,
 }, {
   "name": "timestamp",
   "type": "float",
+  "folder": False,
 }, {
   "name": "nonce",
   "type": "int",
+  "folder": True,
 }, {
   "name": "bin",
   "type": "int",
+  "folder": True,
 }, {
   "name": "file_id",
   "type": "int",
+  "folder": False,
 }, {
   "name": "last",
   "type": "bool",
+  "folder": False,
 }, {
   "name": "suffix",
   "type": "alpha",
+  "folder": False,
 }]
 
 
@@ -45,7 +52,7 @@ def combine_instance(bucket_name, key):
       return [False, keys]
     time.sleep(1)
 
-  print("Combine", done, len(keys))
+  print("Combine", done, current_last_file(bucket_name, key), len(keys))
   return [done and current_last_file(bucket_name, key), keys]
 
 
@@ -55,6 +62,8 @@ def run(bucket_name, key, params, func):
   output_format = dict(input_format)
   output_format["prefix"] = params["prefix"] + 1
 
+  print("key", key)
+  print("input", input_format)
   print_request(input_format, params)
 
   if "range" in params:
@@ -72,6 +81,8 @@ def run(bucket_name, key, params, func):
       output_format["file_id"] = params["file_id"]
       output_format["last"] = not params["more"]
 
+  make_folder(input_format)
+  make_folder(output_format)
   func(bucket_name, key, input_format, output_format, start_byte, end_byte, params)
   return output_format
 
@@ -156,7 +167,8 @@ def setup_client(service, params):
 
 
 def key_prefix(key):
-  return "-".join(key.split("-")[:4]) + "-"
+  print("key", key.split("/"))
+  return "/".join(key.split("/")[:-1])
 
 
 def lambda_client(params):
@@ -181,9 +193,10 @@ def get_credentials(name):
 
 def file_format(m):
   name = ""
+  folder = False
   for part in FILE_FORMAT:
     if len(name) > 0:
-      name += "-"
+      name += "/" if folder else "-"
     if part["name"] in m:
       value = m[part["name"]]
       if part["type"] == "alpha":
@@ -203,6 +216,7 @@ def file_format(m):
         name += "([0-9]+)"
       else:
         name += "([0-1])"
+    folder = part["folder"]
   name += "."
   if "ext" in m:
     name += m["ext"]
@@ -210,6 +224,14 @@ def file_format(m):
     name += "([A-Za-z0-9]+)"
 
   return name
+
+
+def make_folder(file_format):
+  name = file_name(file_format)
+  path = "/tmp/{0:s}".format(key_prefix(name))
+  print("Making directory", path)
+  if not os.path.isdir(path):
+    os.makedirs(path)
 
 
 def file_name(m):

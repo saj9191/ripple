@@ -7,9 +7,14 @@ def run(key, params, input_format, output_format):
   util.print_read(input_format, key, params)
   s3 = boto3.resource("s3")
   bucket = s3.Bucket(params["bucket"])
-  objects = list(bucket.objects.filter(Prefix=params["input_key_prefix"] + "-"))
+  input_format["prefix"] = params["match_prefix"]
+  prefix = util.key_prefix(util.file_name(input_format))
+  objects = list(bucket.objects.filter(Prefix=prefix))
   assert(len(objects) == 1)
-  obj_key = objects[0].key
+  species_key = objects[0].key
+  object_key = key[key.rfind("/") + 1:]
+
+  match = s3.Object(params["bucket"], species_key).get()["Body"].read().decode("utf-8")
 
   payload = {
     "Records": [{
@@ -18,12 +23,12 @@ def run(key, params, input_format, output_format):
           "name": params["bucket"],
         },
         "object": {
-          "key": key,
+          "key": object_key,
         },
         "extra_params": {
           "token": params["token"],
           "prefix": output_format["prefix"],
-          "species": util.parse_file_name(obj_key)["suffix"]
+          "species": util.parse_file_name(match)["suffix"]
         }
       }
     }]

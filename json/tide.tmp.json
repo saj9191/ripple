@@ -22,8 +22,7 @@
 				"formats/tsv.py"
 			],
 			"confidence": [
-				"formats/tsv.py",
-				"formats/percolator.py"
+				"formats/tsv.py"
 			]
 		}
 	},
@@ -87,7 +86,7 @@
 		},
 		"find-species-match": {
 	    "file": "match",
-		  "format": "percolator",
+		  "format": "confidence",
 		  "memory_size": 1024
 		},
 	  "handle-specie-match": {
@@ -183,8 +182,8 @@
 		"chunk_size": 10000000,
 		"sort": false
 	}, {
-    "namme": "handle-specie-match",
-    "match_prefix": "7",
+    "name": "handle-specie-match",
+    "match_prefix": "8",
     "output_function": "tide"
   }, {
     "name": "tide",

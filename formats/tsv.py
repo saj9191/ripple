@@ -75,8 +75,13 @@ class Iterator(iterator.Iterator):
     if params["sort"]:
       raise Exception("Not implement")
 
-    with open(temp_name, "wb+") as f:
-      f.write(str.encode("\t".join(Iterator.HEADER_ITEMS)))
-      for key in keys:
+    with open(temp_name, "w+") as f:
+      f.write("\t".join(Iterator.HEADER_ITEMS))
+      for i in range(len(keys)):
+        key = keys[i]
         obj = s3.Object(bucket_name, key)
-        f.write(obj.get()["Body"].read())
+        content = obj.get()["Body"].read().decode("utf-8")
+        if i == 0:
+          f.write(content)
+        else:
+          f.write(content[content.find("\n") + 1:])

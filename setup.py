@@ -49,6 +49,7 @@ def create_parameter_files(zip_directory, function_name, params):
   files = []
   for i in range(len(params["pipeline"])):
     pparams = params["pipeline"][i]
+    print(pparams)
     if pparams["name"] == function_name:
       p = {**pparams, **params["functions"][function_name]}
       for value in ["timeout", "num_bins", "bucket"]:
@@ -174,7 +175,7 @@ def setup_triggers(params):
         "Events": ["s3:ObjectCreated:*"],
         "Filter": {
           "Key": {
-            "FilterRules": [{"Name": "prefix", "Value": "{0:d}-".format(prefix)}]
+            "FilterRules": [{"Name": "prefix", "Value": "{0:d}/".format(prefix)}]
           }
         }
       })

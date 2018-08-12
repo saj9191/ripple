@@ -9,6 +9,7 @@ def combine(bucket_name, key, input_format, output_format, start_byte, end_byte,
   output_format["file_id"] = input_format["bin"]
   output_format["last"] = output_format["file_id"] == params["num_bins"]
   output_format["bin"] = 1
+  util.make_folder(output_format)
 
   s3 = boto3.resource("s3")
   [combine, keys] = util.combine_instance(bucket_name, key)

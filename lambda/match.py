@@ -20,6 +20,7 @@ def find_match(bucket_name, key, input_format, output_format, start_byte, end_by
       else:
         raise Exception("Not implemented", params["find"])
 
+      print("score", score, "key", key)
       if score > match_score:
         best_match = key
         match_score = score
