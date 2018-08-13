@@ -415,7 +415,7 @@ def setup_connection(service, params):
 
 def clear_buckets(params):
   s3 = setup_connection("s3", params)
-  num_steps = len(params["pipeline"])
+  num_steps = len(params["pipeline"]) + 1
   bucket = s3.Bucket(params["bucket"])
   for i in range(num_steps):
     prefix = "{0:d}/{1:f}-{2:d}/".format(i, params["now"], params["nonce"])
