@@ -12,7 +12,7 @@ def run(key, params, input_format, output_format):
   objects = list(bucket.objects.filter(Prefix=prefix))
   assert(len(objects) == 1)
   species_key = objects[0].key
-  object_key = key[key.rfind("/") + 1:]
+  object_key = key.replace("/tmp/", "")
 
   match = s3.Object(params["bucket"], species_key).get()["Body"].read().decode("utf-8")
 

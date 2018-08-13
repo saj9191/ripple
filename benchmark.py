@@ -324,11 +324,43 @@ def run(params, thread_id):
   print_run_information()
   process_params(params)
 
-  #if params["setup"]:
-  setup.setup(params)
-  i = 0
-  process_iteration_params(params, i)
-  return benchmark(i, params, thread_id)
+  if params["setup"]:
+    setup.setup(params)
+
+  total_upload_duration = 0.0
+  total_duration = 0.0
+  total_failed_attempts = 0.0
+  iterations = params["iterations"]
+
+  pipeline = [{"name": "load", "billed_duration": 0}] + params["pipeline"]
+  stats = list(map(lambda i: [], range(len(pipeline))))
+  for i in range(iterations):
+    process_iteration_params(params, i)
+    clear_buckets(params)
+    if params["stats"]:
+      [results, upload_duration, duration, failed_attempts] = benchmark(i, params, thread_id)
+      for j in range(len(results[:-1])):
+        stats[j].append(results[j])
+    else:
+      [upload_duration, duration, failed_attempts] = benchmark(i, params, thread_id)
+    total_upload_duration += upload_duration
+    total_duration += duration
+    total_failed_attempts += failed_attempts
+    clear_buckets(params)
+
+  dir_path = "results/{0:f}-{1:d}".format(params["now"], params["nonce"])
+  os.makedirs(dir_path)
+  with open("{0:s}/stats".format(dir_path), "w+") as f:
+    f.write(json.dumps({"stats": stats}, indent=4, sort_keys=True))
+
+  for s in stats:
+    print("AVERAGE {0:s}".format(s[0]["name"]))
+    print_stats(calculate_average_results(s, iterations))
+
+  avg_upload_duration = total_upload_duration / iterations
+  avg_duration = total_duration / iterations
+  avg_failed_attempts = total_failed_attempts / iterations
+  return [avg_upload_duration, avg_duration, avg_failed_attempts]
 
 
 def calculate_total_stats(stats):
@@ -383,19 +415,11 @@ def setup_connection(service, params):
 
 def clear_buckets(params):
   s3 = setup_connection("s3", params)
-  prefix = "{0:s}-{1:f}-{2:d}-".format(params["input_prefix"], params["now"], params["nonce"])
-
-  def delete_objects(bucket_name):
-    bucket = s3.Bucket(bucket_name)
+  num_steps = len(params["pipeline"])
+  bucket = s3.Bucket(params["bucket"])
+  for i in range(num_steps):
+    prefix = "{0:d}/{1:f}-{2:d}/".format(i, params["now"], params["nonce"])
     bucket.objects.filter(Prefix=prefix).delete()
-    print("Cleared bucket", bucket_name)
-
-  for function in params["pipeline"]:
-    for bucket_name in setup.function_buckets(function):
-      delete_objects(bucket_name)
-
-  for i in range(params["num_buckets"]):
-    delete_objects("shjoyner-blast-sort-{0:d}".format(i+1))
 
 #############################
 #       COORDINATOR         #
@@ -557,15 +581,13 @@ class MergeLambdaStage(Enum):
 
 def check_objects(client, bucket_name, prefix, count, timeout, params, thread_id):
   done = False
-  suffix = ""
-  if count > 1:
-    suffix = "s"
 
   # There's apparently a stupid bug where str(timestamp) has more significant
   # digits than "{0:f}:.format(timestmap)
   # eg. spectra-1530978873.960075-1-0-58670073.txt 1530978873.9600754
   token = "{0:f}-{1:d}".format(params["now"], params["nonce"])
-  #prefix = util.key_prefix(util.file_name(m))
+  prefix = "{0:s}{1:s}".format(prefix, token)
+  print("Waiting for {0:s}".format(prefix))
   start = datetime.datetime.now()
   s3 = setup_connection("s3", params)
   bucket = s3.Bucket(bucket_name)
@@ -594,14 +616,13 @@ def wait_for_completion(start_time, params, thread_id):
   client = util.setup_client("s3", params)
 
   # Give ourselves time as we need to wait for each part of the pipeline
-  last = params["pipeline"][-1]
+  prefix = "{0:d}/".format(len(params["pipeline"]))
   timeout = 2 * 60 * len(params["pipeline"])
-  bucket_name = last["output_bucket"]
-  check_objects(client, bucket_name, params["output_prefix"], params["num_output_files"], timeout, params, thread_id)
+  check_objects(client, params["bucket"], prefix, 1, timeout, params, thread_id)
   time.sleep(10)  # Wait a little to make sure percolator logs are on the server
 
 
-def fetch(client, log_name, timestamp, nonce, filter_pattern, extra_args={}):
+def fetch(client, log_name, timestamp, nonce, step, filter_pattern, extra_args={}):
   log_events = []
   next_token = None
   args = {
@@ -612,7 +633,7 @@ def fetch(client, log_name, timestamp, nonce, filter_pattern, extra_args={}):
 
   more = True
   while more:
-    args["filterPattern"] = "TIMESTAMP {0:f} NONCE {1:d}".format(timestamp / 1000, nonce)
+    args["filterPattern"] = "TIMESTAMP {0:f} NONCE {1:d} STEP {2:d} ".format(timestamp / 1000, nonce, step)
     if next_token:
       args["nextToken"] = next_token
     response = client.filter_log_events(**args)
@@ -648,8 +669,8 @@ def fetch(client, log_name, timestamp, nonce, filter_pattern, extra_args={}):
   return [events, messages]
 
 
-def fetch_events(client, log_name, start_time, nonce, filter_pattern, extra_args={}):
-  events = fetch(client, log_name, start_time * 1000, nonce, filter_pattern, extra_args)
+def fetch_events(client, log_name, start_time, nonce, step, filter_pattern, extra_args={}):
+  events = fetch(client, log_name, start_time * 1000, nonce, step, filter_pattern, extra_args)
   if len(events) == 0:
     raise BenchmarkException("Could not find any events")
   return events
@@ -672,8 +693,8 @@ def file_count(bucket_name, params):
   return count
 
 
-def parse_mult_logs(client, params, lparams, num_lambdas=None):
-  [events, messages] = fetch_events(client, lparams["name"], params["now"], params["nonce"], "REPORT RequestId")
+def parse_mult_logs(client, params, lparams, step):
+  [events, messages] = fetch_events(client, lparams["name"], params["now"], params["nonce"], step, "REPORT RequestId")
   if len(events) == 0:
     raise BenchmarkException("Can't find events for", lparams["name"])
   max_billed_duration = 0
@@ -700,7 +721,7 @@ def parse_mult_logs(client, params, lparams, num_lambdas=None):
     total_memory_used += memory_used
     durations.append(duration)
 
-  cost = calculate_cost(total_billed_duration, lparams["memory_size"])
+  cost = calculate_cost(total_billed_duration, params["functions"][lparams["name"]]["memory_size"])
 
   print(lparams["name"])
   print("num events", len(events))
@@ -735,7 +756,7 @@ def parse_logs(params, upload_timestamp, upload_duration, total_duration):
   stats.append(load_stats(upload_duration))
   for i in range(len(params["pipeline"])):
     step = params["pipeline"][i]
-    stats.append(parse_mult_logs(client, params, step))
+    stats.append(parse_mult_logs(client, params, step, i))
 
   stats.append({
     "name": "total",
@@ -750,12 +771,16 @@ def parse_logs(params, upload_timestamp, upload_duration, total_duration):
 
 def lambda_benchmark(params, thread_id):
   [upload_timestamp, upload_duration] = upload_input(params, thread_id)
-  raise Exception("")
   start_time = time.time()
   wait_for_completion(upload_timestamp, params, thread_id)
   end_time = time.time()
   total_duration = end_time - start_time
-  return [upload_duration, total_duration]
+  results = [upload_duration, total_duration]
+
+  if params["stats"]:
+    stats = parse_logs(params, upload_timestamp, upload_duration, total_duration)
+    results = [stats] + results
+  return results
 
 
 #############################

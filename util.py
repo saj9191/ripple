@@ -88,7 +88,7 @@ def run(bucket_name, key, params, func):
 
 
 def current_last_file(bucket_name, current_key):
-  prefix = key_prefix(current_key)
+  prefix = key_prefix(current_key) + "/"
   s3 = boto3.resource("s3")
   bucket = s3.Bucket(bucket_name)
   objects = list(bucket.objects.filter(Prefix=prefix))
@@ -133,8 +133,8 @@ def show_duration(context, m, params):
 
 
 def print_request(m, params):
-  msg = "TIMESTAMP {0:f} NONCE {1:d} BIN {2:d} FILE {3:d} REQUEST ID {4:s} TOKEN {5:d}"
-  msg = msg.format(m["timestamp"], m["nonce"], m["bin"], m["file_id"], params["request_id"], params["token"])
+  msg = "TIMESTAMP {0:f} NONCE {1:d} STEP {2:d} BIN {3:d} FILE {4:d} REQUEST ID {5:s} TOKEN {6:d}"
+  msg = msg.format(m["timestamp"], m["nonce"], params["prefix"], m["bin"], m["file_id"], params["request_id"], params["token"])
   print(msg)
   if "extra_params" in params and "token" in params["extra_params"]:
     msg += " INVOKED BY TOKEN {0:d}".format(params["extra_params"]["token"])

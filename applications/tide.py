@@ -5,6 +5,10 @@ import util
 
 
 def run(file, params, input_format, output_format):
+  print("file", file)
+  print("params", params)
+  print("input", input_format)
+  print("output", output_format)
   util.print_read(input_format, file, params)
 
   s3 = boto3.resource('s3')
