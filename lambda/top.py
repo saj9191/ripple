@@ -4,6 +4,15 @@ import importlib
 import util
 
 
+class Element:
+  def __init__(self, identifier, value):
+    self.value = value
+    self.identifier = identifier
+
+  def __lt__(self, other):
+    return self.identifier < other.identifier
+
+
 def find_top(bucket_name, key, input_format, output_format, start_byte, end_byte, params):
   s3 = boto3.resource("s3")
   obj = s3.Object(bucket_name, key)
@@ -16,17 +25,17 @@ def find_top(bucket_name, key, input_format, output_format, start_byte, end_byte
   identifier = params["identifier"] if "identifier" in params else None
   while more:
     if start_byte == 0 and end_byte == obj.content_length:
-      [spectra, more] = it.next(identifier=identifier)
+      [values, more] = it.next(identifier=identifier)
     else:
-      spectra = iterator.get(obj, start_byte, end_byte, identifier)
+      values = iterator.get(obj, start_byte, end_byte, identifier)
       more = False
 
-    for spectrum in spectra:
-      heapq.heappush(top, spectrum)
+    for value in values:
+      heapq.heappush(top, Element(value[0], value[1]))
       if len(top) > params["number"]:
         heapq.heappop(top)
 
-  content = iterator.fromArray(list(map(lambda t: t[1], top)))
+  content = iterator.fromArray(list(map(lambda t: t.value, top)))
 
   file_name = util.file_name(output_format)
   util.print_write(output_format, file_name, params)
