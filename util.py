@@ -52,7 +52,6 @@ def combine_instance(bucket_name, key):
       return [False, keys]
     time.sleep(1)
 
-  print("Combine", done, current_last_file(bucket_name, key), len(keys))
   return [done and current_last_file(bucket_name, key), keys]
 
 
@@ -62,8 +61,6 @@ def run(bucket_name, key, params, func):
   output_format = dict(input_format)
   output_format["prefix"] = params["prefix"] + 1
 
-  print("key", key)
-  print("input", input_format)
   print_request(input_format, params)
 
   if "range" in params:
@@ -94,7 +91,6 @@ def current_last_file(bucket_name, current_key):
   objects = list(bucket.objects.filter(Prefix=prefix))
   keys = set(list(map(lambda o: o.key, objects)))
   objects = sorted(objects, key=lambda o: [o.last_modified, o.key])
-  print("last", objects[-1])
   return ((current_key not in keys) or (objects[-1].key == current_key))
 
 
@@ -135,10 +131,9 @@ def show_duration(context, m, params):
 def print_request(m, params):
   msg = "TIMESTAMP {0:f} NONCE {1:d} STEP {2:d} BIN {3:d} FILE {4:d} REQUEST ID {5:s} TOKEN {6:d}"
   msg = msg.format(m["timestamp"], m["nonce"], params["prefix"], m["bin"], m["file_id"], params["request_id"], params["token"])
-  print(msg)
   if "extra_params" in params and "token" in params["extra_params"]:
     msg += " INVOKED BY TOKEN {0:d}".format(params["extra_params"]["token"])
-    print(msg)
+  print(msg)
 
 
 def print_read(m, key, params):
@@ -229,7 +224,6 @@ def file_format(m):
 def make_folder(file_format):
   name = file_name(file_format)
   path = "/tmp/{0:s}".format(key_prefix(name))
-  print("Making directory", path)
   if not os.path.isdir(path):
     os.makedirs(path)
 
