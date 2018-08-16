@@ -92,29 +92,30 @@ class Iterator:
     return obj.get(Range="bytes={0:d}-{1:d}".format(start_byte, end_byte))["Body"].read().decode("utf-8")
 
   def next(self, identifier=""):
-    [start_byte, end_byte, more] = self.nextOffsets()
-    if start_byte == -1:
-      return [[], more]
-    return [self.cls.get(self.obj, start_byte, end_byte, identifier), more]
+    [o, more] = self.nextOffsets()
+    if len(o["offsets"]) == 0:
+      return [o, False]
+    return [self.cls.get(self.obj, o["offsets"][0], o["offsets"][-1], identifier), more]
 
   def nextOffsets(self):
     if self.content_length == 0:
-      return (-1, -1, False)
+      return ([], False)
     # Plus one is so we get end byte of value
     while len(self.offsets) < (self.batch_size + 1) and self.current_offset < self.content_length:
       self.updateOffsets()
 
     if len(self.offsets) == 0 and self.current_offset >= self.content_length:
-      return (-1, -1, False)
+      return ([], False)
 
-    start_offset = self.offsets[0]
-    if len(self.offsets) > self.batch_size:
-      end_offset = self.offsets[self.batch_size] - 1
+    count = min(len(self.offsets), self.batch_size)
+    self.seen_count += count
+    offsets = self.offsets[:count]
+    self.offsets = self.offsets[count:]
+    if len(self.offsets) > 0:
+      offsets.append(self.offsets[0] - 1)
     else:
-      end_offset = self.endByte()
-    self.seen_count += min(len(self.offsets), self.batch_size)
-    self.offsets = self.offsets[self.batch_size:]
-    return (start_offset, end_offset, self.more())
+      offsets.append(self.endByte())
+    return ({"offsets": offsets}, self.more())
 
   def updateOffsets(self):
     start_byte = self.current_offset

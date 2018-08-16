@@ -63,24 +63,19 @@ def run(bucket_name, key, params, func):
 
   print_request(input_format, params)
 
-  if "range" in params:
-    rparams = params["range"]
-    start_byte = rparams["start_byte"]
-    end_byte = rparams["end_byte"]
-    output_format["file_id"] = rparams["file_id"]
-    output_format["last"] = not rparams["more"]
+  if "offsets" in params:
+    offsets = params["offsets"]
+    output_format["file_id"] = params["object"]["file_id"]
+    output_format["last"] = not params["object"]["more"]
   else:
-    s3 = boto3.resource('s3')
-    obj = s3.Object(bucket_name, key)
-    start_byte = 0
-    end_byte = obj.content_length
-    if "file_id" in params:
-      output_format["file_id"] = params["file_id"]
-      output_format["last"] = not params["more"]
+    offsets = {}
+    # if "file_id" in params:
+    #   output_format["file_id"] = params["file_id"]
+    #   output_format["last"] = not params["more"]
 
   make_folder(input_format)
   make_folder(output_format)
-  func(bucket_name, key, input_format, output_format, start_byte, end_byte, params)
+  func(bucket_name, key, input_format, output_format, offsets, params)
   return output_format
 
 
@@ -111,7 +106,7 @@ def lambda_setup(event, context):
   params["request_id"] = context.aws_request_id
   params["key_fields"] = key_fields
 
-  for value in ["range", "pivots"]:
+  for value in ["object", "offsets", "pivots"]:
     if value in s3:
       params[value] = s3[value]
 

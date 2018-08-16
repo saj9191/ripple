@@ -13,29 +13,26 @@ class Element:
     return self.identifier < other.identifier
 
 
-def find_top(bucket_name, key, input_format, output_format, start_byte, end_byte, params):
+def find_top(bucket_name, key, input_format, output_format, offsets, params):
   s3 = boto3.resource("s3")
   obj = s3.Object(bucket_name, key)
   format_lib = importlib.import_module(params["format"])
   iterator = getattr(format_lib, "Iterator")
-  it = iterator(obj, params["batch_size"], params["chunk_size"])
+  it = iterator(obj, offsets, params["batch_size"], params["chunk_size"])
 
   top = []
   more = True
   identifier = params["identifier"] if "identifier" in params else None
   while more:
-    if start_byte == 0 and end_byte == obj.content_length:
-      [values, more] = it.next(identifier=identifier)
-    else:
-      values = iterator.get(obj, start_byte, end_byte, identifier)
-      more = False
+    [values, more] = it.next(identifier=identifier)
 
     for value in values:
       heapq.heappush(top, Element(value[0], value[1]))
       if len(top) > params["number"]:
         heapq.heappop(top)
 
-  content = iterator.fromArray(list(map(lambda t: t.value, top)))
+  values = list(map(lambda t: t.value, top))
+  content = iterator.fromArray(obj, values, offsets)
 
   file_name = util.file_name(output_format)
   util.print_write(output_format, file_name, params)

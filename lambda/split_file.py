@@ -5,7 +5,7 @@ import pivot
 import util
 
 
-def split_file(bucket_name, key, input_format, output_format, start_byte, end_byte, params):
+def split_file(bucket_name, key, input_format, output_format, offsets, params):
   batch_size = params["batch_size"]
   chunk_size = params["chunk_size"]
 
@@ -21,14 +21,14 @@ def split_file(bucket_name, key, input_format, output_format, start_byte, end_by
 
   obj = s3.Object(input_bucket, input_key)
   iterator_class = getattr(format_lib, "Iterator")
-  iterator = iterator_class(obj, batch_size, chunk_size)
+  iterator = iterator_class(obj, offsets, batch_size, chunk_size)
 
   more = True
   file_id = 0
 
   while more:
     file_id += 1
-    [start_byte, end_byte, more] = iterator.nextOffsets()
+    [offsets, more] = iterator.nextOffsets()
     payload = {
       "Records": [{
         "s3": {
@@ -36,14 +36,11 @@ def split_file(bucket_name, key, input_format, output_format, start_byte, end_by
             "name": input_bucket
           },
           "object": {
-            "key": input_key
-          },
-          "range": {
+            "key": input_key,
             "file_id": file_id,
-            "start_byte": start_byte,
-            "end_byte": end_byte,
             "more": more
           },
+          "offsets": offsets,
           "extra_params": {
             "token": params["token"],
             "prefix": output_format["prefix"]
@@ -52,6 +49,7 @@ def split_file(bucket_name, key, input_format, output_format, start_byte, end_by
       }]
     }
 
+    print(payload)
     if params["ranges"]:
       payload["Records"][0]["s3"]["extra_params"]["pivots"] = ranges
 
@@ -67,3 +65,4 @@ def handler(event, context):
   [bucket_name, key, params] = util.lambda_setup(event, context)
   m = util.run(bucket_name, key, params, split_file)
   util.show_duration(context, m, params)
+

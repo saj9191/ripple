@@ -8,21 +8,29 @@ import xml.etree.ElementTree as ET
 class Iterator(iterator.Iterator):
   INDEX_LIST_OFFSET_REGEX = re.compile("[\s\S]*<indexListOffset>(\d+)</indexListOffset>")
   OFFSET_REGEX = re.compile("<offset[^>]*>(\d+)</offset>")
-  SPECTRUM_LIST_COUNT_REGEX = re.compile('[\s\S]*<spectrumList [\s\S]*count="(\d+)" [\s\S]*>[\s\S]*')
+  SPECTRUM_LIST_COUNT_REGEX = re.compile('<spectrumList [\s\S]*count="(\d+)"')
   SPECTRUM_LIST_CLOSE_TAG = "</spectrumList>"
   INDEX_CHUNK_SIZE = 1000
   SPECTRUM_CLOSE_TAG = "</spectrum>"
+  ID_REGEX = re.compile(".*scan=([0-9]+).*")
   XML_NAMESPACE = "http://psi.hupo.org/ms/mzml"
 
-  def __init__(self, obj, batch_size, chunk_size):
+  def __init__(self, obj, offsets, batch_size, chunk_size):
     iterator.Iterator.__init__(self, Iterator, obj, batch_size, chunk_size)
     ET.register_namespace("", Iterator.XML_NAMESPACE)
     self.footer_offset = 235
     self.remainder = ""
-    self.findOffsets()
-
-  def getCount(self):
-    return self.total_count
+    if "header" in offsets:
+      self.header_length = offsets["header"]["end"]
+      self.offsets = offsets["offsets"]
+      self.end_byte = self.offsets[-1]
+      self.offsets = self.offsets[:-1]
+      self.content_length = self.end_byte
+      self.current_offset = self.content_length
+      self.total_count = len(self.offsets)
+    else:
+      self.start_byte = None
+      self.findOffsets()
 
   def findOffsets(self):
     end_byte = self.content_length
@@ -50,11 +58,19 @@ class Iterator(iterator.Iterator):
       self.total_count = 0
     else:
       end_byte = self.offsets[0]
-      start_byte = min(end_byte - self.INDEX_CHUNK_SIZE, 0)
-      stream = Iterator.getBytes(self.obj, start_byte, end_byte)
-      m = self.SPECTRUM_LIST_COUNT_REGEX.match(stream)
+      self.header_length = end_byte - 1
+      stream = iterator.Iterator.getBytes(self.obj, 0, end_byte)
+      m = self.SPECTRUM_LIST_COUNT_REGEX.search(stream)
       assert(m is not None)
       self.total_count = int(m.group(1))
+
+  def getCount(self):
+    return self.total_count
+
+  def nextOffsets(self):
+    [offsets, more] = iterator.Iterator.nextOffsets(self)
+    offsets["header"] = {"start": 0, "end": self.header_length}
+    return [offsets, more]
 
   def updateOffsets(self):
     start_byte = self.current_offset
@@ -108,16 +124,24 @@ class Iterator(iterator.Iterator):
       spectra = list(spectra)
     return spectra
 
-  def fromArray(spectra, includeHeader=False):
-    content = open("header.mzML").read()
-    content = content.replace("-123456789", str(len(spectra)))
+  def header(obj, start, end, count):
+    content = Iterator.getBytes(obj, start, end)
+    m = Iterator.SPECTRUM_LIST_COUNT_REGEX.search(content)
+    original = m.group(0)
+    replacement = original.replace(m.group(1), str(count))
+    content = content.replace(original, replacement)
+    return content
+
+  def fromArray(obj, spectra, offsets):
+    content = Iterator.header(obj, offsets["header"]["start"], offsets["header"]["end"], len(spectra))
     offset = len(content)
     offsets = []
 
     for i in range(len(spectra)):
       xml = spectra[i]
       xml.set("index", str(i))
-      offsets.append((xml.get("id"), offset))
+      m = Iterator.ID_REGEX.match(xml.get("id"))
+      offsets.append((m.group(1), offset))
       spectrum = ET.tostring(xml).decode()
       offset += len(spectrum)
       content += spectrum
@@ -151,15 +175,17 @@ class Iterator(iterator.Iterator):
     iterators = []
     count = 0
     s3 = boto3.resource("s3")
+
     for key in keys:
       obj = s3.Object(bucket_name, key)
-      iterator = Iterator(obj, params["batch_size"], params["chunk_size"])
+      iterator = Iterator(obj, {}, params["batch_size"], params["chunk_size"])
       iterators.append(iterator)
       count += iterator.getCount()
 
+    header = Iterator.header(obj, 0, iterator.header_length, count)
+
     with open(temp_name, "w+") as f:
-      content = open("header.mzML").read()
-      content = content.replace("-123456789", str(count))
+      content = header
       f.write(content)
       offset = len(content)
       offsets = []
