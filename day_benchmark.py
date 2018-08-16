@@ -82,8 +82,14 @@ def launch_threads(requests, file_names, params):
 
 
 def run(args, params):
-  requests = parse_csv(args.file, args.num_requests)
-  requests = list(filter(lambda r: r < 1*60*60, requests))
+  #requests = parse_csv(args.file, args.num_requests)
+  #requests = list(filter(lambda r: r < 1*60*60, requests))
+  requests = []
+  for i in range(12):
+    num_requests = max(i * 10, 1)
+    for j in range(num_requests):
+      requests.append(i * 20 * 60)
+
   session = boto3.Session(
            aws_access_key_id=params["access_key"],
            aws_secret_access_key=params["secret_key"],
@@ -97,15 +103,14 @@ def run(args, params):
 def main():
   parser = argparse.ArgumentParser()
   parser.add_argument("--parameters", type=str, required=True, help="File containing parameters")
-  parser.add_argument("--file", type=str, required=True, help="CSV Chorus access log")
   parser.add_argument("--num_requests", type=int, required=True, help="Number of requests to send throughout the day")
   args = parser.parse_args()
   params = json.loads(open(args.parameters).read())
   [access_key, secret_key] = util.get_credentials("default")
   params["access_key"] = access_key
   params["secret_key"] = secret_key
-  params["plot"] = False
   params["setup"] = False
+  params["stats"] = False
   params["iterations"] = 1
   params["sample_input"] = True
   run(args, params)

@@ -324,7 +324,7 @@ def run(params, thread_id):
   print_run_information()
   process_params(params)
 
-  if params["setup"]:
+  if params["model"] == "lambda" and params["setup"]:
     setup.setup(params)
 
   total_upload_duration = 0.0
@@ -353,9 +353,10 @@ def run(params, thread_id):
   with open("{0:s}/stats".format(dir_path), "w+") as f:
     f.write(json.dumps({"stats": stats}, indent=4, sort_keys=True))
 
-  for s in stats:
-    print("AVERAGE {0:s}".format(s[0]["name"]))
-    print_stats(calculate_average_results(s, iterations))
+  if params["stats"]:
+    for s in stats:
+      print("AVERAGE {0:s}".format(s[0]["name"]))
+      print_stats(calculate_average_results(s, iterations))
 
   avg_upload_duration = total_upload_duration / iterations
   avg_duration = total_duration / iterations
@@ -922,7 +923,7 @@ def setup_instance(client, params):
   start_time = time.time()
   sftp = client.open_sftp()
 
-  items = []
+  items = ["formats/iterator.py", "formats/mzML.py", "ec2_script.py"]
   if not params["ec2"]["use_ami"]:
     cexec(client, "sudo yum update -y")
     cexec(client, "cd /etc/yum.repos.d; sudo wget http://s3tools.org/repo/RHEL_6/s3tools.repo")
@@ -978,34 +979,9 @@ def sort_spectra(client, params):
   return calculate_results(duration, MEMORY_PARAMETERS["ec2"][params["ec2"]["type"]])
 
 
-def run_analyze(client, params):
-  print("Running Tide", flush=True)
-  arguments = [
-    "--num-threads", str(params["lambda"]["analyze_spectra"]["num_threads"]),
-    "--txt-output", "T",
-    "--concat", "T",
-    "--output-dir", "tide-output",
-    "--overwrite", "T",
-  ]
+def run_ec2_script(client, params):
   start_time = time.time()
-  command = "sudo ./crux tide-search {0:s} HUMAN.fasta.20170123.index {1:s}".format(params["key"], " ".join(arguments))
-  cexec(client, command)
-  end_time = time.time()
-  duration = end_time - start_time
-
-  return calculate_results(duration, MEMORY_PARAMETERS["ec2"][params["ec2"]["type"]])
-
-
-def run_percolator(client, params):
-  print("Running Percolator", flush=True)
-  arguments = [
-    "--subset-max-train", str(params["lambda"]["percolator"]["max_train"]),
-    "--quick-validation", "T",
-    "--overwrite", "T",
-  ]
-
-  start_time = time.time()
-  cexec(client, "sudo ./crux percolator {0:s} {1:s}".format("tide-output/tide-search.txt", " ".join(arguments)))
+  cexec(client, "python3 ec2_script.py --file {0:s}".format(params["input_name"]))
   end_time = time.time()
   duration = end_time - start_time
 
@@ -1044,6 +1020,7 @@ def terminate_instance(instance, client, params):
 
 def ec2_benchmark(params):
   print("EC2 benchmark")
+  start_time = time.time()
   [upload_timestamp, upload_duration] = upload_input(params)
 
   stats = []
@@ -1059,21 +1036,21 @@ def ec2_benchmark(params):
 
   client = initiate_stats["client"]
   stats.append(setup_instance(client, params))
-  stats.append(download_input(client, params))
-  if params["sort"] == "yes":
-    stats.append(sort_spectra(client, params))
+  stats.append(run_ec2_script(client, params))
+  end_time = time.time()
 
-  stats.append(run_analyze(client, params))
-  stats.append(run_percolator(client, params))
-  stats.append(upload_results(client, params))
-  stats.append(terminate_instance(instance, client, params))
-
+  total_duration = end_time - start_time
   total_stats = calculate_total_stats(stats)
   print("END RESULTS")
   print_stats(total_stats)
   stats.append(total_stats)
 
-  return stats
+  results = [upload_duration, total_duration]
+
+  if params["stats"]:
+    stats = parse_logs(params, upload_timestamp, upload_duration, total_duration)
+    results = [stats] + results
+  return results
 
 #############################
 #           MAIN            #
