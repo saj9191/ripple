@@ -3,7 +3,7 @@ import json
 import util
 
 
-def initiate(bucket_name, key, input_format, output_format, start_byte, end_byte, params):
+def initiate(bucket_name, key, input_format, output_format, offsets, params):
   s3 = boto3.resource("s3")
   bucket = s3.Bucket(params["bucket"])
   input_format["prefix"] = params["input_key_prefix"]

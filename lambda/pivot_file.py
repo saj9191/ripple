@@ -16,13 +16,13 @@ def create_pivots(s3, sorted_input, params):
   return pivots
 
 
-def handle_pivots(bucket_name, key, input_format, output_format, start_byte, end_byte, params):
+def handle_pivots(bucket_name, key, input_format, output_format, offsets, params):
   s3 = boto3.resource("s3")
   obj = s3.Object(bucket_name, key)
 
   format_lib = importlib.import_module(params["format"])
   iterator = getattr(format_lib, "Iterator")
-  sorted_input = iterator.get(obj, start_byte, end_byte, params["identifier"])
+  sorted_input = iterator.get(obj, offsets["offsets"][0], offsets["offsets"][-1], params["identifier"])
   sorted_input = sorted(sorted_input, key=lambda k: k[0])
   pivots = create_pivots(s3, sorted_input, params)
 

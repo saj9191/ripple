@@ -32,7 +32,7 @@ class Iterator:
   def createContent(self, content):
     raise Exception("Not Implemented")
 
-  def fromArray(items, includeHeader=False):
+  def fromArray(obj, items, offsets):
     raise Exception("Not Implemented")
 
   def getCount(self):
@@ -94,18 +94,18 @@ class Iterator:
   def next(self, identifier=""):
     [o, more] = self.nextOffsets()
     if len(o["offsets"]) == 0:
-      return [o, False]
+      return [[], False]
     return [self.cls.get(self.obj, o["offsets"][0], o["offsets"][-1], identifier), more]
 
   def nextOffsets(self):
     if self.content_length == 0:
-      return ([], False)
+       return ({"offsets": []}, False)
     # Plus one is so we get end byte of value
     while len(self.offsets) < (self.batch_size + 1) and self.current_offset < self.content_length:
       self.updateOffsets()
 
     if len(self.offsets) == 0 and self.current_offset >= self.content_length:
-      return ([], False)
+      return ({"offsets": []}, False)
 
     count = min(len(self.offsets), self.batch_size)
     self.seen_count += count
@@ -146,3 +146,4 @@ class Iterator:
 
   def endByte(self):
     return self.current_offset
+

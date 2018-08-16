@@ -39,11 +39,15 @@ class Iterator(iterator.Iterator):
     m = self.INDEX_LIST_OFFSET_REGEX.match(stream)
     assert(m is not None)
     self.spectra_list_offset = int(m.group(1))
+    self.header_length = self.spectra_list_offset
+    self.total_count = 0
 
     start_byte = self.spectra_list_offset
     end_byte = start_byte + self.INDEX_CHUNK_SIZE
     stream = iterator.Iterator.getBytes(self.obj, start_byte, end_byte)
-    self.spectra_list_offset += stream.find("<offset")
+    index = stream.find("<offset")
+    if index != -1:
+      self.spectra_list_offset += stream.find("<offset")
     self.current_offset = self.spectra_list_offset
 
     start_byte = self.spectra_list_offset - self.INDEX_CHUNK_SIZE
@@ -54,9 +58,7 @@ class Iterator(iterator.Iterator):
     self.end_byte = start_byte + index + len(Iterator.SPECTRUM_CLOSE_TAG) - 1
 
     self.updateOffsets()
-    if len(self.offsets) == 0:
-      self.total_count = 0
-    else:
+    if len(self.offsets) != 0:
       end_byte = self.offsets[0]
       self.header_length = end_byte - 1
       stream = iterator.Iterator.getBytes(self.obj, 0, end_byte)
@@ -218,3 +220,4 @@ class Iterator(iterator.Iterator):
       content += "<fileChecksum>"
       content += "</fileChecksum>\n</indexedmzML>"
       f.write(content)
+

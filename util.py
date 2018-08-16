@@ -63,12 +63,12 @@ def run(bucket_name, key, params, func):
 
   print_request(input_format, params)
 
-  if "offsets" in params:
-    offsets = params["offsets"]
+  offsets = {}
+  if "more" in params["object"]:
+    if "offsets" in params:
+      offsets = params["offsets"]
     output_format["file_id"] = params["object"]["file_id"]
     output_format["last"] = not params["object"]["more"]
-  else:
-    offsets = {}
     # if "file_id" in params:
     #   output_format["file_id"] = params["file_id"]
     #   output_format["last"] = not params["more"]

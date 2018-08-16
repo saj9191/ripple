@@ -4,7 +4,7 @@ import pivot
 import util
 
 
-def map_file(bucket_name, key, input_format, output_format, start_byte, end_byte, params):
+def map_file(bucket_name, key, input_format, output_format, offsets, params):
   client = boto3.client("lambda")
   s3 = boto3.resource("s3")
   bucket = s3.Bucket(params["map_bucket"])
@@ -38,14 +38,14 @@ def map_file(bucket_name, key, input_format, output_format, start_byte, end_byte
             "name": bucket_name,
           },
           "object": {
+            "file_id": file_id,
+            "more": (i + 1) != len(objects)
           },
           "extra_params": {
             "token": params["token"],
             "target_bucket": params["map_bucket"],
             "target_file": target_file,
             "prefix": output_format["prefix"],
-            "file_id": file_id,
-            "more": (i + 1) != len(objects)
           }
         }
       }]

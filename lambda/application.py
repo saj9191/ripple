@@ -3,7 +3,7 @@ import importlib
 import util
 
 
-def run_application(bucket_name, key, input_format, output_format, start_byte, end_byte, params):
+def run_application(bucket_name, key, input_format, output_format, offsets, params):
   s3 = boto3.resource('s3')
   input_bucket = s3.Bucket(bucket_name)
 
