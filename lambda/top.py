@@ -16,6 +16,8 @@ class Element:
 def find_top(bucket_name, key, input_format, output_format, offsets, params):
   s3 = boto3.resource("s3")
   obj = s3.Object(bucket_name, key)
+  if len(offsets) == 0:
+    util.print_read(input_format, key, params)
   format_lib = importlib.import_module(params["format"])
   iterator = getattr(format_lib, "Iterator")
   it = iterator(obj, offsets, params["batch_size"], params["chunk_size"])

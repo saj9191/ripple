@@ -4,6 +4,7 @@ import util
 
 
 def find_match(bucket_name, key, input_format, output_format, offsets, params):
+  util.print_read(input_format, key, params)
   [combine, keys] = util.combine_instance(bucket_name, key)
   if combine:
     best_match = None

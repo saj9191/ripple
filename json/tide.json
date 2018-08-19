@@ -44,7 +44,7 @@
 		"split-mzML": {
 		  "file": "split_file",
 		  "format": "mzML",
-		  "memory_size": 1024
+		  "memory_size": 128
 		},
 		"find-mzML-pivots": {
 		  "file": "pivot_file",
@@ -64,24 +64,24 @@
 		"combine-mzML-files": {
 		  "file": "combine_files",
 		  "format": "mzML",
-		  "memory_size": 1024
+		  "memory_size": 512
 		},
 		"tide": {
 		  "file": "application",
 		  "application": "tide",
-		  "memory_size": 1024,
+		  "memory_size": 2048,
 			"database_bucket": "shjoyner-fasta"
 		},
 		"combine-tsv-files": {
 		  "file": "combine_files",
 		  "format": "tsv",
-		  "memory_size": 1024
+		  "memory_size": 256
 		},
 		"confidence": {
 		  "file": "application",
 		  "application": "confidence",
 			"database_bucket": "shjoyner-fasta",
-		  "memory_size": 1024
+		  "memory_size": 512
 		},
 		"percolator": {
 		  "file": "application",
@@ -96,17 +96,17 @@
 		},
 		"map-species": {
 	    "file": "map",
-		  "memory_size": 1024
+		  "memory_size": 128
 		},
 		"find-species-match": {
 	    "file": "match",
 		  "format": "confidence",
-		  "memory_size": 1024
+		  "memory_size": 128
 		},
 	  "handle-specie-match": {
 		  "file": "application",
 		  "application": "handle_specie_match",
-		  "memory_size": 1024
+		  "memory_size": 128
 		},
 		"initiate-split": {
 			"file": "initiate",

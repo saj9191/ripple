@@ -8,6 +8,7 @@ def map_file(bucket_name, key, input_format, output_format, offsets, params):
   client = boto3.client("lambda")
   s3 = boto3.resource("s3")
   bucket = s3.Bucket(params["map_bucket"])
+  util.print_read(input_format, key, params)
 
   if params["ranges"]:
     [_, _, ranges] = pivot.get_pivot_ranges(bucket_name, key)

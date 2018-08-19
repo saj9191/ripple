@@ -19,11 +19,11 @@ CHECKS = json.loads(open("json/checks.json").read())
 REPORT = re.compile(".*RequestId:\s([^\s]*)\tDuration:\s([0-9\.]+)\sms.*Billed Duration:\s([0-9\.]+)\sms.*Size:\s([0-9]+)\sMB.*Used:\s([0-9]+)\sMB.*")
 SPECTRA = re.compile("S\s+([0-9\.]+)\s+([0-9\.]+)\s+([0-9\.]+)*")
 STAT_FIELDS = ["cost", "max_duration", "memory_used"]
-INVOKED_REGEX = re.compile("TIMESTAMP [0-9\.]+ NONCE [0-9]+ BIN ([0-9]+) FILE ([0-9]+) REQUEST ID (.*) TOKEN ([0-9]+) INVOKED BY TOKEN ([0-9]+)")
-REQUEST_REGEX = re.compile("TIMESTAMP [0-9\.]+ NONCE [0-9]+ BIN ([0-9]+) FILE ([0-9]+) REQUEST ID (.*) TOKEN ([0-9]+)$")
-WRITE_REGEX = re.compile("TIMESTAMP [0-9\.]+ NONCE [0-9]+ BIN ([0-9]+) WRITE REQUEST ID (.*) TOKEN ([0-9]+) FILE NAME (.*)")
-READ_REGEX = re.compile("TIMESTAMP [0-9\.]+ NONCE [0-9]+ BIN ([0-9]+) READ REQUEST ID (.*) TOKEN ([0-9]+) FILE NAME (.*)")
-DURATION_REGEX = re.compile("TIMESTAMP [0-9\.]+ NONCE [0-9]+ BIN [0-9]+ FILE ([0-9]+) REQUEST ID (.*) TOKEN ([0-9]+) DURATION ([0-9]+)")
+INVOKED_REGEX = re.compile("TIMESTAMP [0-9\.]+ NONCE [0-9]+ STEP ([0-9]+) BIN ([0-9]+) FILE ([0-9]+) REQUEST ID (.*) TOKEN ([0-9]+) INVOKED BY TOKEN ([0-9]+)")
+REQUEST_REGEX = re.compile("TIMESTAMP [0-9\.]+ NONCE [0-9]+ STEP ([0-9]+) BIN ([0-9]+) FILE ([0-9]+) REQUEST ID (.*) TOKEN ([0-9]+)$")
+WRITE_REGEX = re.compile("TIMESTAMP [0-9\.]+ NONCE [0-9]+ STEP ([0-9]+) BIN ([0-9]+) WRITE REQUEST ID (.*) TOKEN ([0-9]+) FILE NAME (.*)")
+READ_REGEX = re.compile("TIMESTAMP [0-9\.]+ NONCE [0-9]+ STEP ([0-9]+) BIN ([0-9]+) READ REQUEST ID (.*) TOKEN ([0-9]+) FILE NAME (.*)")
+DURATION_REGEX = re.compile("TIMESTAMP [0-9\.]+ NONCE [0-9]+ STEP ([0-9]+) BIN [0-9]+ FILE ([0-9]+) REQUEST ID (.*) TOKEN ([0-9]+) DURATION ([0-9]+)")
 
 
 #############################
@@ -194,7 +194,7 @@ class Request:
     self.name = name
     self.request_id = request_id
     self.token = token
-    self.parent_key = None
+    self.parent_key = ""
     self.duration = 0
     self.file_id = file_id
     self.children = set()
@@ -214,13 +214,15 @@ class Request:
     return json.dumps(self.json())
 
 
-def process_request(message, dependencies, token_to_file, name, layer):
-  m = REQUEST_REGEX.match(message)
-  n = INVOKED_REGEX.match(message)
-  if m is not None and n is None:
-    file_id = int(m.group(2))
-    request_id = m.group(3)
-    token = m.group(4)
+def process_request(message, dependencies, token_to_file, name):
+  m = INVOKED_REGEX.match(message)
+  if m is None:
+    m = REQUEST_REGEX.match(message)
+  if m is not None:
+    layer = int(m.group(1))
+    file_id = int(m.group(3))
+    request_id = m.group(4)
+    token = m.group(5)
     key = "{0:d}:{1:s}".format(layer, token)
     file_id = int(m.group(2))
     if key not in dependencies:
@@ -228,59 +230,58 @@ def process_request(message, dependencies, token_to_file, name, layer):
       dependencies[key] = request
 
 
-def process_read(message, file_writes, dependencies, token_to_file, name, layer):
+def process_read(message, file_writes, dependencies, token_to_file, name):
   m = READ_REGEX.match(message)
   if m is not None:
-    key = "{0:d}:{1:s}".format(layer, m.group(3))
-    file_name = m.group(4)
-    if name == "sort-blast-chunk":
-      parent_key = list(filter(lambda k: k.startswith("{0:d}:".format(layer - 1)), dependencies.keys()))[0]
-    else:
-      fkey = "{0:d}:{1:s}".format(layer-1, file_name)
-      if fkey in file_writes:
-        parent_key = file_writes[fkey]
-      else:
-        print("I hate everythign")
-        parent_key = list(filter(lambda k: k.startswith("{0:d}:".format(layer - 1)), dependencies.keys()))[0]
-    dependencies[key].parent_key = parent_key
-    if parent_key not in dependencies:
-      print("process request", name, "Cannot find parent", parent_key, "for key", key)
-      parent_key = list(filter(lambda k: k.startswith("{0:d}:".format(layer - 1)), dependencies.keys()))[0]
-    dependencies[parent_key].children.add(key)
-    assert(dependencies[key].parent_key is not None)
+    layer = int(m.group(1))
+    token = m.group(4)
+    key = "{0:d}:{1:s}".format(layer, token)
+    file_name = m.group(5).replace("/tmp/", "")
+    if layer in [1, 5, 9]:
+      parent_keys = list(filter(lambda k: k.startswith("{0:d}:".format(layer-1)), dependencies.keys()))
+      print("layer", layer)
+      print("pkeys", parent_keys)
+      assert(len(parent_keys) == 1)
+      parent_key = parent_keys[0]
+    elif layer != 0:
+      parent_key = file_writes[file_name]
+
+    if layer != 0:
+      dependencies[key].parent_key = parent_key
+      dependencies[parent_key].children.add(key)
+      assert(dependencies[key].parent_key is not None)
 
 
-def process_write(message, file_writes, dependencies, token_to_file, name, layer):
+def process_write(message, file_writes, dependencies, token_to_file, name):
   m = WRITE_REGEX.match(message)
   if m is not None:
-    key = "{0:d}:{1:s}".format(layer, m.group(3))
-    file_name = m.group(4)
-    fkey = "{0:d}:{1:s}".format(layer, file_name)
-    file_writes[fkey] = key
+    layer = int(m.group(1))
+    token = m.group(4)
+    key = "{0:d}:{1:s}".format(layer, token)
+    file_name = m.group(5).replace("/tmp/", "")
+    file_writes[file_name] = key
 
 
-def process_invoke(message, dependencies, token_to_file, name, layer):
+def process_invoke(message, dependencies, token_to_file, name):
   m = INVOKED_REGEX.match(message)
   if m is not None:
-    key = "{0:d}:{1:s}".format(layer, m.group(4))
-    if key not in dependencies:
-      print("process invoke", name, "Cannot find key", key)
-      key = list(filter(lambda k: k.startswith("{0:d}:".format(layer)), dependencies.keys()))[0]
-    parent_key = "{0:d}:{1:s}".format(layer - 1, m.group(5))
-    if parent_key not in dependencies:
-      print("process invoke", name, "Cannot find parent", parent_key, "for key", key)
-      parent_key = list(filter(lambda k: k.startswith("{0:d}:".format(layer - 1)), dependencies.keys()))[0]
-
+    layer = int(m.group(1))
+    token = int(m.group(5))
+    key = "{0:d}:{1:d}".format(layer, token)
+    parent_token = int(m.group(6))
+    parent_key = "{0:d}:{1:d}".format(layer - 1, parent_token)
     dependencies[key].parent_key = parent_key
     dependencies[parent_key].children.add(key)
     assert(dependencies[key].parent_key is not None)
 
 
-def process_report(message, dependencies, token_to_file, name, layer):
+def process_report(message, dependencies, token_to_file, name):
   m = DURATION_REGEX.match(message)
   if m is not None:
-    key = "{0:d}:{1:s}".format(layer, m.group(3))
-    duration = int(m.group(4))
+    layer = int(m.group(1))
+    token = int(m.group(4))
+    key = "{0:d}:{1:d}".format(layer, token)
+    duration = int(m.group(5))
     dependencies[key].duration += duration
 
 
@@ -291,28 +292,27 @@ def create_dependency_chain(stats, iterations):
   file_writes = {}
   token_to_file = {}
   for layer in range(len(stats)):
-    print("Layer", layer)
-    for i in range(len(stats[layer])):
-      stat = stats[layer][i]
-      name = stat["name"]
-      messages = stat["messages"]
-      for message in messages:
-        process_request(message, dependencies, token_to_file, name, layer)
-
-      for message in messages:
-        process_write(message, file_writes, dependencies, token_to_file, name, layer)
+    stat = stats[layer]
+    name = stat["name"]
+    messages = stat["messages"]
+    for message in messages:
+      process_request(message, dependencies, token_to_file, name)
 
   for layer in range(len(stats)):
-    for i in range(len(stats[layer])):
-      stat = stats[layer][i]
-      name = stat["name"]
-      messages = stat["messages"]
-      for message in messages:
-        message = message.strip()
-        process_report(message, dependencies, token_to_file, name, layer)
-        process_invoke(message, dependencies, token_to_file, name, layer)
-#        process_write(message, file_writes, dependencies, token_to_file, name, layer)
-        process_read(message, file_writes, dependencies, token_to_file, name, layer)
+    stat = stats[layer]
+    name = stat["name"]
+    messages = stat["messages"]
+    for message in messages:
+      process_invoke(message, dependencies, token_to_file, name)
+      process_write(message, file_writes, dependencies, token_to_file, name)
+      process_report(message, dependencies, token_to_file, name)
+
+  for layer in range(len(stats)):
+    stat = stats[layer]
+    name = stat["name"]
+    messages = stat["messages"]
+    for message in messages:
+      process_read(message, file_writes, dependencies, token_to_file, name)
 
   for key in dependencies:
     dependencies[key].duration = float(dependencies[key].duration) / iterations
@@ -348,12 +348,12 @@ def run(params, thread_id):
     total_failed_attempts += failed_attempts
     clear_buckets(params)
 
-  dir_path = "results/{0:f}-{1:d}".format(params["now"], params["nonce"])
-  os.makedirs(dir_path)
-  with open("{0:s}/stats".format(dir_path), "w+") as f:
-    f.write(json.dumps({"stats": stats}, indent=4, sort_keys=True))
-
   if params["stats"]:
+    dir_path = "results/{0:f}-{1:d}".format(params["now"], params["nonce"])
+    os.makedirs(dir_path)
+    with open("{0:s}/stats".format(dir_path), "w+") as f:
+      f.write(json.dumps({"stats": stats}, indent=4, sort_keys=True))
+
     for s in stats:
       print("AVERAGE {0:s}".format(s[0]["name"]))
       print_stats(calculate_average_results(s, iterations))
@@ -420,7 +420,13 @@ def clear_buckets(params):
   bucket = s3.Bucket(params["bucket"])
   for i in range(num_steps):
     prefix = "{0:d}/{1:f}-{2:d}/".format(i, params["now"], params["nonce"])
-    bucket.objects.filter(Prefix=prefix).delete()
+    done = False
+    while not done:
+      try:
+        bucket.objects.filter(Prefix=prefix).delete()
+        done = True
+      except Exception as e:
+        pass
 
 #############################
 #       COORDINATOR         #
@@ -596,7 +602,14 @@ def check_objects(client, bucket_name, prefix, count, timeout, params, thread_id
     c = 0
     now = time.time()
     found = set()
-    for obj in bucket.objects.filter(Prefix=prefix):
+    found_objs = False
+    while not found_objs:
+      try:
+        objects = list(bucket.objects.filter(Prefix=prefix))
+        found_objs = True
+      except Exception as e:
+        print(e)
+    for obj in objects:
       if token in obj.key:
         found.add(int(util.parse_file_name(obj.key)["file_id"]))
         c += 1
@@ -618,7 +631,7 @@ def wait_for_completion(start_time, params, thread_id):
 
   # Give ourselves time as we need to wait for each part of the pipeline
   prefix = "{0:d}/".format(len(params["pipeline"]))
-  timeout = 2 * 60 * len(params["pipeline"])
+  timeout = 60 * len(params["pipeline"])
   check_objects(client, params["bucket"], prefix, 1, timeout, params, thread_id)
   time.sleep(10)  # Wait a little to make sure percolator logs are on the server
 

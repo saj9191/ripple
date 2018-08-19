@@ -3,8 +3,10 @@ import benchmark
 import boto3
 from dateutil import parser
 import json
+import os
+import plot
+import setup
 import threading
-import time
 import util
 
 
@@ -24,8 +26,6 @@ class Request(threading.Thread):
     self.failed_attempts = 0
 
   def run(self):
-    print("Thread {0:d}: Sleeping for {1:d} seconds".format(self.thread_id, self.time))
-    time.sleep(self.time)
     [access_key, secret_key] = util.get_credentials("default")
     self.params["input_name"] = self.file_name
     self.params["access_key"] = access_key
@@ -72,24 +72,29 @@ def launch_threads(requests, file_names, params):
     thread.join()
 
   for thread in threads:
-    msg = "Thread {0:d}: Upload Duration {1:f}. Duration {2:f}.  Failed Attempts {3:d}"
+    msg = "Thread {0:d}: Upload Duration {1:f}. Duration {2:f}. Failed Attempts {3:f}"
     msg = msg.format(thread.thread_id, thread.upload_duration, thread.duration, thread.failed_attempts)
+    print(msg)
+    print("Thread {0:d}: Timestamp {1:f}. Nonce {2:d}".format(thread.thread_id, thread.params["now"], thread.params["nonce"]))
+    stats = benchmark.parse_logs(thread.params, thread.params["now"] * 1000, thread.upload_duration, thread.duration)
+    dir_path = "results/{0:f}-{1:d}".format(thread.params["now"], thread.params["nonce"])
+    os.makedirs(dir_path)
+    with open("{0:s}/stats".format(dir_path), "w+") as f:
+      f.write(json.dumps({"stats": stats}, indent=4, sort_keys=True))
+
+    deps = benchmark.create_dependency_chain(stats[1:-1], 1)
+    with open("{0:s}/deps".format(dir_path), "w+") as f:
+      f.write(json.dumps(deps, indent=4, sort_keys=True, default=benchmark.serialize))
+
+  plot.plot(threads, params["pipeline"], params)
 
   with open("long_benchmark.csv", "w+") as f:
     for thread in threads:
-      msg = "{0:d},{1:f},{2:f},{3:d},{4:d}\n".format(thread.thread_id, thread.upload_duration, thread.duration, thread.failed_attempts, thread.time)
+      msg = "{0:d},{1:f},{2:f},{3:f},{4:d}\n".format(thread.thread_id, thread.upload_duration, thread.duration, thread.failed_attempts, thread.time)
       f.write(msg)
 
 
 def run(args, params):
-  #requests = parse_csv(args.file, args.num_requests)
-  #requests = list(filter(lambda r: r < 1*60*60, requests))
-  requests = []
-  for i in range(12):
-    num_requests = max(i * 10, 1)
-    for j in range(num_requests):
-      requests.append(i * 20 * 60)
-
   session = boto3.Session(
            aws_access_key_id=params["access_key"],
            aws_secret_access_key=params["secret_key"],
@@ -97,7 +102,14 @@ def run(args, params):
   )
   s3 = session.resource("s3")
   file_names = list(map(lambda o: o.key, s3.Bucket("shjoyner-sample-input").objects.all()))
-  launch_threads(requests, file_names, params)
+
+  setup.setup(params)
+  for i in range(0, 1):
+    requests = []
+    num_requests = max(i * 40, 1)
+    for j in range(num_requests):
+      requests.append(i)
+    launch_threads(requests, file_names, params)
 
 
 def main():

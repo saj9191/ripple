@@ -67,11 +67,10 @@ def run(bucket_name, key, params, func):
   if "more" in params["object"]:
     if "offsets" in params:
       offsets = params["offsets"]
+    else:
+      print_read(input_format, key, params)
     output_format["file_id"] = params["object"]["file_id"]
     output_format["last"] = not params["object"]["more"]
-    # if "file_id" in params:
-    #   output_format["file_id"] = params["file_id"]
-    #   output_format["last"] = not params["more"]
 
   make_folder(input_format)
   make_folder(output_format)
@@ -111,6 +110,9 @@ def lambda_setup(event, context):
       params[value] = s3[value]
 
   if "extra_params" in s3:
+    if "token" in s3["extra_params"]:
+      params["parent_token"] = s3["extra_params"]["token"]
+      s3["extra_params"]["token"] = params["token"]
     params = {**params, **s3["extra_params"]}
 
   return [bucket_name, key, params]
@@ -118,16 +120,16 @@ def lambda_setup(event, context):
 
 def show_duration(context, m, params):
   duration = params["timeout"] * 1000 - context.get_remaining_time_in_millis()
-  msg = "TIMESTAMP {0:f} NONCE {1:d} BIN {2:d} FILE {3:d} REQUEST ID {4:s} TOKEN {5:d} DURATION {6:d}"
-  msg = msg.format(m["timestamp"], m["nonce"], m["bin"], m["file_id"], params["request_id"], params["token"], duration)
+  msg = "TIMESTAMP {0:f} NONCE {1:d} STEP {2:d} BIN {3:d} FILE {4:d} REQUEST ID {5:s} TOKEN {6:d} DURATION {7:d}"
+  msg = msg.format(m["timestamp"], m["nonce"], params["prefix"], m["bin"], m["file_id"], params["request_id"], params["token"], duration)
   print(msg)
 
 
 def print_request(m, params):
   msg = "TIMESTAMP {0:f} NONCE {1:d} STEP {2:d} BIN {3:d} FILE {4:d} REQUEST ID {5:s} TOKEN {6:d}"
   msg = msg.format(m["timestamp"], m["nonce"], params["prefix"], m["bin"], m["file_id"], params["request_id"], params["token"])
-  if "extra_params" in params and "token" in params["extra_params"]:
-    msg += " INVOKED BY TOKEN {0:d}".format(params["extra_params"]["token"])
+  if "parent_token" in params:
+    msg += " INVOKED BY TOKEN {0:d}".format(params["parent_token"])
   print(msg)
 
 
@@ -140,8 +142,8 @@ def print_write(m, key, params):
 
 
 def print_action(m, key, action, params):
-  msg = "TIMESTAMP {0:f} NONCE {1:d} BIN {2:d} {3:s} REQUEST ID {4:s} TOKEN {5:d} FILE NAME {6:s}"
-  print(msg.format(m["timestamp"], m["nonce"], m["bin"], action, params["request_id"], params["token"], key))
+  msg = "TIMESTAMP {0:f} NONCE {1:d} STEP {2:d} BIN {3:d} {4:s} REQUEST ID {5:s} TOKEN {6:d} FILE NAME {7:s}"
+  print(msg.format(m["timestamp"], m["nonce"], params["prefix"], m["bin"], action, params["request_id"], params["token"], key))
 
 
 def setup_client(service, params):
@@ -157,7 +159,6 @@ def setup_client(service, params):
 
 
 def key_prefix(key):
-  print("key", key.split("/"))
   return "/".join(key.split("/")[:-1])
 
 

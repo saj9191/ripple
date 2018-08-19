@@ -5,7 +5,6 @@ import util
 
 def combine(bucket_name, key, input_format, output_format, offsets, params):
   util.print_read(input_format, key, params)
-  print("offsets", offsets)
 
   output_format["file_id"] = input_format["bin"]
   output_format["last"] = output_format["file_id"] == params["num_bins"]

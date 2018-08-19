@@ -6,6 +6,7 @@ import util
 
 
 def split_file(bucket_name, key, input_format, output_format, offsets, params):
+  util.print_read(input_format, key, params)
   batch_size = params["batch_size"]
   chunk_size = params["chunk_size"]
 
@@ -65,4 +66,3 @@ def handler(event, context):
   [bucket_name, key, params] = util.lambda_setup(event, context)
   m = util.run(bucket_name, key, params, split_file)
   util.show_duration(context, m, params)
-
