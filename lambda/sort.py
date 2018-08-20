@@ -39,7 +39,7 @@ def handle_sort(bucket_name, key, input_format, output_format, offsets, params):
   sorted_input = iterator.get(obj, offsets["offsets"][0], offsets["offsets"][-1], params["identifier"])
   sorted_input = sorted(sorted_input, key=lambda k: k[0])
 
-  bin_input(s3, obj, sorted_input, format_lib, output_format, params["pivots"], offsets, params)
+  bin_input(s3, obj, sorted_input, format_lib, dict(output_format), params["pivots"], offsets, params)
 
 
 def handler(event, context):

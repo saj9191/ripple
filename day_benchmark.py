@@ -86,6 +86,9 @@ def launch_threads(requests, file_names, params):
     print(msg)
     print("Thread {0:d}: Timestamp {1:f}. Nonce {2:d}".format(thread.thread_id, thread.params["now"], thread.params["nonce"]))
     stats = benchmark.parse_logs(thread.params, thread.params["now"] * 1000, thread.upload_duration, thread.duration)
+    p = dict(params)
+    p["now"] = thread.params["now"]
+    p["nonce"] = thread.params["nonce"]
     dir_path = "results/{0:f}-{1:d}".format(thread.params["now"], thread.params["nonce"])
     os.makedirs(dir_path)
     with open("{0:s}/stats".format(dir_path), "w+") as f:
@@ -94,6 +97,7 @@ def launch_threads(requests, file_names, params):
     deps = benchmark.create_dependency_chain(stats[1:-1], 1)
     with open("{0:s}/deps".format(dir_path), "w+") as f:
       f.write(json.dumps(deps, indent=4, sort_keys=True, default=benchmark.serialize))
+    benchmark.clear_buckets(p)
 
   plot.plot(threads, params["pipeline"], params)
 
@@ -120,11 +124,8 @@ def run(args, params):
       requests.append(i)
     done = False
     while not done:
-      try:
-        launch_threads(requests, file_names, params)
-        done = True
-      except Exception as e:
-        print("Error. Retry.", e)
+      launch_threads(requests, file_names, params)
+      done = True
 
 
 def main():

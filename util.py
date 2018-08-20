@@ -77,6 +77,7 @@ def run(bucket_name, key, params, func):
   make_folder(input_format)
   make_folder(output_format)
   params["output_format"] = output_format
+  params["input_format"] = input_format
   func(bucket_name, key, input_format, output_format, offsets, params)
   return output_format
 
@@ -131,8 +132,13 @@ def show_duration(context, m, params):
   with open(LOG_NAME, "a+") as f:
     f.write(msg)
   s3 = boto3.resource("s3")
-  params["output_format"]["ext"] = "log"
-  s3.Object("shjoyner-logs", file_name(params["output_format"])).put(Body=open(LOG_NAME, "rb"))
+  if params["file"] in ["combine_files", "split_file"]:
+    bucket_format = dict(params["input_format"])
+  else:
+    bucket_format = dict(params["output_format"])
+  bucket_format["ext"] = "log"
+  bucket_format["prefix"] = params["prefix"] + 1
+  s3.Object("shjoyner-logs", file_name(bucket_format)).put(Body=open(LOG_NAME, "rb"))
 
 
 def print_request(m, params):
