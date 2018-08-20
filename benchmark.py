@@ -248,12 +248,7 @@ def process_read(message, file_writes, dependencies, token_to_file, name):
       assert(len(parent_keys) == 1)
       parent_key = parent_keys[0]
     elif layer != 0:
-      if file_name in file_writes:
-        parent_key = file_writes[file_name]
-      else:
-        prefix = "/".join(file_name.split("/")[:-1])
-        for n in file_writes:
-          if n.startswith(prefix):g
+      parent_key = file_writes[file_name]
 
     if layer != 0 and dependencies[key].parent_key == "":
       dependencies[key].parent_key = parent_key
@@ -317,16 +312,16 @@ def create_dependency_chain(stats, iterations):
     name = stat["name"]
     messages = stat["messages"]
     for message in messages:
-      process_invoke(message, dependencies, token_to_file, name)
-      process_write(message, file_writes, dependencies, token_to_file, name)
-      process_report(message, dependencies, token_to_file, name)
+      process_invoke(message[1], dependencies, token_to_file, name)
+      process_write(message[1], file_writes, dependencies, token_to_file, name)
+      process_report(message[1], dependencies, token_to_file, name)
 
   for layer in range(len(stats)):
     stat = stats[layer]
     name = stat["name"]
     messages = stat["messages"]
     for message in messages:
-      process_read(message, file_writes, dependencies, token_to_file, name)
+      process_read(message[1], file_writes, dependencies, token_to_file, name)
 
   for key in dependencies:
     dependencies[key].duration = float(dependencies[key].duration) / iterations
@@ -432,12 +427,14 @@ def clear_buckets(params):
   s3 = setup_connection("s3", params)
   num_steps = len(params["pipeline"]) + 1
   bucket = s3.Bucket(params["bucket"])
+  log_bucket = s3.Bucket("shjoyner-logs")
   for i in range(num_steps):
     prefix = "{0:d}/{1:f}-{2:d}/".format(i, params["now"], params["nonce"])
     done = False
     while not done:
       try:
         bucket.objects.filter(Prefix=prefix).delete()
+        log_bucket.objects.filter(Prefix=prefix).delete()
         done = True
       except Exception as e:
         pass
@@ -749,26 +746,15 @@ def parse_mult_logs(client, params, lparams, step):
     total_memory_used += memory_used
     durations.append(duration)
 
-  cost = calculate_cost(total_billed_duration, params["functions"][lparams["name"]]["memory_size"])
-
-  print(lparams["name"])
-  print("num events", len(events))
-  print("Min Timestamp", min_timestamp)
-  print("Max Timestamp", max_timestamp)
-  print("Min Memory", min_memory)
-  print("Max Memory", max_memory)
-  print("Min Billed Duration", min_billed_duration, "milliseconds")
-  print("Max Billed Duration", max_billed_duration, "milliseconds")
-  print("Total Billed Duration", total_billed_duration, "milliseconds")
-  print("Cost", cost)
-  print("", flush=True)
+#  cost = calculate_cost(total_billed_duration, params["functions"][lparams["name"]]["memory_size"])
+  messages = []
 
   return {
     "name": lparams["name"],
-    "billed_duration": durations,
-    "max_duration": max_billed_duration,
-    "memory_used": total_memory_used,
-    "cost": cost,
+    "billed_duration": 0,
+    "max_duration": 0,
+    "memory_used": 0,
+    "cost": 0,
     "messages": messages
   }
 
@@ -778,13 +764,25 @@ def parse_analyze_logs(client, params):
 
 
 def parse_logs(params, upload_timestamp, upload_duration, total_duration):
-  client = util.setup_client("logs", params)
-
   stats = []
   stats.append(load_stats(upload_duration))
+  s3 = boto3.resource("s3")
+  bucket = s3.Bucket("shjoyner-logs")
+
   for i in range(len(params["pipeline"])):
+    messages = []
+    for obj in bucket.objects.filter(Prefix="{0:d}/{1:f}-{2:d}".format(i + 1, params["now"], params["nonce"])):
+      messages.append(obj.get()["Body"].read().decode("utf8").split("\n"))
+
     step = params["pipeline"][i]
-    stats.append(parse_mult_logs(client, params, step, i))
+    stats.append({
+      "name": step["name"],
+      "billed_duration": [0],
+      "max_duration": 0,
+      "memory_used": 0,
+      "cost": 0,
+      "messages": messages
+    })
 
   stats.append({
     "name": "total",

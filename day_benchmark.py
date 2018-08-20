@@ -7,6 +7,7 @@ import os
 import plot
 import setup
 import threading
+import time
 import util
 
 
@@ -71,6 +72,14 @@ def launch_threads(requests, file_names, params):
   for thread in threads:
     thread.join()
 
+  folder = "concurrency{0:d}".format(len(threads))
+  if not os.path.isdir(folder):
+    os.makedirs(folder)
+
+  with open("{0:s}/{1:f}".format(folder, time.time()), "w+") as f:
+    for thread in threads:
+      f.write("{0:f}-{1:d}\n".format(thread.params["now"], thread.params["nonce"]))
+
   for thread in threads:
     msg = "Thread {0:d}: Upload Duration {1:f}. Duration {2:f}. Failed Attempts {3:f}"
     msg = msg.format(thread.thread_id, thread.upload_duration, thread.duration, thread.failed_attempts)
@@ -104,12 +113,18 @@ def run(args, params):
   file_names = list(map(lambda o: o.key, s3.Bucket("shjoyner-sample-input").objects.all()))
 
   setup.setup(params)
-  for i in range(0, 1):
+  for i in range(0, 5):
     requests = []
-    num_requests = max(i * 40, 1)
+    num_requests = max(i * 100, 1)
     for j in range(num_requests):
       requests.append(i)
-    launch_threads(requests, file_names, params)
+    done = False
+    while not done:
+      try:
+        launch_threads(requests, file_names, params)
+        done = True
+      except Exception as e:
+        print("Error. Retry.", e)
 
 
 def main():

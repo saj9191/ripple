@@ -21,6 +21,7 @@ def split_file(bucket_name, key, input_format, output_format, offsets, params):
     input_key = key
 
   obj = s3.Object(input_bucket, input_key)
+  print("bucket", input_bucket, "input", input_key)
   iterator_class = getattr(format_lib, "Iterator")
   iterator = iterator_class(obj, offsets, batch_size, chunk_size)
 
@@ -50,10 +51,8 @@ def split_file(bucket_name, key, input_format, output_format, offsets, params):
       }]
     }
 
-    print(payload)
     if params["ranges"]:
       payload["Records"][0]["s3"]["extra_params"]["pivots"] = ranges
-
     response = client.invoke(
       FunctionName=params["output_function"],
       InvocationType="Event",

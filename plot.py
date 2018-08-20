@@ -26,8 +26,6 @@ def graph(key, dependencies, heights, runtimes, lefts, num_threads, parent_id, l
   for i in range(len(children)):
     child = children[i]
     thread_id = parent_id + i * max(heights[layer + 1], 0) + i
-    if child == "1:17403681":
-      print("wtf", child, thread_id)
     thread_id = graph(child, dependencies, heights, runtimes, lefts, num_threads, parent_id, layer + 1, thread_id)
 
     if i + 1 != len(children):
@@ -142,7 +140,6 @@ def plot(results, pipeline, params):
       edgecolors = list(map(lambda r: "black" if r > 0 else "none", runtime))
       color = colors[i % len(colors)]
 
-    print("Layer", i, "Height", heights[i])
     height = heights[i] if heights[i] == 1 else heights[i]
     alpha=0.4
     p = ax.barh(threads, runtime, color=color, left=left, height=height, align="edge", edgecolor=edgecolors, linewidth=1, alpha=alpha)

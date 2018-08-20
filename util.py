@@ -38,6 +38,8 @@ FILE_FORMAT = [{
   "folder": False,
 }]
 
+LOG_NAME = "/tmp/log.txt"
+
 
 def combine_instance(bucket_name, key):
   done = False
@@ -74,6 +76,7 @@ def run(bucket_name, key, params, func):
 
   make_folder(input_format)
   make_folder(output_format)
+  params["output_format"] = output_format
   func(bucket_name, key, input_format, output_format, offsets, params)
   return output_format
 
@@ -104,6 +107,7 @@ def lambda_setup(event, context):
   params["token"] = random.randint(1, 100*1000*1000)
   params["request_id"] = context.aws_request_id
   params["key_fields"] = key_fields
+  params["f"] = open("/tmp/log", "w+")
 
   for value in ["object", "offsets", "pivots"]:
     if value in s3:
@@ -120,17 +124,26 @@ def lambda_setup(event, context):
 
 def show_duration(context, m, params):
   duration = params["timeout"] * 1000 - context.get_remaining_time_in_millis()
-  msg = "TIMESTAMP {0:f} NONCE {1:d} STEP {2:d} BIN {3:d} FILE {4:d} REQUEST ID {5:s} TOKEN {6:d} DURATION {7:d}"
-  msg = msg.format(m["timestamp"], m["nonce"], params["prefix"], m["bin"], m["file_id"], params["request_id"], params["token"], duration)
+  msg = "{8:f} - TIMESTAMP {0:f} NONCE {1:d} STEP {2:d} BIN {3:d} FILE {4:d} REQUEST ID {5:s} TOKEN {6:d} DURATION {7:d}"
+  msg = msg.format(m["timestamp"], m["nonce"], params["prefix"], m["bin"], m["file_id"], params["request_id"], params["token"], duration, time.time())
   print(msg)
+  msg += "\n"
+  with open(LOG_NAME, "a+") as f:
+    f.write(msg)
+  s3 = boto3.resource("s3")
+  params["output_format"]["ext"] = "log"
+  s3.Object("shjoyner-logs", file_name(params["output_format"])).put(Body=open(LOG_NAME, "rb"))
 
 
 def print_request(m, params):
-  msg = "TIMESTAMP {0:f} NONCE {1:d} STEP {2:d} BIN {3:d} FILE {4:d} REQUEST ID {5:s} TOKEN {6:d}"
-  msg = msg.format(m["timestamp"], m["nonce"], params["prefix"], m["bin"], m["file_id"], params["request_id"], params["token"])
+  msg = "{7:f} - TIMESTAMP {0:f} NONCE {1:d} STEP {2:d} BIN {3:d} FILE {4:d} REQUEST ID {5:s} TOKEN {6:d}"
+  msg = msg.format(m["timestamp"], m["nonce"], params["prefix"], m["bin"], m["file_id"], params["request_id"], params["token"], time.time())
   if "parent_token" in params:
     msg += " INVOKED BY TOKEN {0:d}".format(params["parent_token"])
   print(msg)
+  msg += "\n"
+  with open(LOG_NAME, "a+") as f:
+    f.write(msg)
 
 
 def print_read(m, key, params):
@@ -142,8 +155,12 @@ def print_write(m, key, params):
 
 
 def print_action(m, key, action, params):
-  msg = "TIMESTAMP {0:f} NONCE {1:d} STEP {2:d} BIN {3:d} {4:s} REQUEST ID {5:s} TOKEN {6:d} FILE NAME {7:s}"
-  print(msg.format(m["timestamp"], m["nonce"], params["prefix"], m["bin"], action, params["request_id"], params["token"], key))
+  msg = "{8:f} - TIMESTAMP {0:f} NONCE {1:d} STEP {2:d} BIN {3:d} {4:s} REQUEST ID {5:s} TOKEN {6:d} FILE NAME {7:s}"
+  msg = msg.format(m["timestamp"], m["nonce"], params["prefix"], m["bin"], action, params["request_id"], params["token"], key, time.time())
+  print(msg)
+  msg += "\n"
+  with open(LOG_NAME, "a+") as f:
+    f.write(msg)
 
 
 def setup_client(service, params):
