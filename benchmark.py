@@ -19,12 +19,11 @@ CHECKS = json.loads(open("json/checks.json").read())
 REPORT = re.compile(".*RequestId:\s([^\s]*)\tDuration:\s([0-9\.]+)\sms.*Billed Duration:\s([0-9\.]+)\sms.*Size:\s([0-9]+)\sMB.*Used:\s([0-9]+)\sMB.*")
 SPECTRA = re.compile("S\s+([0-9\.]+)\s+([0-9\.]+)\s+([0-9\.]+)*")
 STAT_FIELDS = ["cost", "max_duration", "memory_used"]
-INVOKED_REGEX = re.compile("TIMESTAMP [0-9\.]+ NONCE [0-9]+ STEP ([0-9]+) BIN ([0-9]+) FILE ([0-9]+) REQUEST ID (.*) TOKEN ([0-9]+) INVOKED BY TOKEN ([0-9]+)")
-REQUEST_REGEX = re.compile("TIMESTAMP [0-9\.]+ NONCE [0-9]+ STEP ([0-9]+) BIN ([0-9]+) FILE ([0-9]+) REQUEST ID (.*) TOKEN ([0-9]+)$")
-WRITE_REGEX = re.compile("TIMESTAMP [0-9\.]+ NONCE [0-9]+ STEP ([0-9]+) BIN ([0-9]+) WRITE REQUEST ID (.*) TOKEN ([0-9]+) FILE NAME (.*)")
-READ_REGEX = re.compile("TIMESTAMP [0-9\.]+ NONCE [0-9]+ STEP ([0-9]+) BIN ([0-9]+) READ REQUEST ID (.*) TOKEN ([0-9]+) FILE NAME (.*)")
-DURATION_REGEX = re.compile("TIMESTAMP [0-9\.]+ NONCE [0-9]+ STEP ([0-9]+) BIN [0-9]+ FILE ([0-9]+) REQUEST ID (.*) TOKEN ([0-9]+) DURATION ([0-9]+)")
-
+INVOKED_REGEX = re.compile("([0-9\.]+) - TIMESTAMP [0-9\.]+ NONCE [0-9]+ STEP ([0-9]+) BIN ([0-9]+) FILE ([0-9]+) REQUEST ID (.*) TOKEN ([0-9]+) INVOKED BY TOKEN ([0-9]+)")
+REQUEST_REGEX = re.compile("([0-9\.]+) - TIMESTAMP [0-9\.]+ NONCE [0-9]+ STEP ([0-9]+) BIN ([0-9]+) FILE ([0-9]+) REQUEST ID (.*) TOKEN ([0-9]+)$")
+WRITE_REGEX = re.compile("([0-9\.]+) - TIMESTAMP [0-9\.]+ NONCE [0-9]+ STEP ([0-9]+) BIN ([0-9]+) WRITE REQUEST ID (.*) TOKEN ([0-9]+) FILE NAME (.*)")
+READ_REGEX = re.compile("([0-9\.]+) - TIMESTAMP [0-9\.]+ NONCE [0-9]+ STEP ([0-9]+) BIN ([0-9]+) READ REQUEST ID (.*) TOKEN ([0-9]+) FILE NAME (.*)")
+DURATION_REGEX = re.compile("([0-9\.]+) - TIMESTAMP [0-9\.]+ NONCE [0-9]+ STEP ([0-9]+) BIN [0-9]+ FILE ([0-9]+) REQUEST ID (.*) TOKEN ([0-9]+) DURATION ([0-9]+)")
 
 #############################
 #         COMMON            #
@@ -190,10 +189,11 @@ def serialize(obj):
 
 
 class Request:
-  def __init__(self, name, token, request_id, file_id):
+  def __init__(self, name, timestamp, token, request_id, file_id):
     self.name = name
     self.request_id = request_id
     self.token = token
+    self.timestamp = timestamp
     self.parent_key = ""
     self.duration = 0
     self.file_id = file_id
@@ -205,6 +205,7 @@ class Request:
       "request_id": self.request_id,
       "parent_key": self.parent_key,
       "duration": self.duration,
+      "timestamp": self.timestamp,
       "file_id": self.file_id,
       "children": list(self.children),
     }
@@ -214,39 +215,47 @@ class Request:
     return json.dumps(self.json())
 
 
-def process_request(message, dependencies, token_to_file, name):
+def process_request(message, dependencies, token_to_file, name, start_timestamp):
   m = INVOKED_REGEX.match(message)
   if m is None:
-    m = REQUEST_REGEX.match(message)
+    n = DURATION_REGEX.match(message)
+    if n is None:
+      m = REQUEST_REGEX.match(message)
+
   if m is not None:
-    layer = int(m.group(1))
-    file_id = int(m.group(3))
-    request_id = m.group(4)
-    token = m.group(5)
+    timestamp = float(m.group(1))
+    layer = int(m.group(2))
+    file_id = int(m.group(4))
+    request_id = m.group(5)
+    token = m.group(6)
     key = "{0:d}:{1:s}".format(layer, token)
     file_id = int(m.group(2))
     if key not in dependencies:
-      request = Request(name, key, request_id, file_id)
+      request = Request(name, timestamp - start_timestamp, key, request_id, file_id)
       dependencies[key] = request
 
 
 def process_read(message, file_writes, dependencies, token_to_file, name):
   m = READ_REGEX.match(message)
   if m is not None:
-    layer = int(m.group(1))
-    token = m.group(4)
+    layer = int(m.group(2))
+    token = m.group(5)
     key = "{0:d}:{1:s}".format(layer, token)
-    file_name = m.group(5).replace("/tmp/", "")
+    file_name = m.group(6).replace("/tmp/", "")
+
     if layer in [1, 5, 9]:
       parent_keys = list(filter(lambda k: k.startswith("{0:d}:".format(layer-1)), dependencies.keys()))
-      print("layer", layer)
-      print("pkeys", parent_keys)
       assert(len(parent_keys) == 1)
       parent_key = parent_keys[0]
     elif layer != 0:
-      parent_key = file_writes[file_name]
+      if file_name in file_writes:
+        parent_key = file_writes[file_name]
+      else:
+        prefix = "/".join(file_name.split("/")[:-1])
+        for n in file_writes:
+          if n.startswith(prefix):g
 
-    if layer != 0:
+    if layer != 0 and dependencies[key].parent_key == "":
       dependencies[key].parent_key = parent_key
       dependencies[parent_key].children.add(key)
       assert(dependencies[key].parent_key is not None)
@@ -255,20 +264,22 @@ def process_read(message, file_writes, dependencies, token_to_file, name):
 def process_write(message, file_writes, dependencies, token_to_file, name):
   m = WRITE_REGEX.match(message)
   if m is not None:
-    layer = int(m.group(1))
-    token = m.group(4)
+    layer = int(m.group(2))
+    token = m.group(5)
     key = "{0:d}:{1:s}".format(layer, token)
-    file_name = m.group(5).replace("/tmp/", "")
+    file_name = m.group(6).replace("/tmp/", "")
+    if layer == 13 and file_name.startswith("14/1534754597.776868-834/1/"):
+      print("wtf", name, message)
     file_writes[file_name] = key
 
 
 def process_invoke(message, dependencies, token_to_file, name):
   m = INVOKED_REGEX.match(message)
   if m is not None:
-    layer = int(m.group(1))
-    token = int(m.group(5))
+    layer = int(m.group(2))
+    token = int(m.group(6))
     key = "{0:d}:{1:d}".format(layer, token)
-    parent_token = int(m.group(6))
+    parent_token = int(m.group(7))
     parent_key = "{0:d}:{1:d}".format(layer - 1, parent_token)
     dependencies[key].parent_key = parent_key
     dependencies[parent_key].children.add(key)
@@ -278,11 +289,11 @@ def process_invoke(message, dependencies, token_to_file, name):
 def process_report(message, dependencies, token_to_file, name):
   m = DURATION_REGEX.match(message)
   if m is not None:
-    layer = int(m.group(1))
-    token = int(m.group(4))
+    layer = int(m.group(2))
+    token = int(m.group(5))
     key = "{0:d}:{1:d}".format(layer, token)
-    duration = int(m.group(5))
-    dependencies[key].duration += duration
+    duration = int(m.group(6))
+    dependencies[key].duration = duration
 
 
 def create_dependency_chain(stats, iterations):
@@ -291,12 +302,15 @@ def create_dependency_chain(stats, iterations):
   dependencies = {}
   file_writes = {}
   token_to_file = {}
+
+  start_message = list(filter(lambda m: REQUEST_REGEX.match(m) is not None, stats[1]["messages"]))[0]
+  start_timestamp = float(REQUEST_REGEX.match(start_message).group(1))
   for layer in range(len(stats)):
     stat = stats[layer]
     name = stat["name"]
     messages = stat["messages"]
     for message in messages:
-      process_request(message, dependencies, token_to_file, name)
+      process_request(message, dependencies, token_to_file, name, start_timestamp)
 
   for layer in range(len(stats)):
     stat = stats[layer]
@@ -336,7 +350,7 @@ def run(params, thread_id):
   stats = list(map(lambda i: [], range(len(pipeline))))
   for i in range(iterations):
     process_iteration_params(params, i)
-    clear_buckets(params)
+    #clear_buckets(params)
     if params["stats"]:
       [results, upload_duration, duration, failed_attempts] = benchmark(i, params, thread_id)
       for j in range(len(results[:-1])):
@@ -346,7 +360,7 @@ def run(params, thread_id):
     total_upload_duration += upload_duration
     total_duration += duration
     total_failed_attempts += failed_attempts
-    clear_buckets(params)
+    #clear_buckets(params)
 
   if params["stats"]:
     dir_path = "results/{0:f}-{1:d}".format(params["now"], params["nonce"])
@@ -659,7 +673,7 @@ def fetch(client, log_name, timestamp, nonce, step, filter_pattern, extra_args={
     else:
       next_token = response["nextToken"]
 
-  messages = list(map(lambda l: l["message"], log_events))
+  messages = list(map(lambda l: [l["timestamp"], l["message"]], log_events))
   args["filterPattern"] = filter_pattern
 
   les = {}
@@ -677,7 +691,7 @@ def fetch(client, log_name, timestamp, nonce, step, filter_pattern, extra_args={
     response = client.filter_log_events(**args)
     assert(response["ResponseMetadata"]["HTTPStatusCode"] == 200)
     es = response["events"]
-    messages += list(map(lambda e: e["message"], es))
+    messages += list(map(lambda e: [e["timestamp"], e["message"]], es))
     events += es
 
   return [events, messages]
