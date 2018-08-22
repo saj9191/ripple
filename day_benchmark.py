@@ -37,6 +37,20 @@ class Request(threading.Thread):
     self.duration = duration
     self.failed_attempts = failed_attempts
     print("Thread {0:d}: Done in {1:f}".format(self.thread_id, duration))
+    msg = "Thread {0:d}: Upload Duration {1:f}. Duration {2:f}. Failed Attempts {3:f}"
+    msg = msg.format(self.thread_id, self.upload_duration, self.duration, self.failed_attempts)
+    print(msg)
+    print("Thread {0:d}: Timestamp {1:f}. Nonce {2:d}".format(self.thread_id, self.params["now"], self.params["nonce"]))
+    stats = benchmark.parse_logs(self.params, self.params["now"] * 1000, self.upload_duration, self.duration)
+    dir_path = "results/{0:f}-{1:d}".format(self.params["now"], self.params["nonce"])
+    os.makedirs(dir_path)
+    with open("{0:s}/stats".format(dir_path), "w+") as f:
+      f.write(json.dumps({"stats": stats}, indent=4, sort_keys=True))
+
+#    deps = benchmark.create_dependency_chain(stats[1:-1], 1)
+#    with open("{0:s}/deps".format(dir_path), "w+") as f:
+#      f.write(json.dumps(deps, indent=4, sort_keys=True, default=benchmark.serialize))
+    benchmark.clear_buckets(self.params)
 
 
 def parse_csv(file_name, num_requests):
@@ -72,7 +86,7 @@ def launch_threads(requests, file_names, params):
   for thread in threads:
     thread.join()
 
-  folder = "concurrency{0:d}".format(len(threads))
+  folder = "results/concurrency{0:d}".format(len(threads))
   if not os.path.isdir(folder):
     os.makedirs(folder)
 
@@ -80,28 +94,9 @@ def launch_threads(requests, file_names, params):
     for thread in threads:
       f.write("{0:f}-{1:d}\n".format(thread.params["now"], thread.params["nonce"]))
 
-  for thread in threads:
-    msg = "Thread {0:d}: Upload Duration {1:f}. Duration {2:f}. Failed Attempts {3:f}"
-    msg = msg.format(thread.thread_id, thread.upload_duration, thread.duration, thread.failed_attempts)
-    print(msg)
-    print("Thread {0:d}: Timestamp {1:f}. Nonce {2:d}".format(thread.thread_id, thread.params["now"], thread.params["nonce"]))
-    stats = benchmark.parse_logs(thread.params, thread.params["now"] * 1000, thread.upload_duration, thread.duration)
-    p = dict(params)
-    p["now"] = thread.params["now"]
-    p["nonce"] = thread.params["nonce"]
-    dir_path = "results/{0:f}-{1:d}".format(thread.params["now"], thread.params["nonce"])
-    os.makedirs(dir_path)
-    with open("{0:s}/stats".format(dir_path), "w+") as f:
-      f.write(json.dumps({"stats": stats}, indent=4, sort_keys=True))
+  #plot.plot(threads, params["pipeline"], params)
 
-    deps = benchmark.create_dependency_chain(stats[1:-1], 1)
-    with open("{0:s}/deps".format(dir_path), "w+") as f:
-      f.write(json.dumps(deps, indent=4, sort_keys=True, default=benchmark.serialize))
-    benchmark.clear_buckets(p)
-
-  plot.plot(threads, params["pipeline"], params)
-
-  with open("long_benchmark.csv", "w+") as f:
+  with open("{0:s}/long_benchmark.csv".format(folder), "w+") as f:
     for thread in threads:
       msg = "{0:d},{1:f},{2:f},{3:f},{4:d}\n".format(thread.thread_id, thread.upload_duration, thread.duration, thread.failed_attempts, thread.time)
       f.write(msg)
@@ -117,9 +112,9 @@ def run(args, params):
   file_names = list(map(lambda o: o.key, s3.Bucket("shjoyner-sample-input").objects.all()))
 
   setup.setup(params)
-  for i in range(0, 5):
+  for i in range(1,3):
     requests = []
-    num_requests = max(i * 100, 1)
+    num_requests = max(i * 50, 1)
     for j in range(num_requests):
       requests.append(i)
     done = False
