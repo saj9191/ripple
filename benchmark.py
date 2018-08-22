@@ -231,7 +231,10 @@ def process_request(message, dependencies, token_to_file, name, start_timestamp)
     key = "{0:d}:{1:s}".format(layer, token)
     file_id = int(m.group(2))
     if key not in dependencies:
-      request = Request(name, timestamp - start_timestamp, key, request_id, file_id)
+      offset = timestamp - start_timestamp
+      if offset < 0:
+        print("process_request", layer, offset)
+      request = Request(name, offset, key, request_id, file_id)
       dependencies[key] = request
 
 
@@ -243,11 +246,11 @@ def process_read(message, file_writes, dependencies, token_to_file, name):
     key = "{0:d}:{1:s}".format(layer, token)
     file_name = m.group(6).replace("/tmp/", "")
 
-    if layer in [1, 5, 9]:
+    if layer in [1, 5]:
       parent_keys = list(filter(lambda k: k.startswith("{0:d}:".format(layer-1)), dependencies.keys()))
       assert(len(parent_keys) == 1)
       parent_key = parent_keys[0]
-    elif layer != 0:
+    elif layer != 0 and dependencies[key].parent_key == "":
       parent_key = file_writes[file_name]
 
     if layer != 0 and dependencies[key].parent_key == "":
@@ -263,8 +266,6 @@ def process_write(message, file_writes, dependencies, token_to_file, name):
     token = m.group(5)
     key = "{0:d}:{1:s}".format(layer, token)
     file_name = m.group(6).replace("/tmp/", "")
-    if layer == 13 and file_name.startswith("14/1534754597.776868-834/1/"):
-      print("wtf", name, message)
     file_writes[file_name] = key
 
 
@@ -276,9 +277,11 @@ def process_invoke(message, dependencies, token_to_file, name):
     key = "{0:d}:{1:d}".format(layer, token)
     parent_token = int(m.group(7))
     parent_key = "{0:d}:{1:d}".format(layer - 1, parent_token)
-    dependencies[key].parent_key = parent_key
-    dependencies[parent_key].children.add(key)
-    assert(dependencies[key].parent_key is not None)
+    if parent_key in dependencies:
+      dependencies[key].parent_key = parent_key
+      dependencies[parent_key].children.add(key)
+    else:
+     print("process_invoke", "can't find parent", key)
 
 
 def process_report(message, dependencies, token_to_file, name):
@@ -292,7 +295,6 @@ def process_report(message, dependencies, token_to_file, name):
 
 
 def create_dependency_chain(stats, iterations):
-  print("Creating dependencies")
   stats = stats
   dependencies = {}
   file_writes = {}
@@ -300,6 +302,7 @@ def create_dependency_chain(stats, iterations):
 
   start_message = list(filter(lambda m: REQUEST_REGEX.match(m) is not None, stats[1]["messages"]))[0]
   start_timestamp = float(REQUEST_REGEX.match(start_message).group(1))
+
   for layer in range(len(stats)):
     stat = stats[layer]
     name = stat["name"]
@@ -312,16 +315,16 @@ def create_dependency_chain(stats, iterations):
     name = stat["name"]
     messages = stat["messages"]
     for message in messages:
-      process_invoke(message[1], dependencies, token_to_file, name)
-      process_write(message[1], file_writes, dependencies, token_to_file, name)
-      process_report(message[1], dependencies, token_to_file, name)
+      process_invoke(message, dependencies, token_to_file, name)
+      process_write(message, file_writes, dependencies, token_to_file, name)
+      process_report(message, dependencies, token_to_file, name)
 
   for layer in range(len(stats)):
     stat = stats[layer]
     name = stat["name"]
     messages = stat["messages"]
     for message in messages:
-      process_read(message[1], file_writes, dependencies, token_to_file, name)
+      process_read(message, file_writes, dependencies, token_to_file, name)
 
   for key in dependencies:
     dependencies[key].duration = float(dependencies[key].duration) / iterations
@@ -770,9 +773,15 @@ def parse_logs(params, upload_timestamp, upload_duration, total_duration):
   bucket = s3.Bucket("shjoyner-logs")
 
   for i in range(len(params["pipeline"])):
-    messages = []
-    for obj in bucket.objects.filter(Prefix="{0:d}/{1:f}-{2:d}".format(i + 1, params["now"], params["nonce"])):
-      messages.append(obj.get()["Body"].read().decode("utf8").split("\n"))
+    done = False
+    while not done:
+      try:
+        messages = []
+        for obj in bucket.objects.filter(Prefix="{0:d}/{1:f}-{2:d}".format(i + 1, params["now"], params["nonce"])):
+          messages += obj.get()["Body"].read().decode("utf8").split("\n")
+        done = True
+      except Exception as e:
+        done = False
 
     step = params["pipeline"][i]
     stats.append({
