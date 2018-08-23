@@ -67,6 +67,19 @@ def combine_instance(bucket_name, key):
   return [done and current_last_file(bucket_name, key), keys]
 
 
+def get_objects(bucket_name, prefix):
+  found = False
+  s3 = boto3.resource("s3")
+  bucket = s3.Bucket(bucket_name)
+  while not found:
+    try:
+      objects = list(bucket.objects.filter(Prefix=prefix))
+      found = True
+    except Exception as e:
+      found = False
+  return objects
+
+
 def run(bucket_name, key, params, func):
   clear_tmp()
   input_format = parse_file_name(key)

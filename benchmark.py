@@ -599,6 +599,16 @@ class MergeLambdaStage(Enum):
   TOTAL = 7
 
 
+def find_current_stage(bucket_name, params):
+  current_stage = 0
+  for i in range(len(params["pipeline"])):
+    prefix = "{0:d}/{1:f}-{2:d}".format(i, params["now"], params["nonce"])
+    objects = util.get_objects(bucket_name, prefix)
+    if len(objects) > 0:
+      current_stage = i
+  return current_stage
+
+
 def check_objects(client, bucket_name, prefix, count, timeout, params, thread_id):
   done = False
 
@@ -609,33 +619,22 @@ def check_objects(client, bucket_name, prefix, count, timeout, params, thread_id
   prefix = "{0:s}{1:s}".format(prefix, token)
   print("Waiting for {0:s}".format(prefix))
   start = datetime.datetime.now()
-  s3 = setup_connection("s3", params)
-  bucket = s3.Bucket(bucket_name)
   while not done:
-    c = 0
     now = time.time()
     found = set()
-    found_objs = False
-    while not found_objs:
-      try:
-        objects = list(bucket.objects.filter(Prefix=prefix))
-        found_objs = True
-      except Exception as e:
-        print(e)
-    for obj in objects:
-      if token in obj.key:
-        found.add(int(util.parse_file_name(obj.key)["file_id"]))
-        c += 1
-    done = (c == count)
+    objects = util.get_objects(bucket_name, prefix)
+    done = (len(objects) == count)
     end = datetime.datetime.now()
-    now = end.strftime("%H:%M:%S")
     if not done:
       if (end - start).total_seconds() > timeout:
         expected = set(range(1, count + 1))
+        current_stage = find_current_stage(bucket_name, params)
+        print("Thread {0:d}: Last stage with output files is {1:d}".format(thread_id, current_stage))
         print("Could not find", expected.difference(found))
         raise BenchmarkException("Could not find bucket {0:s} prefix {1:s}".format(bucket_name, prefix))
       time.sleep(10)
     else:
+      now = end.strftime("%H:%M:%S")
       print("{0:s}: Thread {1:d}. Found {2:s}".format(now, thread_id, prefix), flush=True)
 
 
