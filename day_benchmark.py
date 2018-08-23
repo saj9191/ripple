@@ -6,6 +6,7 @@ import json
 import os
 import plot
 import setup
+import shutil
 import threading
 import time
 import util
@@ -86,13 +87,18 @@ def launch_threads(requests, file_names, params):
   for thread in threads:
     thread.join()
 
-  folder = "results/concurrency{0:d}".format(len(threads))
+  now = time.time()
+  folder = "results/concurrency{0:d}/{1:f}".format(len(threads, now))
   if not os.path.isdir(folder):
     os.makedirs(folder)
 
-  with open("{0:s}/{1:f}".format(folder, time.time()), "w+") as f:
+  with open("{0:s}/files".format(folder), "w+") as f:
     for thread in threads:
-      f.write("{0:f}-{1:d}\n".format(thread.params["now"], thread.params["nonce"]))
+      file = "{0:f}-{1:d}".format(thread.params["now"], thread.params["nonce"])
+      f.write("{0:s}\n".format(file))
+      input_file = "results/{0:s}".format(file)
+      shutil.copytree(input_file, "{0:s}/{1:s}".format(folder, file))
+      shutil.rmtree(input_file)
 
   #plot.plot(threads, params["pipeline"], params)
 
@@ -112,7 +118,7 @@ def run(args, params):
   file_names = list(map(lambda o: o.key, s3.Bucket("shjoyner-sample-input").objects.all()))
 
   setup.setup(params)
-  for i in range(1,3):
+  for i in range(0, 2):
     requests = []
     num_requests = max(i * 50, 1)
     for j in range(num_requests):
