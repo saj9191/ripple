@@ -19,11 +19,11 @@ CHECKS = json.loads(open("json/checks.json").read())
 REPORT = re.compile(".*RequestId:\s([^\s]*)\tDuration:\s([0-9\.]+)\sms.*Billed Duration:\s([0-9\.]+)\sms.*Size:\s([0-9]+)\sMB.*Used:\s([0-9]+)\sMB.*")
 SPECTRA = re.compile("S\s+([0-9\.]+)\s+([0-9\.]+)\s+([0-9\.]+)*")
 STAT_FIELDS = ["cost", "max_duration", "memory_used"]
-INVOKED_REGEX = re.compile("([0-9\.]+) - TIMESTAMP [0-9\.]+ NONCE [0-9]+ STEP ([0-9]+) BIN ([0-9]+) FILE ([0-9]+) REQUEST ID (.*) TOKEN ([0-9]+) INVOKED BY TOKEN ([0-9]+)")
-REQUEST_REGEX = re.compile("([0-9\.]+) - TIMESTAMP [0-9\.]+ NONCE [0-9]+ STEP ([0-9]+) BIN ([0-9]+) FILE ([0-9]+) REQUEST ID (.*) TOKEN ([0-9]+)$")
-WRITE_REGEX = re.compile("([0-9\.]+) - TIMESTAMP [0-9\.]+ NONCE [0-9]+ STEP ([0-9]+) BIN ([0-9]+) WRITE REQUEST ID (.*) TOKEN ([0-9]+) FILE NAME (.*)")
-READ_REGEX = re.compile("([0-9\.]+) - TIMESTAMP [0-9\.]+ NONCE [0-9]+ STEP ([0-9]+) BIN ([0-9]+) READ REQUEST ID (.*) TOKEN ([0-9]+) FILE NAME (.*)")
-DURATION_REGEX = re.compile("([0-9\.]+) - TIMESTAMP [0-9\.]+ NONCE [0-9]+ STEP ([0-9]+) BIN [0-9]+ FILE ([0-9]+) REQUEST ID (.*) TOKEN ([0-9]+) DURATION ([0-9]+)")
+INVOKED_REGEX = re.compile("([0-9\.]+) - .* STEP ([0-9]+) BIN ([0-9]+) FILE ([0-9]+) REQUEST ID (.*) TOKEN ([0-9]+) INVOKED BY TOKEN ([0-9]+)")
+REQUEST_REGEX = re.compile("([0-9\.]+) - .* STEP ([0-9]+) BIN ([0-9]+) FILE ([0-9]+) REQUEST ID (.*) TOKEN ([0-9]+)$")
+WRITE_REGEX = re.compile("([0-9\.]+) - .* STEP ([0-9]+) BIN ([0-9]+) WRITE REQUEST ID (.*) TOKEN ([0-9]+) FILE NAME (.*)")
+READ_REGEX = re.compile("([0-9\.]+) - .* STEP ([0-9]+) BIN ([0-9]+) READ REQUEST ID (.*) TOKEN ([0-9]+) FILE NAME (.*)")
+DURATION_REGEX = re.compile("([0-9\.]+) - .* STEP ([0-9]+) BIN [0-9]+ FILE ([0-9]+) REQUEST ID (.*) TOKEN ([0-9]+) DURATION ([0-9]+)")
 
 #############################
 #         COMMON            #
