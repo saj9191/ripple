@@ -10,3 +10,4 @@ paper/*.thm
 data/*
 *.pem
 jupyter
+*.ropeproject
