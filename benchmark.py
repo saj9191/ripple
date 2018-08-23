@@ -281,7 +281,7 @@ def process_invoke(message, dependencies, token_to_file, name):
       dependencies[key].parent_key = parent_key
       dependencies[parent_key].children.add(key)
     else:
-     print("process_invoke", "can't find parent", key)
+      print("process_invoke", "can't find parent", key)
 
 
 def process_report(message, dependencies, token_to_file, name):
@@ -333,7 +333,8 @@ def create_dependency_chain(stats, iterations):
 
 
 def run(params, thread_id):
-  print_run_information()
+  if params["setup"]:
+    print_run_information()
   process_params(params)
 
   if params["model"] == "lambda" and params["setup"]:
@@ -348,7 +349,6 @@ def run(params, thread_id):
   stats = list(map(lambda i: [], range(len(pipeline))))
   for i in range(iterations):
     process_iteration_params(params, i)
-    #clear_buckets(params)
     if params["stats"]:
       [results, upload_duration, duration, failed_attempts] = benchmark(i, params, thread_id)
       for j in range(len(results[:-1])):
@@ -358,7 +358,6 @@ def run(params, thread_id):
     total_upload_duration += upload_duration
     total_duration += duration
     total_failed_attempts += failed_attempts
-    #clear_buckets(params)
 
   if params["stats"]:
     dir_path = "results/{0:f}-{1:d}".format(params["now"], params["nonce"])
