@@ -21,11 +21,10 @@ class Iterator(iterator.Iterator):
 
     pivots = sorted(pivots)
     super_pivots = []
-    num_bins = params["num_bins"]
-    increment = int(len(pivots) / num_bins)
+    num_bins = params["num_bins"] + 1
+    increment = int((len(pivots) + num_bins - 1) / num_bins)
     super_pivots = pivots[0::increment]
     super_pivots[-1] = pivots[-1]
-
     spivots = list(map(lambda p: str(p), super_pivots))
     content = "{0:s}\n{1:s}\n{2:s}".format(file_bucket, file_key, "\t".join(spivots))
     with open(temp_name, "w+") as f:
