@@ -12,25 +12,26 @@ def map_file(bucket_name, key, input_format, output_format, offsets, params):
 
   if params["ranges"]:
     [_, _, ranges] = pivot.get_pivot_ranges(bucket_name, key)
-    # TODO: Fix
     prefix = util.key_prefix(key)
-    objects = bucket.objects.filter(Prefix=prefix)
+    objects = list(bucket.objects.filter(Prefix=prefix))
   else:
     if "map_bucket_key_prefix" in params:
-      objects = bucket.objects.filter(Prefix=params["map_bucket_key_prefix"] + "-")
+      objects = list(bucket.objects.filter(Prefix=params["map_bucket_key_prefix"] + "-"))
     else:
-      objects = bucket.objects.all()
+      objects = list(bucket.objects.all())
+      if params["directories"]:
+        objects = list(filter(lambda o: "/" in o.key, objects))
+        objects = list(set(map(lambda o: o.key.split("/")[0], objects)))
 
   file_id = 0
-  objects = list(filter(lambda obj: obj.key.endswith("/") == params["directories"], objects))
+  print("num objects", len(objects))
 
   for i in range(len(objects)):
     obj = objects[i]
     file_id += 1
-    if params["directories"]:
-      target_file = obj.key[:-1]
-    else:
-      target_file = obj.key
+    target_file = obj
+
+    print("target", target_file)
 
     payload = {
       "Records": [{
