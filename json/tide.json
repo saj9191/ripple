@@ -5,7 +5,7 @@
 	"region": "us-west-2",
 	"timeout": 300,
   "iterations": 1,
-	"num_bins": 40,
+	"num_bins": 10,
 	"bucket": "shjoyner-tide",
 	"stats": true,
 	"setup": true,
