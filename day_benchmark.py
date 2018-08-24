@@ -41,16 +41,24 @@ class Request(threading.Thread):
     msg = "Thread {0:d}: Upload Duration {1:f}. Duration {2:f}. Failed Attempts {3:f}"
     msg = msg.format(self.thread_id, self.upload_duration, self.duration, self.failed_attempts)
     print(msg)
-    print("Thread {0:d}: Timestamp {1:f}. Nonce {2:d}".format(self.thread_id, self.params["now"], self.params["nonce"]))
     stats = benchmark.parse_logs(self.params, self.params["now"] * 1000, self.upload_duration, self.duration)
     dir_path = "results/{0:f}-{1:d}".format(self.params["now"], self.params["nonce"])
     os.makedirs(dir_path)
     with open("{0:s}/stats".format(dir_path), "w+") as f:
       f.write(json.dumps({"stats": stats}, indent=4, sort_keys=True))
 
-#    deps = benchmark.create_dependency_chain(stats[1:-1], 1)
-#    with open("{0:s}/deps".format(dir_path), "w+") as f:
-#      f.write(json.dumps(deps, indent=4, sort_keys=True, default=benchmark.serialize))
+    match_stage = -1
+    pipeline = self.params["pipeline"]
+    for i in range(len(pipeline)):
+      if self.params["functions"][pipeline[i]["name"]]["file"] == "match":
+        match_stage = i + 1
+
+    if match_stage != -1:
+      prefix = "{0:d}/{1:f}-{2:d}".format(match_stage, self.params["now"], self.params["nonce"])
+      objects = util.get_objects(self.params["bucket"], prefix)
+      for obj in objects:
+        content = obj.get()["Body"].read().decode("utf-8")
+        print("Thread {0:d}: {1:s}\n".format(self.thread_id, content))
     benchmark.clear_buckets(self.params)
 
 
@@ -88,9 +96,11 @@ def launch_threads(requests, file_names, params):
     thread.join()
 
   now = time.time()
-  folder = "results/concurrency{0:d}/{1:f}".format(len(threads, now))
+  folder = "results/concurrency{0:d}/{1:f}".format(len(threads), now)
   if not os.path.isdir(folder):
     os.makedirs(folder)
+
+  shutil.copyfile(params["params_name"], "{0:s}/params.json".format(folder))
 
   with open("{0:s}/files".format(folder), "w+") as f:
     for thread in threads:
@@ -142,6 +152,7 @@ def main():
   params["stats"] = False
   params["iterations"] = 1
   params["sample_input"] = True
+  params["params_name"] = args.parameters
   run(args, params)
 
 
