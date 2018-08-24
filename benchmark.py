@@ -1,6 +1,5 @@
 import argparse
 import boto3
-import constants
 import datetime
 from enum import Enum
 import json
@@ -32,38 +31,6 @@ DURATION_REGEX = re.compile("([0-9\.]+) - .* STEP ([0-9]+) BIN [0-9]+ FILE ([0-9
 
 class BenchmarkException(Exception):
   pass
-
-
-def get_count(obj):
-  content = obj.get()["Body"].read().decode("utf8")
-  return content.count("S\t")
-
-
-def check_sort(s3, params):
-  keys = []
-  bucket_name = "maccoss-human-merge-spectra"
-  bucket = s3.Bucket(bucket_name)
-  now = "{0:f}".format(params["now"])
-  for obj in bucket.objects.all():
-    if now in obj.key:
-      keys.append(obj.key)
-
-  keys.sort(key=lambda k: int(k.split("-")[2]))
-  mass = 0
-  for key in keys:
-    obj = s3.Object(bucket_name, key)
-    content = obj.get()["Body"].read().decode("utf-8")
-    spectra = constants.SPECTRA_START.split(content)
-    spectra = list(filter(lambda p: len(p) > 0, spectra))
-    for spectrum in spectra:
-      lines = spectrum.split("\n")
-      m = list(filter(lambda line: constants.MASS.match(line), lines))
-      if len(m) == 0:
-        print(spectrum)
-      assert(len(m) > 0)
-      new_mass = float(constants.MASS.match(m[0]).group(2))
-      assert(mass <= new_mass)
-      mass = new_mass
 
 
 def check_output(params):
