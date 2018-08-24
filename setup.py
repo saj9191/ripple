@@ -78,6 +78,9 @@ def upload_functions(client, params):
   response = client.list_functions()
   functions = set(list(map(lambda f: f["FunctionName"], response["Functions"])))
 
+  if os.path.isdir(zip_directory):
+    shutil.rmtree(zip_directory)
+
   for name in params["functions"]:
     fparams = params["functions"][name]
     os.makedirs(zip_directory)
