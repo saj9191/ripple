@@ -30,6 +30,9 @@ def find_match(bucket_name, key, input_format, output_format, offsets, params):
           best_match = key
           match_score = score
 
+    if best_match is None:
+      best_match = keys[0]
+
     output_format["ext"] = "match"
     output_format["suffix"] = "match"
     file_name = util.file_name(output_format)
