@@ -35,7 +35,7 @@ FILE_FORMAT = [{
   "folder": False,
 }, {
   "name": "suffix",
-  "type": "alpha",
+  "type": "alphanum",
   "folder": False,
 }]
 
@@ -253,8 +253,8 @@ def file_format(m):
       else:
         name += str(value)
     else:
-      if part["type"] == "alpha":
-        name += "([A-Za-z]+)"
+      if part["type"] == "alphanum":
+        name += "([A-Za-z0-9]+)"
       elif part["type"] == "float":
         name += "([0-9\.]+)"
       elif part["type"] == "int":
