@@ -159,7 +159,7 @@ def plot(results, pipeline, params):
   ax.set_ylim(0, num_threads)
   plt.xlabel("Runtime (seconds)")
   plt.title("Runtime ({0:d} concurrent runs)".format(num_results))
-  plot_name = "results/plot-{0:d}-{1:d}.png".format(num_results, params["i"])
+  plot_name = "results/concurrency{0:d}/plot-{0:d}-{1:d}.png".format(num_results, params["i"])
   print("plot", plot_name)
   fig.savefig(plot_name)
   plt.close()
