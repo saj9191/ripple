@@ -49,7 +49,6 @@ def create_parameter_files(zip_directory, function_name, params):
   files = []
   for i in range(len(params["pipeline"])):
     pparams = params["pipeline"][i]
-    print(pparams)
     if pparams["name"] == function_name:
       p = {**pparams, **params["functions"][function_name]}
       for value in ["timeout", "num_bins", "bucket"]:
@@ -60,7 +59,6 @@ def create_parameter_files(zip_directory, function_name, params):
       f.write(json.dumps(p))
       f.close()
       files.append(name)
-  print(function_name, files)
   return files
 
 
@@ -103,7 +101,6 @@ def upload_functions(client, params):
 
     files += create_parameter_files(zip_directory, name, params)
     os.chdir(zip_directory)
-    print(name, files)
     subprocess.call("zip ../{0:s} {1:s}".format(zip_file, " ".join(files)), shell=True)
     os.chdir("..")
 
