@@ -3,7 +3,7 @@ import subprocess
 import util
 
 
-def run(query_fasta, params, m):
+def run(file, params, input_format, output_format):
   s3 = boto3.resource("s3")
   program_bucket = s3.Bucket(params["program_bucket"])
 
@@ -12,20 +12,18 @@ def run(query_fasta, params, m):
 
   subprocess.call("chmod 755 /tmp/ssw_test", shell=True)
 
-  target_bucket = s3.Bucket(params["extra_params"]["target_bucket"])
-  target_fasta = params["extra_params"]["target_file"]
+  target_bucket = s3.Bucket(params["target_bucket"])
+  target_fasta = params["target"]
   file_id = int(target_fasta.split("-")[-1])
-  m["prefix"] = "ssw"
-  m["file_id"] = file_id
-  util.print_request(m, params)
+  output_format["file_id"] = file_id
   num_files = sum(1 for _ in target_bucket.objects.all())
-  m["last"] = (file_id == num_files)
-  m["ext"] = "blast"
-  output_file = "/tmp/{0:s}".format(util.file_name(m))
+  output_format["last"] = (file_id == num_files)
+  output_format["ext"] = "blast"
+  output_file = "/tmp/{0:s}".format(util.file_name(output_format))
 
   with open("/tmp/{0:s}".format(target_fasta), "wb") as f:
     target_bucket.download_fileobj(target_fasta, f)
 
-  command = "cd /tmp; ./ssw_test -p {0:s} {1:s} > {2:s}".format(target_fasta, query_fasta, output_file)
+  command = "cd /tmp; ./ssw_test -p {0:s} {1:s} > {2:s}".format(target_fasta, file, output_file)
   subprocess.check_output(command, stderr=subprocess.STDOUT, shell=True)
   return [output_file]

@@ -22,7 +22,10 @@ def handle_pivots(bucket_name, key, input_format, output_format, offsets, params
 
   format_lib = importlib.import_module(params["format"])
   iterator = getattr(format_lib, "Iterator")
-  sorted_input = iterator.get(obj, offsets["offsets"][0], offsets["offsets"][-1], params["identifier"])
+  if len(offsets) == 0:
+    sorted_input = iterator.get(obj, 0, obj.content_length, params["identifier"])
+  else:
+    sorted_input = iterator.get(obj, offsets["offsets"][0], offsets["offsets"][-1], params["identifier"])
   sorted_input = sorted(sorted_input, key=lambda k: k[0])
   pivots = create_pivots(s3, sorted_input, params)
 

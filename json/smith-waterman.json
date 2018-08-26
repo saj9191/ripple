@@ -1,82 +1,104 @@
 {
 	"input_name": "small.fasta",
-	"input_prefix": "ssw",
-	"setup": true,
-	"plot": true,
-	"num_bins": 500,
-	"num_buckets": 50,
-	"iterations": 1,
 	"model": "lambda",
+	"iterations": 1,
 	"region": "us-west-2",
-	"sample_input": false,
-	"check_output": false,
 	"timeout": 300,
-	"num_output_files": 500,
+	"num_bins": 300,
+	"bucket": "shjoyner-ssw",
+	"stats": true,
+	"setup": true,
+	"dependencies": {
+		"common": [
+			"constants.py",
+			"formats/iterator.py",
+			"formats/pivot.py",
+			"util.py"
+		],
+		"formats": {
+			"blast": [
+				"formats/blast.py"
+			]
+		}
+	},
+	"functions": {
+		"map-fasta": {
+			"file": "map",
+			"memory_size": 1024
+		},
+		"smith-waterman": {
+			"file": "application",
+			"application": "ssw",
+			"memory_size": 1024,
+			"program_bucket": "shjoyner-ssw-files"
+		},
+		"find-blast-pivots": {
+			"file": "pivot_file",
+			"format": "blast",
+			"memory_size": 1024
+		},
+		"combine-blast-pivot-files": {
+			"file": "combine_files",
+			"format": "pivot",
+			"memory_size": 1024
+		}, 
+		"map-blast": {
+			"file": "map",
+			"memory_size": 1024
+		},
+		"sort-blast-chunk": {
+			"file": "sort",
+			"format": "blast",
+			"memory_size": 1024
+		}, 
+		"combine-blast-files": {
+			"file": "combine_files",
+			"format": "blast",
+			"memory_size": 1024
+		}
+	},
 	"pipeline": [{
-		"file": "map",
-		"memory_size": 1024,
 		"name": "map-fasta",
 		"map_bucket": "maccoss-smith-waterman-fasta",
-		"input_bucket": "shjoyner-fasta-input",
+		"input_key_value": "key",
+		"bucket_key_value": "target", 
 		"output_function": "smith-waterman",
-		"timeout": 300
+		"directories": false,
+		"ranges": false
 	},
 	{
-		"file": "application",
-		"application": "ssw",
-		"memory_size": 1024,
-		"name": "smith-waterman",
-		"program_bucket": "shjoyner-fasta",
-		"output_bucket": "shjoyner-ssw-scores",
-		"timeout": 300
+		"name": "smith-waterman"
 	},
 	{
-		"file": "pivot_file",
-		"format": "blast",
-		"memory_size": 1024,
 		"name": "find-blast-pivots",
-		"input_bucket": "shjoyner-ssw-scores",
-		"output_bucket": "shjoyner-blast-pivot",
-		"timeout": 300
+		"batch_size": 4000,
+		"chunk_size": 1000000,
+		"identifier": "score",
+		"sort": true
 	},
 	{
-		"file": "combine_files",
-		"format": "pivot",
-		"memory_size": 1024,
-		"name": "combine-pivot-files",
-		"input_bucket": "shjoyner-blast-pivot",
-		"output_bucket": "shjoyner-blast-super-pivot",
-		"sort": false,
-		"timeout": 300
+		"name": "combine-blast-pivot-files",
+		"sort": false
 	},
 	{
-		"file": "map",
-		"memory_size": 1024,
 		"name": "map-blast",
-		"map_bucket": "shjoyner-ssw-scores",
-		"input_bucket": "shjoyner-blast-super-pivot",
-		"bucket_prefix": "shjoyner-blast-sort",
+		"map_bucket": "shjoyner-ssw",
+		"input_key_value": "pivots",
+		"bucket_key_value": "key", 
 		"output_function": "sort-blast-chunk",
-		"timeout": 300
+		"ranges": true
 	},
 	{
-		"file": "sort",
-		"format": "blast",
-		"memory_size": 1024,
 		"name": "sort-blast-chunk",
-		"output_bucket": "shjoyner-blast-sort-1",
-		"timeout": 300
+		"batch_size": 4000,
+		"chunk_size": 100000,
+		"identifier": "score"
 	},
 	{
-		"file": "combine_files",
-		"format": "blast",
+		"name": "combine-blast-files",
 		"batch_size": 100,
 		"chunk_size": 5000,
-		"memory_size": 1024,
-		"name": "combine-blast-files",
-		"input_bucket": "shjoyner-blast-sort-1",
-		"output_bucket": "shjoyner-blast-output",
-		"sort": true,
-		"timeout": 300
+		"identifier": "score",
+		"sort": true
 	}]
 }

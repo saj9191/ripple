@@ -40,7 +40,7 @@ class Iterator:
 
   @classmethod
   def write(cls, f, values, first):
-    content = cls.fromArray(values, includeHeader=first)
+    content = cls.fromArray(None, values, None)
     if first:
       f.write(content.strip())
     else:
@@ -56,8 +56,8 @@ class Iterator:
     if params["sort"]:
       for key in keys:
         obj = s3.Object(bucket_name, key)
-        iterator = cls(obj, params["batch_size"], params["chunk_size"])
-        [s, more] = iterator.next(identifier=True)
+        iterator = cls(obj, {}, params["batch_size"], params["chunk_size"])
+        [s, more] = iterator.next(params["identifier"])
         if len(s) > 0:
           heapq.heappush(iterators, Element(s, more, iterator))
     else:
@@ -75,7 +75,7 @@ class Iterator:
         if len(element.values) > 0:
           heapq.heappush(iterators, element)
         elif more:
-          [s, more] = element.iterator.next(identifier=True)
+          [s, more] = element.iterator.next(params["identifier"])
           element.values = s
           element.more = more
           heapq.heappush(iterators, element)
@@ -99,7 +99,7 @@ class Iterator:
 
   def nextOffsets(self):
     if self.content_length == 0:
-       return ({"offsets": []}, False)
+      return ({"offsets": []}, False)
     # Plus one is so we get end byte of value
     while len(self.offsets) < (self.batch_size + 1) and self.current_offset < self.content_length:
       self.updateOffsets()
@@ -146,4 +146,3 @@ class Iterator:
 
   def endByte(self):
     return self.current_offset
-

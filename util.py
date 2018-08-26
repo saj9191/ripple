@@ -322,6 +322,7 @@ def have_all_files(bucket_name, prefix):
 
   num_files = None
   ids_to_keys = {}
+  prefix += "/"
   for key in bucket.objects.filter(Prefix=prefix):
     m = parse_file_name(key.key)
     if m["file_id"] in ids_to_keys:
