@@ -23,7 +23,6 @@
 	},
 	"dependencies": {
 		"common": [
-			"constants.py",
 			"formats/iterator.py",
 			"formats/pivot.py",
 			"util.py"
