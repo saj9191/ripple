@@ -58,7 +58,7 @@ class Request(threading.Thread):
       objects = util.get_objects(self.params["bucket"], prefix)
       for obj in objects:
         content = obj.get()["Body"].read().decode("utf-8")
-        print("Thread {0:d}: {1:s}\n".format(self.thread_id, content))
+        print("Thread {0:d}: {1:s}\n".format(self.thread_id, content), self.file_name)
     benchmark.clear_buckets(self.params)
 
 
@@ -125,10 +125,10 @@ def run(args, params):
            region_name=params["region"]
   )
   s3 = session.resource("s3")
-  file_names = list(map(lambda o: o.key, s3.Bucket("shjoyner-sample-input").objects.all()))
+  file_names = list(map(lambda o: o.key, s3.Bucket(params["sample_bucket"]).objects.all()))
 
   setup.setup(params)
-  for i in range(0, 2):
+  for i in range(0, 1):
     requests = []
     num_requests = max(i * 50, 1)
     for j in range(num_requests):

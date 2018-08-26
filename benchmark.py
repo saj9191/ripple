@@ -104,7 +104,7 @@ def upload_input(params, thread_id=0):
   start = time.time()
   if "sample_input" in params and params["sample_input"]:
     print("Thread {0:d}: Moving {1:s} to s3://{2:s}".format(thread_id, params["input_name"], bucket_name), flush=True)
-    s3.Object(bucket_name, key).copy_from(CopySource={"Bucket": "shjoyner-sample-input", "Key": params["input_name"]})
+    s3.Object(bucket_name, key).copy_from(CopySource={"Bucket": params["sample_bucket"], "Key": params["input_name"]})
   else:
     print("Uploading {0:s} to s3://{1:s}".format(params["input"], bucket_name), flush=True)
     s3.Object(bucket_name, key).put(Body=open("data/{0:s}".format(params["input"]), 'rb'))
@@ -584,7 +584,7 @@ def check_objects(client, bucket_name, prefix, count, timeout, params, thread_id
   # eg. spectra-1530978873.960075-1-0-58670073.txt 1530978873.9600754
   token = "{0:f}-{1:d}".format(params["now"], params["nonce"])
   prefix = "{0:s}{1:s}".format(prefix, token)
-  print("Waiting for {0:s}".format(prefix))
+  print(params["input_name"], "Waiting for {0:s}".format(prefix))
   start = datetime.datetime.now()
   while not done:
     now = time.time()
