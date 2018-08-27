@@ -3,6 +3,7 @@ import matplotlib
 from matplotlib.font_manager import FontProperties
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+import numpy as np
 
 
 colors = ["red", "orange", "green", "blue", "purple", "cyan", "magenta"]
@@ -10,8 +11,8 @@ colors = ["red", "orange", "green", "blue", "purple", "cyan", "magenta"]
 
 def graph(key, dependencies, heights, num_offsets, runtimes, lefts, num_threads, parent_id, layer=0, thread_id=0):
   if thread_id >= num_threads:
-    print("Sad", "layer", layer, "thread_id", thread_id)
-    print("duration", dependencies[key]["duration"])
+    #    print("Sad", "layer", layer, "thread_id", thread_id)
+    #    print("duration", dependencies[key]["duration"])
     return thread_id
 
   runtimes[layer][thread_id] += float(dependencies[key]["duration"]) / 1000
@@ -85,12 +86,10 @@ def get_heights(key, dependencies, heights, layer=0):
   return h
 
 
-def plot(results, pipeline, params):
-  num_layers = len(pipeline)
-  num_results = len(results)
-  results = results[params["i"]:params["i"] + 1]
+def get_plot_data(results, num_layers, params):
   layer_to_count = {}
-  dep_file = "results/{0:f}-{1:d}/deps".format(results[0].params["now"], results[0].params["nonce"])
+  dep_file_format = "results/concurrency{0:d}/{1:f}/{2:f}-{3:d}/deps"
+  dep_file = dep_file_format.format(len(results), params["timestamp"], results[0].params["now"], results[0].params["nonce"])
   dependencies = json.loads(open(dep_file).read())
   for key in dependencies.keys():
     layer = int(key.split(":")[0])
@@ -99,16 +98,14 @@ def plot(results, pipeline, params):
     layer_to_count[layer] += 1
 
   num_threads = int(max(layer_to_count.values()) * 1)
-  print("num_threads", num_threads)
   lefts = list(map(lambda l: [0] * num_threads, range(num_layers)))
   runtimes = list(map(lambda l: [0] * num_threads, range(num_layers)))
   num_offsets = list(map(lambda l: [0] * num_threads, range(num_layers)))
-  threads = range(1, num_threads + 1)
 
   heights = {}
   for result in results:
     dep_folder = "{0:f}-{1:d}".format(result.params["now"], result.params["nonce"])
-    dependencies = json.loads(open("results/{0:s}/deps".format(dep_folder)).read())
+    dependencies = json.loads(open("results/concurrency{0:d}/{1:f}/{2:s}/deps".format(len(results), params["timestamp"], dep_folder)).read())
     root_key = list(filter(lambda k: k.startswith("0:"), dependencies.keys()))[0]
     get_length(root_key, dependencies)
     if len(heights) == 0:
@@ -121,7 +118,12 @@ def plot(results, pipeline, params):
       runtimes[layer][thread_id] = float(runtimes[layer][thread_id]) / num
       lefts[layer][thread_id] = float(lefts[layer][thread_id]) / num
 
-  print("Graphing")
+  return [dependencies, lefts, runtimes, heights, num_threads]
+
+
+def runtime_plot(num_layers, num_results, lefts, runtimes, heights, num_threads, pipeline, params):
+  threads = range(1, num_threads + 1)
+
   fig = plt.figure()
   ax = fig.add_subplot(1, 1, 1)
   labels = []
@@ -140,11 +142,8 @@ def plot(results, pipeline, params):
     if len(heights) > i:
       height = heights[i] if heights[i] == 1 else heights[i]
     else:
-      print("uhoh", i, heights)
       height = 0
     alpha = 0.4
-    if i == 18:
-      color = "black"
     p = ax.barh(threads, runtime, color=color, left=left, height=height, align="edge", edgecolor=edgecolors, linewidth=1, alpha=alpha)
 
     legends.append(p[0])
@@ -155,14 +154,60 @@ def plot(results, pipeline, params):
   fig.tight_layout(rect=[0, 0, 0.85, 0.94])
   fig.legend(legends, labels, prop=fontP, loc="upper left", ncol=1, bbox_to_anchor=(0.75, 0.95))
   plt.yticks([])
-  #` ax.set_xlim(120, 350)
   ax.set_ylim(0, num_threads)
   plt.xlabel("Runtime (seconds)")
   plt.title("Runtime ({0:d} concurrent runs)".format(num_results))
-  plot_name = "results/concurrency{0:d}/plot-{0:d}-{1:d}.png".format(num_results, params["i"])
+  plot_name = "results/concurrency{0:d}/plot-{0:d}.png".format(num_results)
   print("plot", plot_name)
   fig.savefig(plot_name)
   plt.close()
+
+
+def error_plot(num_layers, dependencies, pipeline):
+  fig = plt.figure()
+  ax = fig.add_subplot(1, 1, 1)
+  bottom = 0
+  legends = []
+  labels = []
+
+  runtimes = list(map(lambda l: [], range(num_layers)))
+  for key in dependencies.keys():
+    layer = int(key.split(":")[0])
+    runtimes[layer].append(dependencies[key]["duration"] / 1000)
+
+  for layer in range(num_layers):
+    runtime = runtimes[layer]
+    mean = np.mean(runtime)
+    std = np.std(runtime)
+    p = ax.bar([0], [mean], bottom=[bottom])
+    color = p.patches[0].get_facecolor()
+    offset = 0.3
+    color = (min(color[0] + offset, 1.0), min(color[1] + offset, 1.0), min(color[2] + offset, 1.0))
+
+    x_pos = (layer % 5) * 0.15 - 0.25
+    print("mean", mean, "std", std, "min", min(runtime), "max", max(runtime))
+    ax.errorbar(x_pos, bottom + mean, yerr=std, ecolor=color, capsize=4)
+    ax.errorbar(x_pos, bottom, yerr=std, ecolor=color, capsize=4)
+    legends.append(p[0])
+    labels.append(pipeline[layer]["name"])
+    bottom += mean
+
+  fig.tight_layout(rect=[0, 0, 0.65, 1])
+  plt.xticks([])
+  fig.legend(legends, labels, loc="upper right")
+
+  plot_name = "error.png"
+  fig.savefig(plot_name)
+  print("Error plot", plot_name)
+  plt.close()
+
+
+def plot(results, pipeline, params):
+  num_layers = len(pipeline)
+  num_results = len(results)
+  [dependencies, lefts, runtimes, heights, num_threads] = get_plot_data(results, num_layers, params)
+  runtime_plot(num_layers, num_results, lefts, runtimes, heights, num_threads, pipeline, params)
+  error_plot(num_layers, dependencies, pipeline)
 
 
 if __name__ == "__main__":

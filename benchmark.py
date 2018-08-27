@@ -218,7 +218,12 @@ def process_read(message, file_writes, dependencies, token_to_file, name):
       assert(len(parent_keys) == 1)
       parent_key = parent_keys[0]
     elif layer != 0 and dependencies[key].parent_key == "":
-      parent_key = file_writes[file_name]
+      if file_name in file_writes:
+        parent_key = file_writes[file_name]
+      else:
+        print("Can't find parent for {0:s}".format(key))
+        parent_keys = list(filter(lambda k: k.startswith("{0:d}:".format(layer-1)), dependencies.keys()))
+        parent_key = parent_keys[0]
 
     if layer != 0 and dependencies[key].parent_key == "":
       dependencies[key].parent_key = parent_key
