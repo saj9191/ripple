@@ -1,9 +1,11 @@
 import json
+import math
 import matplotlib
+import numpy as np
+import sys
 from matplotlib.font_manager import FontProperties
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-import numpy as np
 
 
 colors = ["red", "orange", "green", "blue", "purple", "cyan", "magenta"]
@@ -28,25 +30,6 @@ def graph(key, dependencies, heights, num_offsets, runtimes, lefts, num_threads,
     thread_id = parent_id + i * max(heights[layer + 1], 0)
     graph(child, dependencies, heights, num_offsets, runtimes, lefts, num_threads, parent_id, layer + 1, thread_id)
   return thread_id
-
-
-def offsets(pipeline, runtimes, lefts, params):
-  for layer in range(len(pipeline)):
-    step = pipeline[layer]
-    name = step["name"]
-    parent_name = None if layer == 0 else pipeline[layer-1]["name"]
-    if parent_name is not None and params["functions"][parent_name]["file"] in ["split_file", "initiate", "map"] or name in ["percolator"]:
-      temp = [x + y for x, y in zip(runtimes[layer - 1], lefts[layer - 1])]
-      lefts[layer] = list(map(lambda l: max(temp), lefts[layer]))
-    elif params["functions"][name]["file"] in ["combine_files"] or name == "handle-specie-match":
-      offset = 0
-      for thread_id in range(len(lefts[layer - 1])):
-        if runtimes[layer - 1][thread_id] != 0:
-          offset = lefts[layer - 1][thread_id] + runtimes[layer - 1][thread_id]
-        lefts[layer][thread_id] = offset
-    elif layer != 0:
-      for i in range(len(lefts[layer])):
-        lefts[layer][i] = lefts[layer - 1][i] + runtimes[layer - 1][i]
 
 
 def get_length(key, dependencies):
@@ -202,12 +185,65 @@ def error_plot(num_layers, dependencies, pipeline):
   plt.close()
 
 
+def accumulation_plot(num_layers, dependencies, pipeline):
+  keys = dependencies.keys()
+  points = []
+  regions = {}
+  for key in keys:
+    start = dependencies[key]["timestamp"]
+    end = start + math.ceil(dependencies[key]["duration"] / 1000)
+    points.append([start, 1])
+    points.append([end, -1])
+
+    layer = int(key.split(":")[0])
+    if layer not in regions:
+      regions[layer] = [sys.maxsize, 0]
+
+    regions[layer][0] = min(regions[layer][0], start)
+    regions[layer][1] = max(regions[layer][1], end)
+
+  points.sort()
+  x = []
+  y = []
+  count = 0
+  for point in points:
+    count += point[1]
+    x.append(point[0])
+    y.append(count)
+
+  fig = plt.figure()
+  ax = fig.add_subplot(1, 1, 1)
+
+  colors = ["red", "blue", "yellow", "green", "orange", "purple"]
+  print("num layers", num_layers)
+  legends = []
+  alpha = 0.3
+  for layer in range(num_layers):
+    color = colors[layer % len(colors)]
+    ax.axvspan(regions[layer][0], regions[layer][1], facecolor=color, alpha=alpha)
+    legends.append(matplotlib.lines.Line2D([0], [0], color=color, alpha=alpha, label=pipeline[layer]["name"]))
+
+  fontP = FontProperties()
+  fontP.set_size('x-small')
+  fig.tight_layout(rect=[0.05, 0.05, 0.80, 0.90])
+  fig.legend(handles=legends, loc="upper right", prop=fontP, bbox_to_anchor=(1.0, 0.95))
+  plt.xlim([points[0][0], points[-1][0]])
+  ax.plot(x, y, color="black")
+  plot_name = "accumulation.png"
+  plt.xlabel("Runtime (seconds)")
+  plt.ylabel("Number of Lambda Processes")
+  fig.savefig(plot_name)
+  print("Accumulation plot", plot_name)
+  plt.close()
+
+
 def plot(results, pipeline, params):
   num_layers = len(pipeline)
   num_results = len(results)
   [dependencies, lefts, runtimes, heights, num_threads] = get_plot_data(results, num_layers, params)
   runtime_plot(num_layers, num_results, lefts, runtimes, heights, num_threads, pipeline, params)
   error_plot(num_layers, dependencies, pipeline)
+  accumulation_plot(num_layers, dependencies, pipeline)
 
 
 if __name__ == "__main__":
