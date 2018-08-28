@@ -20,9 +20,8 @@ def clear():
   bucket.objects.all().delete()
 
 
-def trigger_plot():
-  folder_timestamp = 1535130705.201701
-  folder = "results/concurrency1/{0:f}".format(folder_timestamp)
+def trigger_plot(folder):
+  folder_timestamp = float(folder.split("/")[-1])
   params = json.loads(open("{0:s}/params.json".format(folder)).read())
   params["timestamp"] = folder_timestamp
 
@@ -41,7 +40,7 @@ def trigger_plot():
     stats = json.loads(open("{0:s}/{1:s}/stats".format(folder, line)).read())
     deps = benchmark.create_dependency_chain(stats["stats"], 1)
     with open("{0:s}/{1:s}/deps".format(folder, line), "w+") as f:
-      json.dump(deps, f, default=benchmark.serialize)
+      json.dump(deps, f, default=benchmark.serialize, sort_keys=True, indent=4)
 
   plot.plot(results, params["pipeline"], params)
 
@@ -49,13 +48,13 @@ def trigger_plot():
 def main():
   parser = argparse.ArgumentParser()
   parser.add_argument('--clear', action="store_true", help="Clear bucket files")
-  parser.add_argument('--plot', action="store_true", help="Plot graph")
+  parser.add_argument('--plot', type=str, help="Plot graph")
   args = parser.parse_args()
 
   if args.clear:
     clear()
   if args.plot:
-    trigger_plot()
+    trigger_plot(args.plot)
 
 
 if __name__ == "__main__":
