@@ -146,7 +146,7 @@ def runtime_plot(num_layers, num_results, lefts, runtimes, heights, num_threads,
   plt.close()
 
 
-def error_plot(num_layers, dependencies, pipeline):
+def error_plot(num_results, num_layers, dependencies, pipeline):
   fig = plt.figure()
   ax = fig.add_subplot(1, 1, 1)
   bottom = 0
@@ -179,13 +179,13 @@ def error_plot(num_layers, dependencies, pipeline):
   plt.xticks([])
   fig.legend(legends, labels, loc="upper right")
 
-  plot_name = "error.png"
+  plot_name = "results/concurrency{0:d}/{1:f}/error-{0:d}.png".format(num_results, params["timestamp"])
   fig.savefig(plot_name)
   print("Error plot", plot_name)
   plt.close()
 
 
-def accumulation_plot(num_layers, dependencies, pipeline):
+def accumulation_plot(num_results, num_layers, dependencies, pipeline):
   keys = dependencies.keys()
   points = []
   regions = {}
@@ -229,7 +229,7 @@ def accumulation_plot(num_layers, dependencies, pipeline):
   fig.legend(handles=legends, loc="upper right", prop=fontP, bbox_to_anchor=(1.0, 0.95))
   plt.xlim([points[0][0], points[-1][0]])
   ax.plot(x, y, color="black")
-  plot_name = "accumulation.png"
+  plot_name = "results/concurrency{0:d}/{1:f}/accumulation-{0:d}.png".format(num_results, params["timestamp"])
   plt.xlabel("Runtime (seconds)")
   plt.ylabel("Number of Lambda Processes")
   fig.savefig(plot_name)
@@ -242,8 +242,8 @@ def plot(results, pipeline, params):
   num_results = len(results)
   [dependencies, lefts, runtimes, heights, num_threads] = get_plot_data(results, num_layers, params)
   runtime_plot(num_layers, num_results, lefts, runtimes, heights, num_threads, pipeline, params)
-  error_plot(num_layers, dependencies, pipeline)
-  accumulation_plot(num_layers, dependencies, pipeline)
+  error_plot(num_results, num_layers, dependencies, pipeline)
+  accumulation_plot(num_results, num_layers, dependencies, pipeline)
 
 
 if __name__ == "__main__":
