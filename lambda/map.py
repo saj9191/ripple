@@ -11,7 +11,6 @@ def map_file(bucket_name, key, input_format, output_format, offsets, params):
   util.print_read(input_format, key, params)
 
   if params["ranges"]:
-    print("pivot", "bucket", bucket_name, "key", key)
     [bucket_name, key, ranges] = pivot.get_pivot_ranges(bucket_name, key)
     prefix = util.key_prefix(key)
     bucket = s3.Bucket(bucket_name)
@@ -30,14 +29,11 @@ def map_file(bucket_name, key, input_format, output_format, offsets, params):
         objects = list(set(map(lambda o: o.key, objects)))
 
   file_id = 0
-  print("num objects", len(objects))
 
   for i in range(len(objects)):
     obj = objects[i]
     file_id += 1
     target_file = obj
-
-    print("target", target_file)
 
     payload = {
       "Records": [{
