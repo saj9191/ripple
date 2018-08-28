@@ -74,7 +74,7 @@ class Iterator:
         values.append(next_value[1])
         if len(element.values) > 0:
           heapq.heappush(iterators, element)
-        elif more:
+        elif element.more:
           [s, more] = element.iterator.next(params["identifier"])
           element.values = s
           element.more = more
