@@ -96,6 +96,8 @@ def run(bucket_name, key, params, func):
       print_read(input_format, key, params)
     output_format["file_id"] = params["object"]["file_id"]
     output_format["last"] = not params["object"]["more"]
+  else:
+    print_read(input_format, key, params)
 
   if params["file"] in ["combine_files", "split_file"]:
     bucket_format = dict(input_format)
