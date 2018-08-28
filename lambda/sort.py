@@ -1,5 +1,7 @@
 import boto3
 import importlib
+import random
+import time
 import util
 
 
@@ -27,7 +29,13 @@ def bin_input(s3, obj, sorted_input, format_lib, m, bin_ranges, offsets, params)
     m["bin"] = bin_ranges[i]["bin"]
     bin_key = util.file_name(m)
     util.print_write(m, bin_key, params)
-    s3.Object(params["bucket"], bin_key).put(Body=str.encode(content))
+    done = False
+    while not done:
+      try:
+        s3.Object(params["bucket"], bin_key).put(Body=str.encode(content))
+        done = True
+      except Exception as e:
+        time.sleep(random.randint(0, 10))
 
 
 def handle_sort(bucket_name, key, input_format, output_format, offsets, params):
