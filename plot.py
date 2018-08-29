@@ -13,8 +13,8 @@ colors = ["red", "orange", "green", "blue", "purple", "cyan", "magenta"]
 
 def graph(key, dependencies, heights, num_offsets, runtimes, lefts, num_threads, parent_id, layer=0, thread_id=0):
   if thread_id >= num_threads:
-    #    print("Sad", "layer", layer, "thread_id", thread_id)
-    #    print("duration", dependencies[key]["duration"])
+    print("Sad", "layer", layer, "thread_id", thread_id)
+    print("duration", dependencies[key]["duration"])
     return thread_id
 
   runtimes[layer][thread_id] += float(dependencies[key]["duration"]) / 1000
@@ -29,6 +29,7 @@ def graph(key, dependencies, heights, num_offsets, runtimes, lefts, num_threads,
     child = children[i]
     thread_id = parent_id + i * max(heights[layer + 1], 0)
     graph(child, dependencies, heights, num_offsets, runtimes, lefts, num_threads, parent_id, layer + 1, thread_id)
+
   return thread_id
 
 
@@ -76,11 +77,13 @@ def get_plot_data(results, num_layers, params):
   dependencies = json.loads(open(dep_file).read())
   for key in dependencies.keys():
     layer = int(key.split(":")[0])
+    if layer == 2:
+      print(layer, key, dependencies[key]["parent_key"])
     if layer not in layer_to_count:
       layer_to_count[layer] = 0
     layer_to_count[layer] += 1
 
-  num_threads = int(max(layer_to_count.values()) * 1)
+  num_threads = 16000#int(max(layer_to_count.values()) * 1)
   lefts = list(map(lambda l: [0] * num_threads, range(num_layers)))
   runtimes = list(map(lambda l: [0] * num_threads, range(num_layers)))
   num_offsets = list(map(lambda l: [0] * num_threads, range(num_layers)))
@@ -93,6 +96,9 @@ def get_plot_data(results, num_layers, params):
     get_length(root_key, dependencies)
     if len(heights) == 0:
       get_heights(root_key, dependencies, heights)
+      heights[0] = num_threads
+      heights[1] = int(num_threads / 92)
+      heights[1] = int(num_threads / 92)
     graph(root_key, dependencies, heights, num_offsets, runtimes, lefts, num_threads, -1, layer=0, thread_id=0)
 
   for layer in range(len(runtimes)):
@@ -106,6 +112,7 @@ def get_plot_data(results, num_layers, params):
 
 def runtime_plot(num_layers, num_results, lefts, runtimes, heights, num_threads, pipeline, params):
   threads = range(1, num_threads + 1)
+  print("Num threads", num_threads)
 
   fig = plt.figure()
   ax = fig.add_subplot(1, 1, 1)
@@ -138,15 +145,16 @@ def runtime_plot(num_layers, num_results, lefts, runtimes, heights, num_threads,
   fig.legend(legends, labels, prop=fontP, loc="upper left", ncol=1, bbox_to_anchor=(0.75, 0.95))
   plt.yticks([])
   ax.set_ylim(0, num_threads)
+  ax.set_xlim(0, 500)
   plt.xlabel("Runtime (seconds)")
   plt.title("Runtime Concurrency {0:d} ({1:f})".format(num_results, params["timestamp"]))
-  plot_name = "results/concurrency{0:d}/plot-{0:d}.png".format(num_results)
+  plot_name = "results/concurrency{0:d}/{1:f}/plot-{0:d}.png".format(num_results, params["timestamp"])
   print("plot", plot_name)
   fig.savefig(plot_name)
   plt.close()
 
 
-def error_plot(num_results, num_layers, dependencies, pipeline):
+def error_plot(num_results, num_layers, results, pipeline, params):
   fig = plt.figure()
   ax = fig.add_subplot(1, 1, 1)
   bottom = 0
@@ -154,9 +162,12 @@ def error_plot(num_results, num_layers, dependencies, pipeline):
   labels = []
 
   runtimes = list(map(lambda l: [], range(num_layers)))
-  for key in dependencies.keys():
-    layer = int(key.split(":")[0])
-    runtimes[layer].append(dependencies[key]["duration"] / 1000)
+  for result in results:
+    dep_folder = "{0:f}-{1:d}".format(result.params["now"], result.params["nonce"])
+    dependencies = json.loads(open("results/concurrency{0:d}/{1:f}/{2:s}/deps".format(len(results), params["timestamp"], dep_folder)).read())
+    for key in dependencies.keys():
+      layer = int(key.split(":")[0])
+      runtimes[layer].append(dependencies[key]["duration"] / 1000)
 
   for layer in range(num_layers):
     runtime = runtimes[layer]
@@ -168,14 +179,13 @@ def error_plot(num_results, num_layers, dependencies, pipeline):
     color = (min(color[0] + offset, 1.0), min(color[1] + offset, 1.0), min(color[2] + offset, 1.0))
 
     x_pos = (layer % 5) * 0.15 - 0.25
-    print("mean", mean, "std", std, "min", min(runtime), "max", max(runtime))
     ax.errorbar(x_pos, bottom + mean, yerr=std, ecolor=color, capsize=4)
     ax.errorbar(x_pos, bottom, yerr=std, ecolor=color, capsize=4)
     legends.append(p[0])
     labels.append(pipeline[layer]["name"])
     bottom += mean
 
-  fig.tight_layout(rect=[0, 0, 0.65, 1])
+  fig.tight_layout(rect=[0, 0.05, 0.65, 0.90])
   plt.xticks([])
   fig.legend(legends, labels, loc="upper right")
   plt.title("Error Concurrency {0:d} ({1:f})".format(num_results, params["timestamp"]))
@@ -185,22 +195,26 @@ def error_plot(num_results, num_layers, dependencies, pipeline):
   plt.close()
 
 
-def accumulation_plot(num_results, num_layers, dependencies, pipeline):
-  keys = dependencies.keys()
+def accumulation_plot(num_results, num_layers, results, pipeline, params):
   points = []
   regions = {}
-  for key in keys:
-    start = dependencies[key]["timestamp"]
-    end = start + math.ceil(dependencies[key]["duration"] / 1000)
-    points.append([start, 1])
-    points.append([end, -1])
 
-    layer = int(key.split(":")[0])
-    if layer not in regions:
-      regions[layer] = [sys.maxsize, 0]
+  for result in results:
+    dep_folder = "{0:f}-{1:d}".format(result.params["now"], result.params["nonce"])
+    dependencies = json.loads(open("results/concurrency{0:d}/{1:f}/{2:s}/deps".format(len(results), params["timestamp"], dep_folder)).read())
+    keys = dependencies.keys()
+    for key in keys:
+      start = dependencies[key]["timestamp"]
+      end = start + math.ceil(dependencies[key]["duration"] / 1000)
+      points.append([start, 1])
+      points.append([end, -1])
 
-    regions[layer][0] = min(regions[layer][0], start)
-    regions[layer][1] = max(regions[layer][1], end)
+      layer = int(key.split(":")[0])
+      if layer not in regions:
+        regions[layer] = [sys.maxsize, 0]
+
+      regions[layer][0] = min(regions[layer][0], start)
+      regions[layer][1] = max(regions[layer][1], end)
 
   points.sort()
   x = []
@@ -215,7 +229,6 @@ def accumulation_plot(num_results, num_layers, dependencies, pipeline):
   ax = fig.add_subplot(1, 1, 1)
 
   colors = ["red", "blue", "yellow", "green", "orange", "purple"]
-  print("num layers", num_layers)
   legends = []
   alpha = 0.3
   for layer in range(num_layers):
@@ -243,8 +256,8 @@ def plot(results, pipeline, params):
   num_results = len(results)
   [dependencies, lefts, runtimes, heights, num_threads] = get_plot_data(results, num_layers, params)
   runtime_plot(num_layers, num_results, lefts, runtimes, heights, num_threads, pipeline, params)
-  error_plot(num_results, num_layers, dependencies, pipeline)
-  accumulation_plot(num_results, num_layers, dependencies, pipeline)
+  error_plot(num_results, num_layers, results, pipeline, params)
+  accumulation_plot(num_results, num_layers, results, pipeline, params)
 
 
 if __name__ == "__main__":
