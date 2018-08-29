@@ -1,11 +1,9 @@
 import boto3
 import importlib
-import random
-import time
 import util
 
 
-def bin_input(s3, obj, sorted_input, format_lib, m, bin_ranges, offsets, params):
+def bin_input(s3, obj, sorted_input, format_lib, input_format, output_format, bin_ranges, offsets, params):
   bin_index = 0
   binned_input = list(map(lambda r: [], bin_ranges))
   count = 0
@@ -26,16 +24,9 @@ def bin_input(s3, obj, sorted_input, format_lib, m, bin_ranges, offsets, params)
   for i in range(len(binned_input)):
     count += len(binned_input[i])
     content = iterator_class.fromArray(obj, binned_input[i], offsets)
-    m["bin"] = bin_ranges[i]["bin"]
-    bin_key = util.file_name(m)
-    util.print_write(m, bin_key, params)
-    done = False
-    while not done:
-      try:
-        s3.Object(params["bucket"], bin_key).put(Body=str.encode(content))
-        done = True
-      except Exception as e:
-        time.sleep(random.randint(0, 10))
+    output_format["bin"] = bin_ranges[i]["bin"]
+    bin_key = util.file_name(output_format)
+    util.write(input_format, params["bucket"], bin_key, str.encode(content), params)
 
 
 def handle_sort(bucket_name, key, input_format, output_format, offsets, params):
@@ -50,7 +41,7 @@ def handle_sort(bucket_name, key, input_format, output_format, offsets, params):
     sorted_input = iterator.get(obj, offsets["offsets"][0], offsets["offsets"][-1], params["identifier"])
   sorted_input = sorted(sorted_input, key=lambda k: k[0])
 
-  bin_input(s3, obj, sorted_input, format_lib, dict(output_format), params["pivots"], offsets, params)
+  bin_input(s3, obj, sorted_input, format_lib, input_format, dict(output_format), params["pivots"], offsets, params)
 
 
 def handler(event, context):

@@ -42,6 +42,18 @@ FILE_FORMAT = [{
 LOG_NAME = "/tmp/log.txt"
 
 
+def write(m, bucket, key, body, params):
+  print_write(m, key, params)
+  s3 = boto3.resource("s3")
+  done = False
+  while not done:
+    try:
+      s3.Object(bucket, key).put(Body=body, StorageClass=params["storage_class"])
+      done = True
+    except botocore.exceptions.ClientError as e:
+      time.sleep(random.randint(0, 10))
+
+
 def object_exists(bucket_name, key):
   try:
     s3 = boto3.resource("s3")

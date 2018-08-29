@@ -39,8 +39,7 @@ def find_top(bucket_name, key, input_format, output_format, offsets, params):
   content = iterator.fromArray(obj, values, offsets)
 
   file_name = util.file_name(output_format)
-  util.print_write(output_format, file_name, params)
-  s3.Object(bucket_name, file_name).put(Body=str.encode(content))
+  util.write(output_format, bucket_name, file_name, str.encode(content), params)
 
 
 def handler(event, context):

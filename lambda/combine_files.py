@@ -1,4 +1,3 @@
-import boto3
 import importlib
 import util
 
@@ -11,7 +10,6 @@ def combine(bucket_name, key, input_format, output_format, offsets, params):
   output_format["bin"] = 1
   util.make_folder(output_format)
 
-  s3 = boto3.resource("s3")
   [combine, keys] = util.combine_instance(bucket_name, key)
   if combine:
     msg = "Combining TIMESTAMP {0:f} NONCE {1:d} BIN {2:d} FILE {3:d}"
@@ -25,8 +23,7 @@ def combine(bucket_name, key, input_format, output_format, offsets, params):
     # Make this deterministic and combine in the same order
     keys.sort()
     iterator.combine(bucket_name, keys, temp_name, params)
-    util.print_write(output_format, temp_name, params)
-    s3.Object(params["bucket"], file_name).put(Body=open(temp_name, "rb"))
+    util.write(input_format, params["bucket"], file_name, open(temp_name, "rb"), params)
 
 
 def handler(event, context):
