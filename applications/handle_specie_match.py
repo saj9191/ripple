@@ -14,7 +14,8 @@ def run(key, params, input_format, output_format):
   species_key = objects[0].key
   object_key = key.replace("/tmp/", "")
 
-  match = s3.Object(params["bucket"], species_key).get()["Body"].read().decode("utf-8")
+  obj = s3.Object(params["bucket"], species_key)
+  match = util.read(obj, 0, obj.content_length)
 
   payload = {
     "Records": [{
