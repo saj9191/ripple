@@ -5,11 +5,9 @@ import util
 
 def initiate(bucket_name, key, input_format, output_format, offsets, params):
   util.print_read(input_format, key, params)
-  s3 = boto3.resource("s3")
-  bucket = s3.Bucket(params["bucket"])
   input_format["prefix"] = params["input_key_prefix"]
   prefix = util.key_prefix(util.file_name(input_format))
-  objects = list(bucket.objects.filter(Prefix=prefix))
+  objects = util.get_objects(params["bucket"], prefix=prefix)
   assert(len(objects) == 1)
 
   payload = {

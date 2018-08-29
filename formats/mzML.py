@@ -1,7 +1,8 @@
 import boto3
 import hashlib
-import re
 import iterator
+import re
+import util
 import xml.etree.ElementTree as ET
 
 
@@ -35,7 +36,7 @@ class Iterator(iterator.Iterator):
   def findOffsets(self):
     end_byte = self.content_length
     start_byte = end_byte - self.footer_offset
-    stream = iterator.Iterator.getBytes(self.obj, start_byte, end_byte)
+    stream = util.read(self.obj, start_byte, end_byte)
     m = self.INDEX_LIST_OFFSET_REGEX.match(stream)
     assert(m is not None)
     self.spectra_list_offset = int(m.group(1))
@@ -44,7 +45,7 @@ class Iterator(iterator.Iterator):
 
     start_byte = self.spectra_list_offset
     end_byte = start_byte + self.INDEX_CHUNK_SIZE
-    stream = iterator.Iterator.getBytes(self.obj, start_byte, end_byte)
+    stream = util.read(self.obj, start_byte, end_byte)
     index = stream.find("<offset")
     if index != -1:
       self.spectra_list_offset += stream.find("<offset")
@@ -52,7 +53,7 @@ class Iterator(iterator.Iterator):
 
     start_byte = self.spectra_list_offset - self.INDEX_CHUNK_SIZE
     end_byte = self.spectra_list_offset
-    stream = iterator.Iterator.getBytes(self.obj, start_byte, end_byte)
+    stream = util.read(self.obj, start_byte, end_byte)
 
     index = stream.rfind(Iterator.SPECTRUM_CLOSE_TAG)
     self.end_byte = start_byte + index + len(Iterator.SPECTRUM_CLOSE_TAG) - 1
@@ -61,7 +62,7 @@ class Iterator(iterator.Iterator):
     if len(self.offsets) != 0:
       end_byte = self.offsets[0]
       self.header_length = end_byte - 1
-      stream = iterator.Iterator.getBytes(self.obj, 0, end_byte)
+      stream = util.read(self.obj, 0, end_byte)
       m = self.SPECTRUM_LIST_COUNT_REGEX.search(stream)
       assert(m is not None)
       self.total_count = int(m.group(1))
@@ -77,7 +78,7 @@ class Iterator(iterator.Iterator):
   def updateOffsets(self):
     start_byte = self.current_offset
     end_byte = min(self.content_length, start_byte + self.chunk_size)
-    stream = Iterator.getBytes(self.obj, start_byte, end_byte)
+    stream = util.read(self.obj, start_byte, end_byte)
     stream = self.remainder + stream
     offset_regex = list(self.OFFSET_REGEX.finditer(stream))
     self.offsets += list(map(lambda r: int(r.group(1)), offset_regex))
@@ -109,7 +110,7 @@ class Iterator(iterator.Iterator):
     return Iterator.cvParam(spectrum, "total ion current")
 
   def get(obj, start_byte, end_byte, identifier):
-    content = Iterator.getBytes(obj, start_byte, end_byte)
+    content = util.read(obj, start_byte, end_byte)
     index = content.rfind(Iterator.SPECTRUM_LIST_CLOSE_TAG)
     if index != -1:
       content = content[:index - 1]
@@ -127,7 +128,7 @@ class Iterator(iterator.Iterator):
     return spectra
 
   def header(obj, start, end, count):
-    content = Iterator.getBytes(obj, start, end)
+    content = util.read(obj, start, end)
     m = Iterator.SPECTRUM_LIST_COUNT_REGEX.search(content)
     original = m.group(0)
     replacement = original.replace(m.group(1), str(count))
@@ -220,4 +221,3 @@ class Iterator(iterator.Iterator):
       content += "<fileChecksum>"
       content += "</fileChecksum>\n</indexedmzML>"
       f.write(content)
-

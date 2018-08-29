@@ -42,12 +42,37 @@ FILE_FORMAT = [{
 LOG_NAME = "/tmp/log.txt"
 
 
+READ_COUNT = 0
+LIST_COUNT = 0
+WRITE_COUNT = 0
+
+
+def get_objects(bucket_name, prefix=None):
+  global LIST_COUNT
+  LIST_COUNT += 1
+  s3 = boto3.resource("s3")
+  bucket = s3.Bucket(bucket_name)
+  if prefix is None:
+    objects = bucket.objects.all()
+  else:
+    objects = bucket.objects.filter(Prefix=prefix)
+  return list(objects)
+
+
+def read(obj, start_byte, end_byte):
+  global READ_COUNT
+  READ_COUNT += 1
+  return obj.get(Range="bytes={0:d}-{1:d}".format(start_byte, end_byte))["Body"].read().decode("utf-8")
+
+
 def write(m, bucket, key, body, params):
+  global WRITE_COUNT
   print_write(m, key, params)
   s3 = boto3.resource("s3")
   done = False
   while not done:
     try:
+      WRITE_COUNT += 1
       s3.Object(bucket, key).put(Body=body, StorageClass=params["storage_class"])
       done = True
     except botocore.exceptions.ClientError as e:
@@ -77,19 +102,6 @@ def combine_instance(bucket_name, key):
     time.sleep(1)
 
   return [done and current_last_file(bucket_name, key), keys]
-
-
-def get_objects(bucket_name, prefix):
-  found = False
-  s3 = boto3.resource("s3")
-  bucket = s3.Bucket(bucket_name)
-  while not found:
-    try:
-      objects = list(bucket.objects.filter(Prefix=prefix))
-      found = True
-    except Exception as e:
-      found = False
-  return objects
 
 
 def run(bucket_name, key, params, func):
@@ -135,9 +147,7 @@ def run(bucket_name, key, params, func):
 
 def current_last_file(bucket_name, current_key):
   prefix = key_prefix(current_key) + "/"
-  s3 = boto3.resource("s3")
-  bucket = s3.Bucket(bucket_name)
-  objects = list(bucket.objects.filter(Prefix=prefix))
+  objects = get_objects(bucket_name, prefix=prefix)
   keys = set(list(map(lambda o: o.key, objects)))
   objects = sorted(objects, key=lambda o: [o.last_modified, o.key])
   return ((current_key not in keys) or (objects[-1].key == current_key))
@@ -175,12 +185,19 @@ def lambda_setup(event, context):
 
 
 def show_duration(context, m, params):
-  duration = params["timeout"] * 1000 - context.get_remaining_time_in_millis()
-  msg = "{8:f} - TIMESTAMP {0:f} NONCE {1:d} STEP {2:d} BIN {3:d} FILE {4:d} REQUEST ID {5:s} TOKEN {6:d} DURATION {7:d}"
-  msg = msg.format(m["timestamp"], m["nonce"], params["prefix"], m["bin"], m["file_id"], params["request_id"], params["token"], duration, time.time())
-  print(msg)
-  msg += "\n"
+  global READ_COUNT
+  global WRITE_COUNT
+  READ_COUNT += 1
+  WRITE_COUNT += 1
   with open(LOG_NAME, "a+") as f:
+    msg = "READ COUNT {0:d} WRITE COUNT {1:d} LIST COUNT {2:d}\n".format(READ_COUNT, WRITE_COUNT, LIST_COUNT)
+    print(msg)
+    f.write(msg)
+    duration = params["timeout"] * 1000 - context.get_remaining_time_in_millis()
+    msg = "{8:f} - TIMESTAMP {0:f} NONCE {1:d} STEP {2:d} BIN {3:d} FILE {4:d} REQUEST ID {5:s} TOKEN {6:d} DURATION {7:d}"
+    msg = msg.format(m["timestamp"], m["nonce"], params["prefix"], m["bin"], m["file_id"], params["request_id"], params["token"], duration, time.time())
+    print(msg)
+    msg += "\n"
     f.write(msg)
   s3 = boto3.resource("s3")
   s3.Object("shjoyner-logs", file_name(params["bucket_format"])).put(Body=open(LOG_NAME, "rb"))
@@ -331,13 +348,10 @@ def clear_tmp():
 
 
 def have_all_files(bucket_name, prefix):
-  s3 = boto3.resource("s3")
-  bucket = s3.Bucket(bucket_name)
-
   num_files = None
   ids_to_keys = {}
   prefix += "/"
-  for key in bucket.objects.filter(Prefix=prefix):
+  for key in get_objects(bucket_name, prefix=prefix):
     m = parse_file_name(key.key)
     if m["file_id"] in ids_to_keys:
       if key.key < ids_to_keys[m["file_id"]]:

@@ -1,5 +1,6 @@
 import boto3
 import heapq
+import util
 
 
 class Element():
@@ -88,9 +89,6 @@ class Iterator:
       if len(values) > 0:
         cls.write(f, values, first)
 
-  def getBytes(obj, start_byte, end_byte):
-    return obj.get(Range="bytes={0:d}-{1:d}".format(start_byte, end_byte))["Body"].read().decode("utf-8")
-
   def next(self, identifier=""):
     [o, more] = self.nextOffsets()
     if len(o["offsets"]) == 0:
@@ -120,7 +118,7 @@ class Iterator:
   def updateOffsets(self):
     start_byte = self.current_offset
     end_byte = min(start_byte + self.chunk_size, self.content_length)
-    stream = Iterator.getBytes(self.obj, start_byte, end_byte)
+    stream = util.read(self.obj, start_byte, end_byte)
     stream = self.remainder + stream
     start_byte -= len(self.remainder)
     done = False

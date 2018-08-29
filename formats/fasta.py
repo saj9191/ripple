@@ -1,4 +1,5 @@
 import iterator
+import util
 
 
 class Iterator(iterator.Iterator):
@@ -18,14 +19,14 @@ class Iterator(iterator.Iterator):
     count = 0
     while start_byte < self.content_length:
       end_byte = start_byte + self.chunk_size
-      stream = iterator.Iterator.getBytes(self.obj, start_byte, end_byte)
+      stream = util.read(self.obj, start_byte, end_byte)
       count += stream.count(self.ENTRY_IDENTIFIER)
       start_byte = end_byte + 1
 
   def updateOffsets(self):
     start_byte = self.current_offset
     end_byte = min(start_byte + self.chunk_size, self.content_length)
-    stream = iterator.Iterator.getBytes(self.obj, start_byte, end_byte)
+    stream = util.read(self.obj, start_byte, end_byte)
     done = False
     while not done:
       index = stream.index(self.ENTRY_IDENTIFIER)

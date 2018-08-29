@@ -1,4 +1,5 @@
 import tsv
+import util
 
 
 class Iterator(tsv.Iterator):
@@ -13,7 +14,7 @@ class Iterator(tsv.Iterator):
     return float(line.split(tsv.Iterator.COLUMN_SEPARATOR)[Iterator.QVALUE_INDEX])
 
   def get(obj, start_byte, end_byte, identifier=""):
-    content = Iterator.getBytes(obj, start_byte, end_byte)
+    content = util.read(obj, start_byte, end_byte)
     lines = list(content.split(tsv.Iterator.IDENTIFIER))
 
     if identifier == "q-value":

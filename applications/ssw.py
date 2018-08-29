@@ -16,8 +16,6 @@ def run(file, params, input_format, output_format):
   target_fasta = params["target"]
   file_id = int(target_fasta.split("-")[-1])
   output_format["file_id"] = file_id
-  num_files = sum(1 for _ in target_bucket.objects.all())
-  output_format["last"] = (file_id == num_files)
   output_format["ext"] = "blast"
   output_file = "/tmp/{0:s}".format(util.file_name(output_format))
 

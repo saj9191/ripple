@@ -6,22 +6,19 @@ import util
 
 def map_file(bucket_name, key, input_format, output_format, offsets, params):
   client = boto3.client("lambda")
-  s3 = boto3.resource("s3")
-  bucket = s3.Bucket(params["map_bucket"])
   util.print_read(input_format, key, params)
 
   if params["ranges"]:
     [bucket_name, key, ranges] = pivot.get_pivot_ranges(bucket_name, key)
     prefix = util.key_prefix(key)
-    bucket = s3.Bucket(bucket_name)
-    objects = list(bucket.objects.filter(Prefix=prefix))
+    objects = util.get_objects(bucket_name, prefix=prefix)
     objects = list(set(map(lambda o: o.key, objects)))
   else:
     if "map_bucket_key_prefix" in params:
-      objects = list(bucket.objects.filter(Prefix=params["map_bucket_key_prefix"] + "-"))
+      objects = util.get_objects(params["map_bucket"], prefix=prefix)
       objects = list(set(map(lambda o: o.key, objects)))
     else:
-      objects = list(bucket.objects.all())
+      objects = util.get_objects(params["map_bucket"])
       if params["directories"]:
         objects = list(filter(lambda o: "/" in o.key, objects))
         objects = list(set(map(lambda o: o.key.split("/")[0], objects)))

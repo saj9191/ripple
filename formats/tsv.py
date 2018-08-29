@@ -1,5 +1,6 @@
 import boto3
 import iterator
+import util
 
 
 class Iterator(iterator.Iterator):
@@ -31,7 +32,7 @@ class Iterator(iterator.Iterator):
     self.identifier = Iterator.IDENTIFIER
     start_byte = 0
     end_byte = start_byte + self.chunk_size
-    stream = iterator.Iterator.getBytes(self.obj, start_byte, end_byte)
+    stream = util.read(self.obj, start_byte, end_byte)
     self.current_offset = stream.index(Iterator.IDENTIFIER) + 1
     # First element
     self.offsets.append(self.current_offset)
@@ -45,7 +46,7 @@ class Iterator(iterator.Iterator):
     count = 0
     while start_byte < self.content_length:
       end_byte = start_byte + self.chunk_size
-      stream = iterator.Iterator.getBytes(self.obj, start_byte, end_byte)
+      stream = util.read(self.obj, start_byte, end_byte)
       count += stream.count(Iterator.IDENTIFIER)
       start_byte = end_byte + 1
 
@@ -63,7 +64,7 @@ class Iterator(iterator.Iterator):
     return content
 
   def get(obj, start_byte, end_byte, identifier=""):
-    content = Iterator.getBytes(obj, start_byte, end_byte)
+    content = util.read(obj, start_byte, end_byte)
     items = list(content.split(Iterator.IDENTIFIER))
     if identifier:
       raise Exception("TSV score identifier not implemented")
@@ -80,7 +81,7 @@ class Iterator(iterator.Iterator):
       for i in range(len(keys)):
         key = keys[i]
         obj = s3.Object(bucket_name, key)
-        content = obj.get()["Body"].read().decode("utf-8")
+        content = util.read(obj, 0, obj.content_length)
         if i == 0:
           f.write(content)
         else:

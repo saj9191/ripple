@@ -6,10 +6,9 @@ import util
 def run(key, params, input_format, output_format):
   util.print_read(input_format, key, params)
   s3 = boto3.resource("s3")
-  bucket = s3.Bucket(params["bucket"])
   input_format["prefix"] = params["match_prefix"]
   prefix = util.key_prefix(util.file_name(input_format))
-  objects = list(bucket.objects.filter(Prefix=prefix))
+  objects = util.get_objects(params["bucket"], prefix=prefix)
   assert(len(objects) == 1)
   species_key = objects[0].key
   object_key = key.replace("/tmp/", "")

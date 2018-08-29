@@ -1,5 +1,6 @@
 import iterator
 import re
+import util
 
 
 class Iterator(iterator.Iterator):
@@ -24,7 +25,7 @@ class Iterator(iterator.Iterator):
     return score
 
   def get(obj, start_byte, end_byte, identifier):
-    content = Iterator.getBytes(obj, start_byte, end_byte)
+    content = util.read(obj, start_byte, end_byte)
     blast = content.split(Iterator.IDENTIFIER)
     blast = list(filter(lambda b: len(b.strip()) > 0, blast))
     if identifier == "score":
