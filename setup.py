@@ -51,7 +51,7 @@ def create_parameter_files(zip_directory, function_name, params):
     pparams = params["pipeline"][i]
     if pparams["name"] == function_name:
       p = {**pparams, **params["functions"][function_name]}
-      for value in ["timeout", "num_bins", "bucket"]:
+      for value in ["timeout", "num_bins", "bucket", "storage_class"]:
         p[value] = params[value]
       name = "{0:d}.json".format(i)
       json_path = "{0:s}/{1:s}".format(zip_directory, name)

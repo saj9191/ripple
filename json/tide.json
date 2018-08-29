@@ -6,6 +6,7 @@
 	"timeout": 300,
 	"num_bins": 20,
 	"bucket": "shjoyner-tide",
+	"storage_class": "STANDARD",
 	"stats": true,
 	"setup": true,
 	"sample_bucket": "shjoyner-als",

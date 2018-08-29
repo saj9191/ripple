@@ -104,10 +104,10 @@ def upload_input(params, thread_id=0):
   start = time.time()
   if "sample_input" in params and params["sample_input"]:
     print("Thread {0:d}: Moving {1:s} to s3://{2:s}".format(thread_id, params["input_name"], bucket_name), flush=True)
-    s3.Object(bucket_name, key).copy_from(CopySource={"Bucket": params["sample_bucket"], "Key": params["input_name"]})
+    s3.Object(bucket_name, key).copy_from(CopySource={"Bucket": params["sample_bucket"], "Key": params["input_name"]}, StorageClass=params["storage_class"])
   else:
     print("Uploading {0:s} to s3://{1:s}".format(params["input"], bucket_name), flush=True)
-    s3.Object(bucket_name, key).put(Body=open("data/{0:s}".format(params["input"]), 'rb'))
+    s3.Object(bucket_name, key).put(Body=open("data/{0:s}".format(params["input"]), 'rb'), StorageClass=params["storage_class"])
   end = time.time()
 
   obj = s3.Object(bucket_name, key)

@@ -3,11 +3,13 @@
 	"model": "lambda",
 	"iterations": 1,
 	"region": "us-west-2",
+	"storage_class": "STANDARD",
 	"timeout": 300,
 	"num_bins": 300,
 	"bucket": "shjoyner-ssw",
 	"stats": true,
 	"setup": true,
+	"sample_bucket": "shjoyner-ssw-input",
 	"dependencies": {
 		"common": [
 			"formats/iterator.py",
