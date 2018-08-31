@@ -12,6 +12,7 @@ def run(file, params, input_format, output_format):
   util.print_read(input_format, file, params)
 
   s3 = boto3.resource('s3')
+  print("Download from database ", params["database_bucket"])
   database_bucket = s3.Bucket(params["database_bucket"])
 
   if "species" in params:
@@ -20,7 +21,9 @@ def run(file, params, input_format, output_format):
     raise Exception("Tide needs species parameter specified")
 
   with open("/tmp/fasta", "wb") as f:
+    print("Downloading", "{0:s}/fasta".format(species), "from bucket", database_bucket)
     database_bucket.download_fileobj("{0:s}/fasta".format(species), f)
+    print("after")
 
   with open("/tmp/crux", "wb") as f:
     database_bucket.download_fileobj("crux", f)

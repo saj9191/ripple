@@ -14,8 +14,6 @@ def run(file, params, input_format, output_format):
 
   target_bucket = s3.Bucket(params["target_bucket"])
   target_fasta = params["target"]
-  file_id = int(target_fasta.split("-")[-1])
-  output_format["file_id"] = file_id
   output_format["ext"] = "blast"
   output_file = "/tmp/{0:s}".format(util.file_name(output_format))
 

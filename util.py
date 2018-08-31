@@ -95,11 +95,15 @@ def combine_instance(bucket_name, key):
   prefix = key_prefix(key)
   count = 0
   while not done and (len(keys) == 0 or current_last_file(bucket_name, key)):
-    [done, keys] = have_all_files(bucket_name, prefix)
+    [done, keys, num_files] = have_all_files(bucket_name, prefix)
     count += 1
     if count == num_attempts and not done:
       return [False, keys]
-    time.sleep(1)
+    if num_files == None:
+      sleep = 5
+    else:
+      sleep = int((1 * num_files) / len(keys))
+    time.sleep(sleep)
 
   return [done and current_last_file(bucket_name, key), keys]
 
@@ -190,7 +194,8 @@ def show_duration(context, m, params):
   READ_COUNT += 1
   WRITE_COUNT += 1
   with open(LOG_NAME, "a+") as f:
-    msg = "READ COUNT {0:d} WRITE COUNT {1:d} LIST COUNT {2:d}\n".format(READ_COUNT, WRITE_COUNT, LIST_COUNT)
+    msg = "STEP {0:d} TOKEN {1:d} READ COUNT {0:d} WRITE COUNT {1:d} LIST COUNT {2:d}\n"
+    msg = msg.format(m["prefix"], params["token"], READ_COUNT, WRITE_COUNT, LIST_COUNT)
     print(msg)
     f.write(msg)
     duration = params["timeout"] * 1000 - context.get_remaining_time_in_millis()
@@ -362,4 +367,4 @@ def have_all_files(bucket_name, prefix):
       num_files = m["file_id"]
 
   matching_keys = list(ids_to_keys.values())
-  return (len(matching_keys) == num_files, matching_keys)
+  return (len(matching_keys) == num_files, matching_keys, num_files)

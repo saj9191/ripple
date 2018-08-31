@@ -23,6 +23,7 @@ REQUEST_REGEX = re.compile("([0-9\.]+) - .* STEP ([0-9]+) BIN ([0-9]+) FILE ([0-
 WRITE_REGEX = re.compile("([0-9\.]+) - .* STEP ([0-9]+) BIN ([0-9]+) WRITE REQUEST ID (.*) TOKEN ([0-9]+) FILE NAME (.*)")
 READ_REGEX = re.compile("([0-9\.]+) - .* STEP ([0-9]+) BIN ([0-9]+) READ REQUEST ID (.*) TOKEN ([0-9]+) FILE NAME (.*)")
 DURATION_REGEX = re.compile("([0-9\.]+) - .* STEP ([0-9]+) BIN [0-9]+ FILE ([0-9]+) REQUEST ID (.*) TOKEN ([0-9]+) DURATION ([0-9]+)")
+COUNT_REGEX = re.compile("STEP ([0-9]+) TOKEN ([0-9]+) READ COUNT ([0-9]+) WRITE COUNT ([0-9]+) LIST COUNT ([0-9]+)")
 
 #############################
 #         COMMON            #
@@ -165,6 +166,9 @@ class Request:
     self.duration = 0
     self.file_id = file_id
     self.children = set()
+    self.read_count = 0
+    self.write_count = 0
+    self.list_count = 0
 
   def json(self):
     s = {
@@ -213,11 +217,7 @@ def process_read(message, file_writes, dependencies, token_to_file, name):
     key = "{0:d}:{1:s}".format(layer, token)
     file_name = m.group(6).replace("/tmp/", "")
 
-    if layer in [1, 5]:
-      parent_keys = list(filter(lambda k: k.startswith("{0:d}:".format(layer-1)), dependencies.keys()))
-      assert(len(parent_keys) == 1)
-      parent_key = parent_keys[0]
-    elif layer != 0 and dependencies[key].parent_key == "":
+    if layer != 0 and dependencies[key].parent_key == "":
       if file_name in file_writes:
         parent_key = file_writes[file_name]
       else:
@@ -263,12 +263,24 @@ def process_report(message, dependencies, token_to_file, name):
     token = int(m.group(5))
     key = "{0:d}:{1:d}".format(layer, token)
     duration = int(m.group(6))
+    duration = int((duration + 99) / 100) * 100
     dependencies[key].duration = duration
+
+
+def process_counts(message, dependencies, name):
+  m = COUNT_REGEX.match(message)
+  if m is not None:
+    layer = int(m.group(1))
+    token = int(m.group(2))
+    key = "{0:d}:{1:d}".format(layer, token)
+    dependencies["read_count"] += int(m.group(3))
+    dependencies["write_count"] += int(m.group(4))
+    dependencies["list_count"] += int(m.group(5))
 
 
 def create_dependency_chain(stats, iterations):
   stats = stats
-  dependencies = {}
+  dependencies = {"read_count": 0, "write_count": 0, "list_count": 0}
   file_writes = {}
   token_to_file = {}
 
@@ -297,9 +309,11 @@ def create_dependency_chain(stats, iterations):
     messages = stat["messages"]
     for message in messages:
       process_read(message, file_writes, dependencies, token_to_file, name)
+      process_counts(message, dependencies, name)
 
   for key in dependencies:
-    dependencies[key].duration = float(dependencies[key].duration) / iterations
+    if key not in ["read_count", "write_count", "list_count"]:
+      dependencies[key].duration = float(dependencies[key].duration) / iterations
 
   return dependencies
 

@@ -47,6 +47,11 @@ class Request(threading.Thread):
     with open("{0:s}/stats".format(dir_path), "w+") as f:
       f.write(json.dumps({"stats": stats}, indent=4, sort_keys=True))
 
+    deps = benchmark.create_dependency_chain(stats, 1)
+    print("Writing deps to", dir_path)
+    with open("{0:s}/deps".format(dir_path), "w+") as f:
+      f.write(json.dumps(deps, indent=4, sort_keys=True, default=benchmark.serialize))
+
     match_stage = -1
     pipeline = self.params["pipeline"]
     for i in range(len(pipeline)):
@@ -110,7 +115,8 @@ def launch_threads(requests, file_names, params):
       shutil.copytree(input_file, "{0:s}/{1:s}".format(folder, file))
       shutil.rmtree(input_file)
 
-  #plot.plot(threads, params["pipeline"], params)
+  params["timestamp"] = now
+  plot.plot(threads, params["pipeline"], params)
 
   with open("{0:s}/long_benchmark.csv".format(folder), "w+") as f:
     for thread in threads:
@@ -128,7 +134,7 @@ def run(args, params):
   file_names = list(map(lambda o: o.key, s3.Bucket(params["sample_bucket"]).objects.all()))
 
   setup.setup(params)
-  for i in range(0, 1):
+  for i in range(1, 5):
     requests = []
     num_requests = max(i * 50, 1)
     for j in range(num_requests):

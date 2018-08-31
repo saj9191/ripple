@@ -9,7 +9,9 @@ def run_application(bucket_name, key, input_format, output_format, offsets, para
 
   temp_file = "/tmp/{0:s}".format(key)
   with open(temp_file, "wb") as f:
+    print("Downloading from bucket", bucket_name, "key", key)
     input_bucket.download_fileobj(key, f)
+    print("after")
 
   application_lib = importlib.import_module(params["application"])
   application_method = getattr(application_lib, "run")

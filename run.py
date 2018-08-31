@@ -2,6 +2,7 @@ import argparse
 import benchmark
 import boto3
 import json
+import os
 import plot
 import re
 import util
@@ -23,7 +24,7 @@ def clear():
 
 
 def get_counts(params):
-  count_regex = re.compile("READ COUNT ([0-9]+) WRITE COUNT ([0-9]+) LIST ([0-9]+)")
+  count_regex = re.compile("READ COUNT ([0-9]+) WRITE COUNT ([0-9]+) LIST COUNT ([0-9]+)")
   s3 = boto3.resource("s3")
   bucket = s3.Bucket("shjoyner-logs")
   layer_to_counts = {}
@@ -36,7 +37,7 @@ def get_counts(params):
     obj_format = util.parse_file_name(obj.key)
     layer = obj_format["prefix"]
     if layer not in layer_to_counts:
-      layer_to_counts[layer] = [0, 0]
+      layer_to_counts[layer] = [0, 0, 0]
 
     o = s3.Object("shjoyner-logs", obj.key)
     content = util.read(o, 0, o.content_length)
@@ -85,12 +86,55 @@ def trigger_plot(folder):
   plot.plot(results, params["pipeline"], params)
 
 
+def iterate(bucket_name, params):
+  s3 = boto3.resource("s3")
+  bucket = s3.Bucket(bucket_name)
+  folder = "results/{0:s}".format(bucket_name)
+  [access_key, secret_key] = util.get_credentials("default")
+  params["access_key"] = access_key
+  params["secret_key"] = secret_key
+  params["stats"] = False
+  params["sample_input"] = True
+
+  memory_parameter = json.loads(open("json/memory.json").read())
+
+  for obj in bucket.objects.all():
+    params["input_name"] = obj.key
+    print("Processing file {0:s}".format(obj.key))
+    [upload_duration, duration, failed_attempts] = benchmark.run(params, 0)
+    stats = benchmark.parse_logs(params, params["now"] * 1000, upload_duration, duration)
+    dir_path = "{0:s}/{1:f}-{2:d}".format(folder, params["now"], params["nonce"])
+    os.makedirs(dir_path)
+
+    deps = benchmark.create_dependency_chain(stats, 1)
+    with open("{0:s}/deps".format(dir_path), "w+") as f:
+      f.write(json.dumps(deps, indent=4, sort_keys=True, default=benchmark.serialize))
+
+    cost = 0
+    for key in deps.keys():
+      if key not in ["read_count", "write_count", "list_count"]:
+        memory_size = str(params["functions"][deps[key].name]["memory_size"])
+        cost += memory_parameter["lambda"][memory_size] * deps[key].duration
+
+    cost += deps["read_count"] + (0.0004 / 1000)
+    cost += (deps["write_count"] + deps["list_count"]) + (0.0005 / 1000)
+
+    print("Cost", cost)
+
+    stats["cost"] = cost
+    with open("{0:s}/stats".format(dir_path), "w+") as f:
+      f.write(json.dumps({"stats": stats}, indent=4, sort_keys=True))
+
+    benchmark.clear_buckets(params)
+
+
 def main():
   parser = argparse.ArgumentParser()
   parser.add_argument('--clear', action="store_true", help="Clear bucket files")
   parser.add_argument('--plot', type=str, help="Plot graph")
   parser.add_argument('--counts', action="store_true", help="Get read / write counts")
   parser.add_argument('--parameters', type=str, help="JSON parameter file to use")
+  parser.add_argument('--iterate', type=str, help="Bucket to iterate through")
   args = parser.parse_args()
 
   if args.clear:
@@ -100,6 +144,9 @@ def main():
   if args.counts:
     params = json.load(open(args.parameters))
     get_counts(params)
+  if args.iterate:
+    params = json.load(open(args.parameters))
+    iterate(args.iterate, params)
 
 
 if __name__ == "__main__":
