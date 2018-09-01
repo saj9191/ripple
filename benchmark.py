@@ -256,33 +256,46 @@ def process_invoke(message, dependencies, token_to_file, name):
       print("process_invoke", "can't find parent", key)
 
 
-def process_report(message, dependencies, token_to_file, name):
+def process_report(message, dependencies, token_to_file, name, layers_to_cost, layers_to_count, params):
   m = DURATION_REGEX.match(message)
   if m is not None:
     layer = int(m.group(2))
     token = int(m.group(5))
     key = "{0:d}:{1:d}".format(layer, token)
     duration = int(m.group(6))
-    duration = int((duration + 99) / 100) * 100
     dependencies[key].duration = duration
+    memory_size = str(params["functions"][name]["memory_size"])
+    cost = MEMORY_PARAMETERS["lambda"][memory_size] * int((duration + 99) / 100)
+    layers_to_cost[layer] += cost
+    layers_to_count[layer] += 1
 
 
-def process_counts(message, dependencies, name):
+def process_counts(message, dependencies, name, layers_to_cost):
   m = COUNT_REGEX.match(message)
   if m is not None:
-    layer = int(m.group(1))
-    token = int(m.group(2))
-    key = "{0:d}:{1:d}".format(layer, token)
-    dependencies["read_count"] += int(m.group(3))
-    dependencies["write_count"] += int(m.group(4))
-    dependencies["list_count"] += int(m.group(5))
+    layer = int(m.group(1)) - 1
+    read_count = int(m.group(3))
+    write_count = int(m.group(4))
+    list_count = int(m.group(5))
+    layers_to_cost[layer] += ((write_count + list_count) / 1000) * 0.0005
+    layers_to_cost[layer] += (read_count / 1000) * 0.0004
 
 
-def create_dependency_chain(stats, iterations):
+def create_dependency_chain(stats, iterations, params):
   stats = stats
-  dependencies = {"read_count": 0, "write_count": 0, "list_count": 0}
   file_writes = {}
   token_to_file = {}
+  layers_to_cost = {}
+  layers_to_count = {}
+  dependencies = {}
+
+  stats = list(filter(lambda s: s["name"] not in ["load", "total"], stats))
+
+  for i in range(len(stats)):
+    layers_to_cost[i] = 0
+    layers_to_count[i] = 0
+    if "content_length" in stats[i]:
+      layers_to_cost[i] = (stats[i]["content_length"] / (1024 * 1024 * 1024)) * 0.023
 
   start_message = list(filter(lambda m: REQUEST_REGEX.match(m) is not None, stats[1]["messages"]))[0]
   start_timestamp = float(REQUEST_REGEX.match(start_message).group(1))
@@ -301,7 +314,7 @@ def create_dependency_chain(stats, iterations):
     for message in messages:
       process_invoke(message, dependencies, token_to_file, name)
       process_write(message, file_writes, dependencies, token_to_file, name)
-      process_report(message, dependencies, token_to_file, name)
+      process_report(message, dependencies, token_to_file, name, layers_to_cost, layers_to_count, params)
 
   for layer in range(len(stats)):
     stat = stats[layer]
@@ -309,12 +322,10 @@ def create_dependency_chain(stats, iterations):
     messages = stat["messages"]
     for message in messages:
       process_read(message, file_writes, dependencies, token_to_file, name)
-      process_counts(message, dependencies, name)
+      process_counts(message, dependencies, name, layers_to_cost)
 
-  for key in dependencies:
-    if key not in ["read_count", "write_count", "list_count"]:
-      dependencies[key].duration = float(dependencies[key].duration) / iterations
-
+  dependencies["layers_to_cost"] = layers_to_cost
+  dependencies["layers_to_count"] = layers_to_count
   return dependencies
 
 
@@ -754,17 +765,31 @@ def parse_logs(params, upload_timestamp, upload_duration, total_duration):
   stats = []
   stats.append(load_stats(upload_duration))
   s3 = boto3.resource("s3")
-  bucket = s3.Bucket("shjoyner-logs")
+  log_bucket = s3.Bucket("shjoyner-logs")
+  data_bucket = s3.Bucket("shjoyner-tide")
 
+  print("pipeline", len(params["pipeline"]))
   for i in range(len(params["pipeline"])):
     done = False
+    content_length = 0
     while not done:
       try:
         messages = []
-        for obj in bucket.objects.filter(Prefix="{0:d}/{1:f}-{2:d}".format(i + 1, params["now"], params["nonce"])):
-          messages += obj.get()["Body"].read().decode("utf8").split("\n")
+        content_length = 0
+        prefix = "{0:d}/{1:f}-{2:d}".format(i + 1, params["now"], params["nonce"])
+        print("Getting data")
+        for obj in data_bucket.objects.filter(Prefix=prefix):
+          o = s3.Object("shjoyner-tide", obj.key)
+          content_length += o.content_length
+
+        print("Getting logs")
+        for obj in log_bucket.objects.filter(Prefix=prefix):
+          o = s3.Object("shjoyner-logs", obj.key)
+          content_length += o.content_length
+          messages += o.get()["Body"].read().decode("utf-8").split("\n")
         done = True
       except Exception as e:
+        print(e)
         done = False
 
     step = params["pipeline"][i]
@@ -774,6 +799,7 @@ def parse_logs(params, upload_timestamp, upload_duration, total_duration):
       "max_duration": 0,
       "memory_used": 0,
       "cost": 0,
+      "content_length": content_length,
       "messages": messages
     })
 
