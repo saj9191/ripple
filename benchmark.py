@@ -94,7 +94,10 @@ def process_iteration_params(params, iteration):
     "last": True,
     "ext": params["ext"]
   }
-  params["key"] = util.file_name(m)
+  if params["model"] == "ec2":
+    params["key"] = params["input_name"]
+  else:
+    params["key"] = util.file_name(m)
 
 
 def upload_input(params, thread_id=0):
@@ -362,9 +365,9 @@ def run(params, thread_id):
     with open("{0:s}/stats".format(dir_path), "w+") as f:
       f.write(json.dumps({"stats": stats}, indent=4, sort_keys=True))
 
-    for s in stats:
-      print("AVERAGE {0:s}".format(s[0]["name"]))
-      print_stats(calculate_average_results(s, iterations))
+    #for s in stats:
+    #  print("AVERAGE {0:s}".format(s[0]["name"]))
+    #  print_stats(calculate_average_results(s, iterations))
 
   avg_upload_duration = total_upload_duration / iterations
   avg_duration = total_duration / iterations
@@ -909,30 +912,30 @@ def create_instance(params):
   results = calculate_results(duration, 0)
   results["instance"] = instance
   results["ec2"] = ec2
+  results["name"] = "create"
   return results
 
 
 def cexec(client, command, error=False):
   (stdin, stdout, stderr) = client.exec_command(command)
   stdout.channel.recv_exit_status()
-  if error:
-    print(stderr.read())
   return stdout.read().decode("utf-8")
 
 
 def connect(instance, params):
   client = paramiko.SSHClient()
   pem = params["ec2"]["key"] + ".pem"
+  print(pem)
   key = paramiko.RSAKey.from_private_key_file(pem)
   client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-
+  time.sleep(10)
   connected = False
   while not connected:
     try:
       client.connect(
         instance.public_ip_address,
-        username="ec2-user",
-        pkey=key
+        username="ubuntu",
+        pkey=key,
       )
       connected = True
     except paramiko.ssh_exception.NoValidConnectionsError:
@@ -959,6 +962,7 @@ def initiate_instance(ec2, instance, params):
   duration = end_time - start_time
   results = calculate_results(duration, MEMORY_PARAMETERS["ec2"][params["ec2"]["type"]])
   results["client"] = client
+  results["name"] = "initiate"
   return results
 
 
@@ -966,29 +970,23 @@ def setup_instance(client, params):
   print("Setting up EC2 instance.")
   start_time = time.time()
   sftp = client.open_sftp()
-
-  items = ["formats/iterator.py", "formats/mzML.py", "ec2_script.py"]
+  items = ["formats/iterator.py", "formats/mzML.py", "ec2_script.py", "util.py"]
   if not params["ec2"]["use_ami"]:
-    cexec(client, "sudo yum update -y")
-    cexec(client, "cd /etc/yum.repos.d; sudo wget http://s3tools.org/repo/RHEL_6/s3tools.repo")
-    cexec(client, "sudo yum -y install s3cmd")
-    cexec(client, "sudo update-alternatives --set python /usr/bin/python2.6")
-    cexec(client, "sudo yum -y install python-pip")
-    cexec(client, "sudo pip install argparse")
-    cexec(client, "echo -e '{0:s}\n{1:s}\n\n\n\n\nY\ny\n' | s3cmd --configure".format(params["access_key"], params["secret_key"]))
+    cexec(client, "sudo apt-get update -y")
+    time.sleep(3)
+    cexec(client, "sudo apt-get update -y")
+    time.sleep(3)
+    cexec(client, "sudo apt-get update -y")
+    time.sleep(3)
+    cexec(client, "sudo apt install python3-pip -y")
+    cexec(client, "pip3 install boto3")
     items.append("crux")
-    items.append("HUMAN.fasta.20170123")
-    items.append("sort.py")
-    items.append("constants.py")
-
-    index_dir = "HUMAN.fasta.20170123.index"
-    sftp.mkdir(index_dir)
-    for item in os.listdir(index_dir):
-      path = "{0:s}/{1:s}".format(index_dir, item)
-      sftp.put(path, path)
+    cexec(client, "mkdir ~/.aws")
+    cexec(client, "touch ~/.aws/credentials")
+    cexec(client, 'echo "[default]\naws_access_key_id={0:s}\naws_secret_access_key={1:s}" >> ~/.aws/credentials'.format(params["access_key"], params["secret_key"]))
 
   for item in items:
-    sftp.put(item, item)
+    sftp.put(item, item.split("/")[-1])
 
   if not params["ec2"]["use_ami"]:
     cexec(client, "sudo chmod +x crux")
@@ -998,7 +996,7 @@ def setup_instance(client, params):
 
   duration = end_time - start_time
   results = calculate_results(duration, MEMORY_PARAMETERS["ec2"][params["ec2"]["type"]])
-  results["client"] = client
+  results["name"] = "setup"
   return results
 
 
@@ -1011,25 +1009,30 @@ def download_input(client, params):
   return results
 
 
-def sort_spectra(client, params):
-  if params["ext"] != "ms2":
-    raise Exception("sort_spectra: Not implemented for ext", params["ext"])
-  start_time = time.time()
-  cexec(client, "python sort.py --file {0:s}".format(params["key"]))
-  params["key"] = "sorted_{0:s}".format(params["key"])
-  end_time = time.time()
-  duration = end_time - start_time
-
-  return calculate_results(duration, MEMORY_PARAMETERS["ec2"][params["ec2"]["type"]])
-
-
 def run_ec2_script(client, params):
   start_time = time.time()
-  cexec(client, "python3 ec2_script.py --file {0:s}".format(params["input_name"]))
+  stdout = cexec(client, "python3 ec2_script.py --file {0:s}".format(params["input_name"]))
   end_time = time.time()
   duration = end_time - start_time
 
-  return calculate_results(duration, MEMORY_PARAMETERS["ec2"][params["ec2"]["type"]])
+  regex = re.compile("([A-Z]+) DURATION: ([0-9\.]+)")
+  lines = stdout.split("\n")
+  stats = []
+  for line in lines:
+    m = regex.search(line)
+    if m:
+      duration = float(m.group(2))
+      milliseconds = duration * 1000
+      stats.append({
+        "billed_duration": [milliseconds],
+        "cost": duration * MEMORY_PARAMETERS["ec2"][params["ec2"]["type"]],
+        "max_duration": milliseconds,
+        "memory_used": 0,
+        "name": m.group(1).lower()
+      })
+
+  print("stats", stats)
+  return stats
 
 
 def upload_results(client, params):
@@ -1071,29 +1074,30 @@ def ec2_benchmark(params):
   stats.append(load_stats(upload_duration))
 
   create_stats = create_instance(params)
-  stats.append(create_stats)
-
   instance = create_stats["instance"]
   ec2 = create_stats["ec2"]
+  del create_stats["instance"]
+  del create_stats["ec2"]
+  stats.append(create_stats)
+
   initiate_stats = initiate_instance(ec2, instance, params)
+  client = initiate_stats["client"]
+  del initiate_stats["client"]
   stats.append(initiate_stats)
 
-  client = initiate_stats["client"]
   stats.append(setup_instance(client, params))
-  stats.append(run_ec2_script(client, params))
+  stats += run_ec2_script(client, params)
   end_time = time.time()
+  terminate_stats = terminate_instance(instance, client, params)
+  print("terminate_stats", terminate_stats)
+  stats.append(terminate_stats)
 
   total_duration = end_time - start_time
-  total_stats = calculate_total_stats(stats)
-  print("END RESULTS")
-  print_stats(total_stats)
-  stats.append(total_stats)
-
   results = [upload_duration, total_duration]
-
   if params["stats"]:
-    stats = parse_logs(params, upload_timestamp, upload_duration, total_duration)
     results = [stats] + results
+
+  print("results", results)
   return results
 
 #############################
