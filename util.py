@@ -52,10 +52,18 @@ def get_objects(bucket_name, prefix=None):
   LIST_COUNT += 1
   s3 = boto3.resource("s3")
   bucket = s3.Bucket(bucket_name)
-  if prefix is None:
-    objects = bucket.objects.all()
-  else:
-    objects = bucket.objects.filter(Prefix=prefix)
+  found = False
+  while not found:
+    try:
+      if prefix is None:
+        objects = bucket.objects.all()
+      else:
+        objects = bucket.objects.filter(Prefix=prefix)
+      found = True
+    except Exception as e:
+      print("get_objects", e)
+      found = False
+
   return list(objects)
 
 
@@ -194,7 +202,7 @@ def show_duration(context, m, params):
   READ_COUNT += 1
   WRITE_COUNT += 1
   with open(LOG_NAME, "a+") as f:
-    msg = "STEP {0:d} TOKEN {1:d} READ COUNT {0:d} WRITE COUNT {1:d} LIST COUNT {2:d}\n"
+    msg = "STEP {0:d} TOKEN {1:d} READ COUNT {2:d} WRITE COUNT {3:d} LIST COUNT {4:d}\n"
     msg = msg.format(m["prefix"], params["token"], READ_COUNT, WRITE_COUNT, LIST_COUNT)
     print(msg)
     f.write(msg)
