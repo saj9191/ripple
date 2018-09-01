@@ -93,12 +93,12 @@ def iterate(bucket_name, params):
   [access_key, secret_key] = util.get_credentials("default")
   params["access_key"] = access_key
   params["secret_key"] = secret_key
-  params["stats"] = False
+ # params["stats"] = False
   params["sample_input"] = True
+  params["setup"] = False
 
-  memory_parameter = json.loads(open("json/memory.json").read())
-
-  for obj in bucket.objects.all():
+  objects = list(bucket.objects.all())
+  for obj in objects:
     params["input_name"] = obj.key
     print("Processing file {0:s}".format(obj.key))
     [upload_duration, duration, failed_attempts] = benchmark.run(params, 0)
@@ -106,26 +106,50 @@ def iterate(bucket_name, params):
     dir_path = "{0:s}/{1:f}-{2:d}".format(folder, params["now"], params["nonce"])
     os.makedirs(dir_path)
 
-    deps = benchmark.create_dependency_chain(stats, 1)
-    with open("{0:s}/deps".format(dir_path), "w+") as f:
-      f.write(json.dumps(deps, indent=4, sort_keys=True, default=benchmark.serialize))
+    with open("{0:s}/params".format(dir_path), "w+") as f:
+      f.write(json.dumps(params, indent=4, sort_keys=True))
 
-    cost = 0
-    for key in deps.keys():
-      if key not in ["read_count", "write_count", "list_count"]:
-        memory_size = str(params["functions"][deps[key].name]["memory_size"])
-        cost += memory_parameter["lambda"][memory_size] * deps[key].duration
-
-    cost += deps["read_count"] + (0.0004 / 1000)
-    cost += (deps["write_count"] + deps["list_count"]) + (0.0005 / 1000)
-
-    print("Cost", cost)
-
-    stats["cost"] = cost
     with open("{0:s}/stats".format(dir_path), "w+") as f:
       f.write(json.dumps({"stats": stats}, indent=4, sort_keys=True))
 
+    deps = benchmark.create_dependency_chain(stats, 1, params)
+    with open("{0:s}/deps".format(dir_path), "w+") as f:
+      f.write(json.dumps(deps, indent=4, sort_keys=True, default=benchmark.serialize))
+
+    for key in deps["layers_to_cost"].keys():
+      print("Layer", key, "Cost", deps["layers_to_cost"][key] / deps["layers_to_count"][key])
+
     benchmark.clear_buckets(params)
+
+
+def cost(folder, params):
+  layers_to_cost = {}
+  layers_to_count = {}
+  for i in range(len(params["pipeline"])):
+    layers_to_cost[str(i)] = 0
+    layers_to_count[str(i)] = 0
+
+  for subdir, dirs, files in os.walk(folder):
+    if len(files) > 0:
+      file_name = "{0:s}/deps".format(subdir)
+      if not os.path.isfile(file_name):
+        continue
+
+      deps = json.load(open(file_name))
+      print(deps["layers_to_cost"])
+      for layer in deps["layers_to_cost"]:
+        layers_to_cost[layer] += deps["layers_to_cost"][layer]
+
+      for layer in deps["layers_to_count"]:
+        layers_to_count[layer] += deps["layers_to_count"][layer]
+
+  total = 0
+  for i in range(len(params["pipeline"])):
+    s = str(i)
+    layers_to_cost[s] = float(layers_to_cost[s]) / layers_to_count[s]
+    total += layers_to_cost[s]
+    print("Layer", i, "Cost", layers_to_cost[s])
+  print("Total", total)
 
 
 def main():
@@ -137,6 +161,8 @@ def main():
   parser.add_argument('--iterate', type=str, help="Bucket to iterate through")
   args = parser.parse_args()
 
+  params = json.load(open(args.parameters))
+  cost("results/shjoyner-als-lambda", params)
   if args.clear:
     clear()
   if args.plot:
