@@ -3,7 +3,7 @@ import json
 import util
 
 
-def run(key, params, input_format, output_format):
+def run(key, params, input_format, output_format, offsets):
   util.print_read(input_format, key, params)
   s3 = boto3.resource("s3")
   input_format["prefix"] = params["match_prefix"]

@@ -3,7 +3,7 @@ import subprocess
 import util
 
 
-def run(file, params, input_format, output_format):
+def run(file, params, input_format, output_format, offsets):
   s3 = boto3.resource("s3")
   program_bucket = s3.Bucket(params["program_bucket"])
 

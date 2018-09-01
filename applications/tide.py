@@ -4,7 +4,7 @@ import subprocess
 import util
 
 
-def run(file, params, input_format, output_format):
+def run(file, params, input_format, output_format, offsets):
   print("file", file)
   print("params", params)
   print("input", input_format)

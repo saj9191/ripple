@@ -9,13 +9,15 @@ def run_application(bucket_name, key, input_format, output_format, offsets, para
 
   temp_file = "/tmp/{0:s}".format(key)
   with open(temp_file, "wb") as f:
-    print("Downloading from bucket", bucket_name, "key", key)
-    input_bucket.download_fileobj(key, f)
-    print("after")
+    if len(offsets) == 0:
+      input_bucket.download_fileobj(key, f)
+    else:
+      obj = s3.Object(bucket_name, key)
+      f.write(obj.get(Range="bytes={0:d}-{1:d}".format(offsets[0], offsets[-1]))["Body"].read())
 
   application_lib = importlib.import_module(params["application"])
   application_method = getattr(application_lib, "run")
-  output_files = application_method(temp_file, params, input_format, output_format)
+  output_files = application_method(temp_file, params, input_format, output_format, offsets)
 
   for output_file in output_files:
     p = util.parse_file_name(output_file.replace("/tmp/", ""))

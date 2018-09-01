@@ -4,7 +4,7 @@ import subprocess
 import util
 
 
-def run(file, params, input_format, output_format):
+def run(file, params, input_format, output_format, offsets):
   util.print_read(input_format, file, params)
 
   s3 = boto3.resource('s3')
