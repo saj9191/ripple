@@ -121,7 +121,7 @@ def combine_instance(bucket_name, key):
     count += 1
     if count == num_attempts and not done:
       return [False, keys]
-    if num_files == None:
+    if num_files is None:
       sleep = 5
     else:
       sleep = int((1 * num_files) / len(keys))
