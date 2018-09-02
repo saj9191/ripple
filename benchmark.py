@@ -143,8 +143,6 @@ def benchmark(i, params, thread_id=0):
         results = lambda_benchmark(params, thread_id)
       elif params["model"] == "ec2":
         results = ec2_benchmark(params)
-      elif params["model"] == "coordinator":
-        results = coordinator_benchmark(params)
 
       done = True
     except BenchmarkException as e:
@@ -296,38 +294,50 @@ def create_dependency_chain(stats, iterations, params):
 
   stats = list(filter(lambda s: s["name"] not in ["load", "total"], stats))
 
-  for i in range(len(stats)):
-    layers_to_cost[i] = 0
-    layers_to_count[i] = 0
-    if "content_length" in stats[i]:
-      layers_to_cost[i] = (stats[i]["content_length"] / (1024 * 1024 * 1024)) * 0.023
+  if params["model"] == "ec2":
+    s3 = boto3.resource("s3")
+    bucket = s3.Bucket(params["bucket"])
+    content_length = 0
+    for obj in bucket.objects.all():
+      o = s3.Object(params["bucket"], obj.key)
+      content_length += o.content_length
+    layers_to_cost[0] = (content_length / (1024 * 1024 * 1024)) * 0.023
+    layers_to_cost[0] += (1.0 / 1000) * 0.0005
+    layers_to_cost[0] += (1.0 / 1000) * 0.0004
+    layers_to_count[0] = 1
+  else:
+    for i in range(len(stats)):
+      layers_to_cost[i] = 0
+      layers_to_count[i] = 0
+      if "content_length" in stats[i]:
+        layers_to_cost[i] = (stats[i]["content_length"] / (1024 * 1024 * 1024)) * 0.023
 
-  start_message = list(filter(lambda m: REQUEST_REGEX.match(m) is not None, stats[1]["messages"]))[0]
-  start_timestamp = float(REQUEST_REGEX.match(start_message).group(1))
+    start_message = list(filter(lambda m: REQUEST_REGEX.match(m) is not None, stats[1]["messages"]))[0]
+    start_timestamp = float(REQUEST_REGEX.match(start_message).group(1))
 
-  for layer in range(len(stats)):
-    stat = stats[layer]
-    name = stat["name"]
-    messages = stat["messages"]
-    for message in messages:
-      process_request(message, dependencies, token_to_file, name, start_timestamp)
+    for layer in range(len(stats)):
+      stat = stats[layer]
+      name = stat["name"]
+      messages = stat["messages"]
+      for message in messages:
+        process_request(message, dependencies, token_to_file, name, start_timestamp)
 
-  for layer in range(len(stats)):
-    stat = stats[layer]
-    name = stat["name"]
-    messages = stat["messages"]
-    for message in messages:
-      process_invoke(message, dependencies, token_to_file, name)
-      process_write(message, file_writes, dependencies, token_to_file, name)
-      process_report(message, dependencies, token_to_file, name, layers_to_cost, layers_to_count, params)
+    for layer in range(len(stats)):
+      stat = stats[layer]
+      name = stat["name"]
+      messages = stat["messages"]
+      for message in messages:
+        process_invoke(message, dependencies, token_to_file, name)
+        process_write(message, file_writes, dependencies, token_to_file, name)
+        process_report(message, dependencies, token_to_file, name, layers_to_cost, layers_to_count, params)
 
-  for layer in range(len(stats)):
-    stat = stats[layer]
-    name = stat["name"]
-    messages = stat["messages"]
-    for message in messages:
-      process_read(message, file_writes, dependencies, token_to_file, name)
-      process_counts(message, dependencies, name, layers_to_cost)
+    for layer in range(len(stats)):
+      stat = stats[layer]
+      name = stat["name"]
+      messages = stat["messages"]
+      for message in messages:
+        process_read(message, file_writes, dependencies, token_to_file, name)
+        process_counts(message, dependencies, name, layers_to_cost)
 
   dependencies["layers_to_cost"] = layers_to_cost
   dependencies["layers_to_count"] = layers_to_count
@@ -347,13 +357,14 @@ def run(params, thread_id):
   total_failed_attempts = 0.0
   iterations = params["iterations"]
 
-  pipeline = [{"name": "load", "billed_duration": 0}] + params["pipeline"]
-  stats = list(map(lambda i: [], range(len(pipeline))))
+  stats = None
   for i in range(iterations):
     process_iteration_params(params, i)
     if params["stats"]:
       [results, upload_duration, duration, failed_attempts] = benchmark(i, params, thread_id)
-      for j in range(len(results[:-1])):
+      if stats is None:
+        stats = list(map(lambda i: [], range(len(results))))
+      for j in range(len(results)):
         stats[j].append(results[j])
     else:
       [upload_duration, duration, failed_attempts] = benchmark(i, params, thread_id)
@@ -444,52 +455,8 @@ def clear_buckets(params):
         pass
 
 #############################
-#       COORDINATOR         #
-#############################
-
-
-class CoordinatorStage(Enum):
-  LOAD = 0
-  CREATE = 1
-  INITIATE = 2
-  SETUP = 3
-  DOWNLOAD = 4
-  SPLIT = 5
-  COMBINE = 6
-  PERCOLATOR = 7
-  ANALYZE = 8
-  UPLOAD = 9
-  TERMINATE = 10
-  TOTAL = 11
-
-
-SPLIT_REGEX = re.compile("SPLIT\sDURATION\s*([0-9\.]+)")
-COMBINE_REGEX = re.compile("COMBINE\sDURATION\s*([0-9\.]+)")
-PERCOLATOR_REGEX = re.compile("PERCOLATOR\sDURATION\s*([0-9\.]+)")
-
-
-#############################
 #         LAMBDA            #
 #############################
-
-class NonMergeLambdaStage(Enum):
-  LOAD = 0
-  SPLIT = 1
-  ANALYZE = 2
-  COMBINE = 3
-  PERCOLATOR = 4
-  TOTAL = 5
-
-
-class MergeLambdaStage(Enum):
-  LOAD = 0
-  SPLIT = 1
-  SORT = 2
-  MERGE = 3
-  ANALYZE = 4
-  COMBINE = 5
-  PERCOLATOR = 6
-  TOTAL = 7
 
 
 def find_current_stage(bucket_name, params):
@@ -664,7 +631,6 @@ def parse_logs(params, upload_timestamp, upload_duration, total_duration):
   log_bucket = s3.Bucket("shjoyner-logs")
   data_bucket = s3.Bucket("shjoyner-tide")
 
-  print("pipeline", len(params["pipeline"]))
   for i in range(len(params["pipeline"])):
     done = False
     content_length = 0
@@ -673,12 +639,10 @@ def parse_logs(params, upload_timestamp, upload_duration, total_duration):
         messages = []
         content_length = 0
         prefix = "{0:d}/{1:f}-{2:d}".format(i + 1, params["now"], params["nonce"])
-        print("Getting data")
         for obj in data_bucket.objects.filter(Prefix=prefix):
           o = s3.Object("shjoyner-tide", obj.key)
           content_length += o.content_length
 
-        print("Getting logs")
         for obj in log_bucket.objects.filter(Prefix=prefix):
           o = s3.Object("shjoyner-logs", obj.key)
           content_length += o.content_length
@@ -772,8 +736,6 @@ def create_instance(params):
   ami = params["ec2"]["default_ami"]
   if params["model"] == "ec2" and params["ec2"]["use_ami"]:
     ami = params["ec2"]["ami"]
-  elif params["model"] == "coordinator" and params["coordinator"]["use_ami"]:
-    ami = params["coordinator"]["ami"]
 
   start_time = time.time()
   instances = ec2.create_instances(
@@ -812,13 +774,13 @@ def create_instance(params):
 def cexec(client, command, error=False):
   (stdin, stdout, stderr) = client.exec_command(command)
   stdout.channel.recv_exit_status()
+  print(stderr.read().decode("utf-8"))
   return stdout.read().decode("utf-8")
 
 
 def connect(instance, params):
   client = paramiko.SSHClient()
   pem = params["ec2"]["key"] + ".pem"
-  print(pem)
   key = paramiko.RSAKey.from_private_key_file(pem)
   client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
   time.sleep(10)
@@ -859,12 +821,12 @@ def initiate_instance(ec2, instance, params):
   return results
 
 
-def setup_instance(client, params):
+def setup_instance(client, p):
   print("Setting up EC2 instance.")
   start_time = time.time()
   sftp = client.open_sftp()
   items = ["formats/iterator.py", "formats/mzML.py", "ec2_script.py", "util.py"]
-  if not params["ec2"]["use_ami"]:
+  if not p["ec2"]["use_ami"]:
     cexec(client, "sudo apt-get update -y")
     time.sleep(3)
     cexec(client, "sudo apt-get update -y")
@@ -876,19 +838,21 @@ def setup_instance(client, params):
     items.append("crux")
     cexec(client, "mkdir ~/.aws")
     cexec(client, "touch ~/.aws/credentials")
-    cexec(client, 'echo "[default]\naws_access_key_id={0:s}\naws_secret_access_key={1:s}" >> ~/.aws/credentials'.format(params["access_key"], params["secret_key"]))
+    cmd = 'echo "[default]\naws_access_key_id={0:s}\naws_secret_access_key={1:s}" >> ~/.aws/credentials'.format(p["access_key"], p["secret_key"])
+    cexec(client, cmd)
+  cexec(client, "chmod u+x crux")
 
   for item in items:
     sftp.put(item, item.split("/")[-1])
 
-  if not params["ec2"]["use_ami"]:
+  if not p["ec2"]["use_ami"]:
     cexec(client, "sudo chmod +x crux")
 
   sftp.close()
   end_time = time.time()
 
   duration = end_time - start_time
-  results = calculate_results(duration, MEMORY_PARAMETERS["ec2"][params["ec2"]["type"]])
+  results = calculate_results(duration, MEMORY_PARAMETERS["ec2"][p["ec2"]["type"]])
   results["name"] = "setup"
   return results
 
@@ -904,8 +868,9 @@ def download_input(client, params):
 
 def run_ec2_script(client, params):
   start_time = time.time()
-  stdout = cexec(client, "python3 ec2_script.py --file {0:s}".format(params["input_name"]))
+  stdout = cexec(client, "python3 ec2_script.py --file {0:s} --application tide".format(params["input_name"]))
   end_time = time.time()
+  print(stdout)
   duration = end_time - start_time
 
   regex = re.compile("([A-Z]+) DURATION: ([0-9\.]+)")
@@ -923,8 +888,8 @@ def run_ec2_script(client, params):
         "memory_used": 0,
         "name": m.group(1).lower()
       })
+      print("name", stats[-1]["name"])
 
-  print("stats", stats)
   return stats
 
 
@@ -982,7 +947,6 @@ def ec2_benchmark(params):
   stats += run_ec2_script(client, params)
   end_time = time.time()
   terminate_stats = terminate_instance(instance, client, params)
-  print("terminate_stats", terminate_stats)
   stats.append(terminate_stats)
 
   total_duration = end_time - start_time
@@ -990,7 +954,6 @@ def ec2_benchmark(params):
   if params["stats"]:
     results = [stats] + results
 
-  print("results", results)
   return results
 
 #############################
@@ -1003,10 +966,9 @@ def main():
   parser.add_argument('--parameters', type=str, required=True, help="File containing parameters")
   args = parser.parse_args()
   params = json.loads(open(args.parameters).read())
-  [access_key, secret_key] = util.get_credentials("default")
+  [access_key, secret_key] = util.get_credentials("maccoss")
   params["access_key"] = access_key
   params["secret_key"] = secret_key
-  print(params)
   run(params, 0)
 
 
