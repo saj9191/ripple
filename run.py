@@ -98,6 +98,7 @@ def iterate(bucket_name, params):
   params["setup"] = False
 
   objects = list(bucket.objects.all())
+  data_bucket = s3.Bucket(params["bucket"])
   for obj in objects:
     params["input_name"] = obj.key
     print("Processing file {0:s}".format(obj.key))
@@ -119,7 +120,8 @@ def iterate(bucket_name, params):
     for key in deps["layers_to_cost"].keys():
       print("Layer", key, "Cost", deps["layers_to_cost"][key] / deps["layers_to_count"][key])
 
-    benchmark.clear_buckets(params)
+    data_bucket.objects.all().delete()
+    #benchmark.clear_buckets(params)
 
 
 def cost(folder, params):
@@ -161,8 +163,8 @@ def main():
   parser.add_argument('--iterate', type=str, help="Bucket to iterate through")
   args = parser.parse_args()
 
-  params = json.load(open(args.parameters))
-  cost("results/shjoyner-als-lambda", params)
+#  params = json.load(open(args.parameters))
+#  cost("results/shjoyner-als-lambda", params)
   if args.clear:
     clear()
   if args.plot:

@@ -7,19 +7,19 @@ import subprocess
 import util
 
 
-def upload_function_code(client, zip_file, name, params, create):
+def upload_function_code(client, zip_file, name, p, create):
   zipped_code = open(zip_file, "rb").read()
-  fparams = params["functions"][name]
+  fparams = p["functions"][name]
   if create:
     response = client.create_function(
       FunctionName=name,
       Runtime="python3.6",
-      Role="arn:aws:iam::469290334000:role/LambdaExecution",
+      Role="arn:aws:iam::{0:d}:role/{1:s}".format(p["account"], p["role"]),
       Handler="{0:s}.handler".format(fparams["file"]),
       Code={
         "ZipFile": zipped_code
       },
-      Timeout=params["timeout"],
+      Timeout=p["timeout"],
       MemorySize=fparams["memory_size"]
     )
     assert(response["ResponseMetadata"]["HTTPStatusCode"] == 201)
@@ -32,17 +32,17 @@ def upload_function_code(client, zip_file, name, params, create):
     assert(response["ResponseMetadata"]["HTTPStatusCode"] == 200)
     response = client.update_function_configuration(
       FunctionName=name,
-      Timeout=params["timeout"],
+      Timeout=p["timeout"],
       MemorySize=fparams["memory_size"]
     )
     assert(response["ResponseMetadata"]["HTTPStatusCode"] == 200)
     try:
       client.remove_permission(
         FunctionName=name,
-        StatementId=name + "-" + params["bucket"]
+        StatementId=name + "-" + p["bucket"]
       )
     except Exception as e:
-      print("Cannot remove permissions for", name, params["bucket"])
+      print("Cannot remove permissions for", name, p["bucket"])
 
 
 def create_parameter_files(zip_directory, function_name, params):
@@ -51,7 +51,7 @@ def create_parameter_files(zip_directory, function_name, params):
     pparams = params["pipeline"][i]
     if pparams["name"] == function_name:
       p = {**pparams, **params["functions"][function_name]}
-      for value in ["timeout", "num_bins", "bucket", "storage_class"]:
+      for value in ["timeout", "num_bins", "bucket", "storage_class", "log"]:
         p[value] = params[value]
       name = "{0:d}.json".format(i)
       json_path = "{0:s}/{1:s}".format(zip_directory, name)
@@ -164,8 +164,8 @@ def setup_triggers(params):
       "StatementId": name + "-" + params["bucket"],
       "Action": "lambda:InvokeFunction",
       "Principal": "s3.amazonaws.com",
-      "SourceAccount": "469290334000",
-      "SourceArn": "arn:aws:s3:::shjoyner-tide",
+      "SourceAccount": str(params["account"]),
+      "SourceArn": "arn:aws:s3:::{0:s}".format(params["bucket"]),
     }
     lambda_client.add_permission(**args)
 

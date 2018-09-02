@@ -6,10 +6,12 @@
 	"storage_class": "STANDARD",
 	"timeout": 300,
 	"num_bins": 300,
-	"bucket": "shjoyner-ssw",
+	"bucket": "maccoss-ssw",
+	"log": "maccoss-log",
+	"account": 999145429263,
+	"role": "service-role/lambdaFullAccessRole",
 	"stats": true,
 	"setup": true,
-	"sample_bucket": "shjoyner-ssw-input",
 	"dependencies": {
 		"common": [
 			"formats/iterator.py",
@@ -31,7 +33,7 @@
 			"file": "application",
 			"application": "ssw",
 			"memory_size": 1024,
-			"program_bucket": "shjoyner-ssw-files"
+			"program_bucket": "ssw-program"
 		},
 		"find-blast-pivots": {
 			"file": "pivot_file",
@@ -60,7 +62,7 @@
 	},
 	"pipeline": [{
 		"name": "map-fasta",
-		"map_bucket": "maccoss-smith-waterman-fasta",
+		"map_bucket": "ssw-database",
 		"input_key_value": "key",
 		"bucket_key_value": "target", 
 		"output_function": "smith-waterman",
@@ -83,7 +85,8 @@
 	},
 	{
 		"name": "map-blast",
-		"map_bucket": "shjoyner-ssw",
+		"map_bucket": "maccoss-ssw",
+		"map_hucket_key_prefix": "2",
 		"input_key_value": "pivots",
 		"bucket_key_value": "key", 
 		"output_function": "sort-blast-chunk",
