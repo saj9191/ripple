@@ -23,7 +23,7 @@ REQUEST_REGEX = re.compile("([0-9\.]+) - .* STEP ([0-9]+) BIN ([0-9]+) FILE ([0-
 WRITE_REGEX = re.compile("([0-9\.]+) - .* STEP ([0-9]+) BIN ([0-9]+) WRITE REQUEST ID (.*) TOKEN ([0-9]+) FILE NAME (.*)")
 READ_REGEX = re.compile("([0-9\.]+) - .* STEP ([0-9]+) BIN ([0-9]+) READ REQUEST ID (.*) TOKEN ([0-9]+) FILE NAME (.*)")
 DURATION_REGEX = re.compile("([0-9\.]+) - .* STEP ([0-9]+) BIN [0-9]+ FILE ([0-9]+) REQUEST ID (.*) TOKEN ([0-9]+) DURATION ([0-9]+)")
-COUNT_REGEX = re.compile("STEP ([0-9]+) TOKEN ([0-9]+) READ COUNT ([0-9]+) WRITE COUNT ([0-9]+) LIST COUNT ([0-9]+)")
+COUNT_REGEX = re.compile("STEP ([0-9]+) TOKEN ([0-9]+) READ COUNT ([0-9]+) WRITE COUNT ([0-9]+) LIST COUNT ([0-9]+) BYTE COUNT ([0-9]+)")
 
 #############################
 #         COMMON            #
@@ -100,18 +100,18 @@ def process_iteration_params(params, iteration):
     params["key"] = util.file_name(m)
 
 
-def upload_input(params, thread_id=0):
-  bucket_name = params["input_bucket"]
-  s3 = setup_connection("s3", params)
-  key = params["key"]
+def upload_input(p, thread_id=0):
+  bucket_name = p["input_bucket"]
+  s3 = setup_connection("s3", p)
+  key = p["key"]
 
   start = time.time()
-  if "sample_input" in params and params["sample_input"]:
-    print("Thread {0:d}: Moving {1:s} to s3://{2:s}".format(thread_id, params["input_name"], bucket_name), flush=True)
-    s3.Object(bucket_name, key).copy_from(CopySource={"Bucket": params["sample_bucket"], "Key": params["input_name"]}, StorageClass=params["storage_class"])
+  if "sample_input" in p and p["sample_input"]:
+    print("Thread {0:d}: Moving {1:s} to s3://{2:s}".format(thread_id, p["input_name"], bucket_name), flush=True)
+    s3.Object(bucket_name, key).copy_from(CopySource={"Bucket": p["sample_bucket"], "Key": p["input_name"]}, StorageClass=p["storage_class"])
   else:
-    print("Uploading {0:s} to s3://{1:s}".format(params["input"], bucket_name), flush=True)
-    s3.Object(bucket_name, key).put(Body=open("data/{0:s}".format(params["input"]), 'rb'), StorageClass=params["storage_class"])
+    print("Uploading {0:s} to s3://{1:s}".format(p["input"], bucket_name), flush=True)
+    s3.Object(bucket_name, key).put(Body=open("data/{0:s}".format(p["input"]), 'rb'), StorageClass=p["storage_class"])
   end = time.time()
 
   obj = s3.Object(bucket_name, key)
@@ -280,8 +280,10 @@ def process_counts(message, dependencies, name, layers_to_cost):
     read_count = int(m.group(3))
     write_count = int(m.group(4))
     list_count = int(m.group(5))
-    layers_to_cost[layer] += ((write_count + list_count) / 1000) * 0.0005
+    byte_count = int(m.group(6))
+    layers_to_cost[layer] += ((write_count + list_count) / 1000) * 0.005
     layers_to_cost[layer] += (read_count / 1000) * 0.0004
+    layers_to_cost[layer] += (float(byte_count) / (1024 * 1024 * 1024)) * 0.0007
 
 
 def create_dependency_chain(stats, iterations, params):

@@ -45,6 +45,18 @@ LOG_NAME = "/tmp/log.txt"
 READ_COUNT = 0
 LIST_COUNT = 0
 WRITE_COUNT = 0
+BYTE_COUNT = 0
+
+
+def download(bucket, file):
+  global BYTE_COUNT
+  s3 = boto3.resource("s3")
+  bucket = s3.Bucket(bucket)
+  print(bucket, file)
+
+  with open("/tmp/{0:s}".format(file), "wb") as f:
+    bucket.download_fileobj(file, f)
+    BYTE_COUNT += f.tell()
 
 
 def get_objects(bucket_name, prefix=None):
@@ -70,6 +82,8 @@ def get_objects(bucket_name, prefix=None):
 def read(obj, start_byte, end_byte):
   global READ_COUNT
   READ_COUNT += 1
+  global BYTE_COUNT
+  BYTE_COUNT += (end_byte - start_byte)
   return obj.get(Range="bytes={0:d}-{1:d}".format(start_byte, end_byte))["Body"].read().decode("utf-8")
 
 
@@ -196,24 +210,24 @@ def lambda_setup(event, context):
   return [bucket_name, key, params]
 
 
-def show_duration(context, m, params):
+def show_duration(context, m, p):
   global READ_COUNT
   global WRITE_COUNT
   READ_COUNT += 1
   WRITE_COUNT += 1
   with open(LOG_NAME, "a+") as f:
-    msg = "STEP {0:d} TOKEN {1:d} READ COUNT {2:d} WRITE COUNT {3:d} LIST COUNT {4:d}\n"
-    msg = msg.format(m["prefix"], params["token"], READ_COUNT, WRITE_COUNT, LIST_COUNT)
+    msg = "STEP {0:d} TOKEN {1:d} READ COUNT {2:d} WRITE COUNT {3:d} LIST COUNT {4:d} BYTE COUNT {5:d}\n"
+    msg = msg.format(m["prefix"], p["token"], READ_COUNT, WRITE_COUNT, LIST_COUNT, BYTE_COUNT)
     print(msg)
     f.write(msg)
-    duration = params["timeout"] * 1000 - context.get_remaining_time_in_millis()
+    duration = p["timeout"] * 1000 - context.get_remaining_time_in_millis()
     msg = "{8:f} - TIMESTAMP {0:f} NONCE {1:d} STEP {2:d} BIN {3:d} FILE {4:d} REQUEST ID {5:s} TOKEN {6:d} DURATION {7:d}"
-    msg = msg.format(m["timestamp"], m["nonce"], params["prefix"], m["bin"], m["file_id"], params["request_id"], params["token"], duration, time.time())
+    msg = msg.format(m["timestamp"], m["nonce"], p["prefix"], m["bin"], m["file_id"], p["request_id"], p["token"], duration, time.time())
     print(msg)
     msg += "\n"
     f.write(msg)
   s3 = boto3.resource("s3")
-  s3.Object("shjoyner-logs", file_name(params["bucket_format"])).put(Body=open(LOG_NAME, "rb"))
+  s3.Object(p["log"], file_name(p["bucket_format"])).put(Body=open(LOG_NAME, "rb"))
 
 
 def print_request(m, params):

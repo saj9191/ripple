@@ -5,15 +5,14 @@ import util
 
 def run_application(bucket_name, key, input_format, output_format, offsets, params):
   s3 = boto3.resource('s3')
-  input_bucket = s3.Bucket(bucket_name)
 
   temp_file = "/tmp/{0:s}".format(key)
-  with open(temp_file, "wb") as f:
-    if len(offsets) == 0:
-      input_bucket.download_fileobj(key, f)
-    else:
-      obj = s3.Object(bucket_name, key)
-      f.write(obj.get(Range="bytes={0:d}-{1:d}".format(offsets[0], offsets[-1]))["Body"].read())
+  if len(offsets) == 0:
+    util.download(bucket_name, key)
+  else:
+    obj = s3.Object(bucket_name, key)
+    with open(temp_file, "w") as f:
+      f.write(util.read(obj, offsets[0], offsets[-1]))
 
   application_lib = importlib.import_module(params["application"])
   application_method = getattr(application_lib, "run")
