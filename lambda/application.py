@@ -6,13 +6,13 @@ import util
 def run_application(bucket_name, key, input_format, output_format, offsets, params):
   s3 = boto3.resource('s3')
 
-  temp_file = "/tmp/{0:s}".format(key)
   if len(offsets) == 0:
-    util.download(bucket_name, key)
+    temp_file = util.download(bucket_name, key)
   else:
     obj = s3.Object(bucket_name, key)
+    temp_file = "/tmp/{0:s}".format(key)
     with open(temp_file, "w") as f:
-      f.write(util.read(obj, offsets[0], offsets[-1]))
+      f.write(util.read(obj, offsets["offsets"][0], offsets["offsets"][-1]))
 
   application_lib = importlib.import_module(params["application"])
   application_method = getattr(application_lib, "run")

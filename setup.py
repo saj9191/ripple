@@ -200,6 +200,11 @@ def setup_triggers(params):
         }
       })
 
+      if "suffix" in params["functions"][name]:
+        configurations[-1]["Filter"]["Key"]["FilterRules"].append(
+          {"Name": "suffix", "Value": params["functions"][name]["suffix"]}
+        )
+
   config = {
     "LambdaFunctionConfigurations": configurations,
   }

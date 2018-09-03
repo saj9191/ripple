@@ -48,6 +48,15 @@ WRITE_COUNT = 0
 BYTE_COUNT = 0
 
 
+def check_output(command):
+  try:
+    stdout = subprocess.check_output(command, stderr=subprocess.STDOUT, shell=True)
+    return stdout
+  except subprocess.CalledProcessError as e:
+    print("ERROR", e.returncode, e.output)
+    raise e
+
+
 def is_set(params, key):
   if key not in params:
     return False
@@ -70,9 +79,12 @@ def download(bucket, file):
   s3 = boto3.resource("s3")
   bucket = s3.Bucket(bucket)
 
-  with open("/tmp/{0:s}".format(file), "wb") as f:
+  name = file.split("/")[-1]
+  path = "/tmp/{0:s}".format(name)
+  with open(path, "wb") as f:
     bucket.download_fileobj(file, f)
     BYTE_COUNT += f.tell()
+  return path
 
 
 def get_objects(bucket_name, prefix=None):
