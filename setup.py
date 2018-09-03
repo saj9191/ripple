@@ -19,6 +19,9 @@ def upload_function_code(client, zip_file, name, p, create):
       Code={
         "ZipFile": zipped_code
       },
+      Tags={
+        "Application": p["tag"],
+      },
       Timeout=p["timeout"],
       MemorySize=fparams["memory_size"]
     )
@@ -30,6 +33,13 @@ def upload_function_code(client, zip_file, name, p, create):
       ZipFile=zipped_code
     )
     assert(response["ResponseMetadata"]["HTTPStatusCode"] == 200)
+    response = client.tag_resource(
+      Resource="arn:aws:lambda:{0:s}:{1:d}:function:{2:s}".format(p["region"], p["account"], name),
+      Tags={
+        "Application": p["tag"],
+      }
+    )
+    assert(response["ResponseMetadata"]["HTTPStatusCode"] == 204)
     response = client.update_function_configuration(
       FunctionName=name,
       Timeout=p["timeout"],
@@ -134,6 +144,16 @@ def create_bucket(client, bucket_name, params):
     if "BucketAlreadyOwnedByYou" not in str(ex):
       raise ex
 
+  client.put_bucket_tagging(
+    Bucket=bucket_name,
+    Tagging={
+      "TagSet": [{
+        "Key": "Application",
+        "Value": params["tag"],
+      }]
+    }
+  )
+
 
 def function_arns(params):
   name_to_arn = {}
@@ -189,6 +209,7 @@ def setup_triggers(params):
 def setup(params):
   s3 = util.setup_client("s3", params)
   create_bucket(s3, params["bucket"], params)
+  create_bucket(s3, params["log"], params)
   clear_triggers(s3, params["bucket"], params)
 
   client = util.lambda_client(params)
@@ -201,7 +222,7 @@ def main():
   parser.add_argument('--parameters', type=str, required=True, help="File containing parameters")
   args = parser.parse_args()
   params = json.loads(open(args.parameters).read())
-  [access_key, secret_key] = util.get_credentials("default")
+  [access_key, secret_key] = util.get_credentials(params["ec2"]["key"])
   params["access_key"] = access_key
   params["secret_key"] = secret_key
   setup(params)

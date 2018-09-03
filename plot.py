@@ -8,7 +8,7 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 
-colors = ["red", "orange", "green", "blue", "purple", "cyan", "magenta"]
+COLORS = ["red", "blue", "yellow", "green", "orange", "purple"]
 
 
 def graph(key, dependencies, heights, num_offsets, runtimes, lefts, num_threads, parent_id, layer=0, thread_id=0):
@@ -72,10 +72,13 @@ def get_heights(key, dependencies, heights, layer=0):
 
 def get_plot_data(results, num_layers, params):
   layer_to_count = {}
-  dep_file_format = "results/concurrency{0:d}/{1:f}/{2:f}-{3:d}/deps"
-  dep_file = dep_file_format.format(len(results), params["timestamp"], results[0].params["now"], results[0].params["nonce"])
+  dep_file = "results/{0:s}/{1:f}-{2:d}/deps".format(params["folder"], results[0].params["now"], results[0].params["nonce"])
+ # dep_file_format = "results/concurrency{0:d}/{1:f}/{2:f}-{3:d}/deps"
+  #dep_file = dep_file_format.format(len(results), params["timestamp"], results[0].params["now"], results[0].params["nonce"])
   dependencies = json.loads(open(dep_file).read())
   for key in dependencies.keys():
+    if ":" not in key:
+      continue
     layer = int(key.split(":")[0])
     if layer == 2:
       print(layer, key, dependencies[key]["parent_key"])
@@ -83,7 +86,7 @@ def get_plot_data(results, num_layers, params):
       layer_to_count[layer] = 0
     layer_to_count[layer] += 1
 
-  num_threads = 16000#int(max(layer_to_count.values()) * 1)
+  num_threads = int(max(layer_to_count.values()) * 1)
   lefts = list(map(lambda l: [0] * num_threads, range(num_layers)))
   runtimes = list(map(lambda l: [0] * num_threads, range(num_layers)))
   num_offsets = list(map(lambda l: [0] * num_threads, range(num_layers)))
@@ -91,7 +94,8 @@ def get_plot_data(results, num_layers, params):
   heights = {}
   for result in results:
     dep_folder = "{0:f}-{1:d}".format(result.params["now"], result.params["nonce"])
-    dependencies = json.loads(open("results/concurrency{0:d}/{1:f}/{2:s}/deps".format(len(results), params["timestamp"], dep_folder)).read())
+    dependencies = json.loads(open("results/{0:s}/{1:s}/deps".format(params["folder"], dep_folder)).read())
+    #dependencies = json.loads(open("results/concurrency{0:d}/{1:f}/{2:s}/deps".format(len(results), params["timestamp"], dep_folder)).read())
     root_key = list(filter(lambda k: k.startswith("0:"), dependencies.keys()))[0]
     get_length(root_key, dependencies)
     if len(heights) == 0:
@@ -195,21 +199,94 @@ def error_plot(num_results, num_layers, results, pipeline, params):
   plt.close()
 
 
+def ec2_accumulation_plot(results, params):
+  points = []
+  regions = {}
+
+  labels = []
+  print(len(results))
+  for result in results:
+    dep_folder = "{0:f}-{1:d}".format(result.params["now"], result.params["nonce"])
+    stats = json.loads(open("{0:s}/{1:s}/stats".format(params["folder"], dep_folder)).read())["stats"]
+
+    layer = 0
+    start = 0
+    for stat in stats:
+      stat = stat[0]
+      if "name" not in stat:
+        stat["name"] = "terminate"
+      if stat["name"] in ["load", "total"]:
+        continue
+
+      labels.append(stat["name"])
+      if layer not in regions:
+        regions[layer] = [0, 0]
+
+      regions[layer][0] += start
+      if stat["name"] in ["download", "ssw", "upload"]:
+        duration = stat["billed_duration"][0]
+      else:
+        duration = stat["billed_duration"]
+      duration /= 1000.0
+      start += duration
+      regions[layer][1] += start
+      layer += 1
+
+  for layer in regions.keys():
+    for i in range(2):
+      regions[layer][i] = regions[layer][i] / len(results)
+
+  x = [0, regions[len(regions) - 1][1]]
+  y = [1, 1]
+
+  fig = plt.figure()
+  ax = fig.add_subplot(1, 1, 1)
+
+  colors = ["red", "blue", "yellow", "purple", "orange", "green", "magenta"]
+  legends = []
+  alpha = 0.3
+  for layer in range(len(regions)):
+    color = colors[layer % len(colors)]
+    ax.axvspan(regions[layer][0], regions[layer][1], facecolor=color, alpha=alpha)
+    legends.append(matplotlib.lines.Line2D([0], [0], color=color, alpha=alpha, label=labels[layer]))
+
+  fontP = FontProperties()
+  fontP.set_size('x-small')
+  fig.tight_layout(rect=[0.05, 0.05, 0.80, 0.90])
+  fig.legend(handles=legends, loc="upper right", prop=fontP, bbox_to_anchor=(1.0, 0.95))
+  plt.xlim(x)
+  plt.title("Average Accumulation (EC2)".format(len(results)))
+  ax.plot(x, y, color="black")
+  plot_name = "{0:s}/accumulation.png".format(params["folder"])
+  plt.xlabel("Runtime (seconds)")
+  plt.ylabel("Number of EC2 instances")
+  print(plot_name)
+  fig.savefig(plot_name)
+  print("Accumulation plot", plot_name)
+  plt.close()
+
+
 def accumulation_plot(num_results, num_layers, results, pipeline, params):
   points = []
   regions = {}
 
   for result in results:
     dep_folder = "{0:f}-{1:d}".format(result.params["now"], result.params["nonce"])
-    dependencies = json.loads(open("results/concurrency{0:d}/{1:f}/{2:s}/deps".format(len(results), params["timestamp"], dep_folder)).read())
+    dependencies = json.loads(open("{0:s}/{1:s}/deps".format(params["folder"], dep_folder)).read())
     keys = dependencies.keys()
+    offset = -1 * dependencies[list(filter(lambda k: k.startswith("6:"), keys))[0]]["timestamp"]
+
     for key in keys:
-      start = dependencies[key]["timestamp"]
+      if ":" not in key:
+        continue
+      layer = int(key.split(":")[0])
+      if layer <= 5 or layer == num_layers - 1:
+        continue
+      start = dependencies[key]["timestamp"] + offset
       end = start + math.ceil(dependencies[key]["duration"] / 1000)
       points.append([start, 1])
       points.append([end, -1])
 
-      layer = int(key.split(":")[0])
       if layer not in regions:
         regions[layer] = [sys.maxsize, 0]
 
@@ -231,7 +308,7 @@ def accumulation_plot(num_results, num_layers, results, pipeline, params):
   colors = ["red", "blue", "yellow", "green", "orange", "purple"]
   legends = []
   alpha = 0.3
-  for layer in range(num_layers):
+  for layer in range(6, num_layers - 1):
     color = colors[layer % len(colors)]
     ax.axvspan(regions[layer][0], regions[layer][1], facecolor=color, alpha=alpha)
     legends.append(matplotlib.lines.Line2D([0], [0], color=color, alpha=alpha, label=pipeline[layer]["name"]))
@@ -241,11 +318,12 @@ def accumulation_plot(num_results, num_layers, results, pipeline, params):
   fig.tight_layout(rect=[0.05, 0.05, 0.80, 0.90])
   fig.legend(handles=legends, loc="upper right", prop=fontP, bbox_to_anchor=(1.0, 0.95))
   plt.xlim([points[0][0], points[-1][0]])
-  plt.title("Accumulation Concurrency {0:d} ({1:f})".format(num_results, params["timestamp"]))
+  plt.title("Average Accumulation (Lambda)".format(num_results))
   ax.plot(x, y, color="black")
-  plot_name = "results/concurrency{0:d}/{1:f}/accumulation-{0:d}.png".format(num_results, params["timestamp"])
+  plot_name = "results/{0:s}/accumulation.png".format(params["folder"])
   plt.xlabel("Runtime (seconds)")
   plt.ylabel("Number of Lambda Processes")
+  print(plot_name)
   fig.savefig(plot_name)
   print("Accumulation plot", plot_name)
   plt.close()
@@ -254,10 +332,47 @@ def accumulation_plot(num_results, num_layers, results, pipeline, params):
 def plot(results, pipeline, params):
   num_layers = len(pipeline)
   num_results = len(results)
-  [dependencies, lefts, runtimes, heights, num_threads] = get_plot_data(results, num_layers, params)
-  runtime_plot(num_layers, num_results, lefts, runtimes, heights, num_threads, pipeline, params)
-  error_plot(num_results, num_layers, results, pipeline, params)
-  accumulation_plot(num_results, num_layers, results, pipeline, params)
+  #[dependencies, lefts, runtimes, heights, num_threads] = get_plot_data(results, num_layers, params)
+  #runtime_plot(num_layers, num_results, lefts, runtimes, heights, num_threads, pipeline, params)
+  #error_plot(num_results, num_layers, results, pipeline, params)
+  if params["model"] == "ec2":
+    ec2_accumulation_plot(results, params)
+  else:
+    accumulation_plot(num_results, num_layers, results, pipeline, params)
+
+
+def comparison(name, title, lambda_results, ec2_results, ylabel, params={}):
+  print("lambda", lambda_results, "ec2", ec2_results)
+  fig = plt.figure()
+  ax = fig.add_subplot(1, 1, 1)
+  ind = range(2)
+  offsets = list(map(lambda i: 0, ind))
+  lambda_keys = sorted(list(map(lambda k: int(k), lambda_results.keys())))
+  ec2_keys = sorted(list(map(lambda k: int(k), ec2_results.keys())))
+
+  i = 0
+  for key in lambda_keys:
+    lambda_num = lambda_results[str(key)]
+    ax.bar([0], [lambda_num], color="red", bottom=offsets[0])
+    offsets[0] += lambda_num
+    i += 1
+
+
+  i = 0
+  for key in ec2_keys:
+    ec2_num = ec2_results[str(key)]
+    ax.bar([1], [ec2_num], color="blue", bottom=offsets[1])
+    offsets[1] += ec2_num
+    i += 1
+
+  print(offsets)
+  plt.xticks(ind, ("Lambda", "EC2"))
+  plt.title(title)
+  plt.ylabel(ylabel)
+  file_name = "{0:s}.png".format(name)
+  fig.savefig(file_name)
+  print("Comparison", file_name)
+  plt.close()
 
 
 if __name__ == "__main__":
