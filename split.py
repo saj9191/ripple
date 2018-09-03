@@ -1,13 +1,20 @@
 import boto3
+import util
 
 num_entries_per_file = 4*1000*1000
 num_entries = 370261379
 num_files = (num_entries + num_entries_per_file - 1) / num_entries_per_file
 
-s3 = boto3.resource("s3")
-bucket_name = "maccoss-smith-waterman-fasta"
-bucket = s3.Bucket(bucket_name)
-bucket.objects.all().delete()
+[access_key, secret_key] = util.get_credentials("maccoss")
+session = boto3.Session(
+  aws_access_key_id=access_key,
+  aws_secret_access_key=secret_key,
+  region_name="us-west-2"
+)
+s3 = session.resource("s3")
+bucket_name = "ssw-database"#"maccoss-smith-waterman-fasta"
+#bucket = s3.Bucket(bucket_name)
+#bucket.objects.all().delete()
 
 def add(file_id, content):
   key = "uniprot-fasta-{0:d}".format(file_id)
