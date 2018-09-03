@@ -12,6 +12,6 @@ def run(file, params, input_format, output_format, offsets):
 
   util.download(params["target_bucket"], target_fasta)
 
-  command = "cd /tmp; ./ssw_test -c -p {0:s} {1:s} > {2:s}".format(target_fasta, file, output_file)
+  command = "cd /tmp; ./ssw_test -p {0:s} {1:s} > {2:s}".format(target_fasta, file, output_file)
   subprocess.check_output(command, stderr=subprocess.STDOUT, shell=True)
   return [output_file]
