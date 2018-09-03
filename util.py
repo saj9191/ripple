@@ -48,11 +48,21 @@ WRITE_COUNT = 0
 BYTE_COUNT = 0
 
 
+def s3(params):
+  [access_key, secret_key] = get_credentials("maccoss")
+  session = boto3.Session(
+           aws_access_key_id=access_key,
+           aws_secret_access_key=secret_key,
+           region_name=params["region"]
+  )
+  s3 = session.resource("s3")
+  return s3
+
+
 def download(bucket, file):
   global BYTE_COUNT
   s3 = boto3.resource("s3")
   bucket = s3.Bucket(bucket)
-  print(bucket, file)
 
   with open("/tmp/{0:s}".format(file), "wb") as f:
     bucket.download_fileobj(file, f)
