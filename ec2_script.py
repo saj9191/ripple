@@ -60,7 +60,7 @@ def s3():
 
 
 def create_top_file(file_name):
-  obj = s3().Object("shjoyner-ec2-tide", file_name)
+  obj = s3().Object("maccoss-ec2", file_name)
   top_name = "top-{0:s}".format(file_name)
   it = mzML.Iterator(obj, {}, 4000, 10*1000*1000)
 
@@ -163,28 +163,28 @@ def identify_species(file_name):
   return best_species
 
 
-def download_input(file_name):
+def download_input(file_name, bucket):
   start_time = time.time()
   s3 = boto3.resource("s3")
-  bucket = s3.Bucket("shjoyner-ec2-tide")
+  bucket = s3.Bucket(bucket)
   with open(file_name, "wb") as f:
     bucket.download_fileobj(file_name, f)
   end_time = time.time()
   print("DOWNLOAD DURATION: {0:f}".format(end_time - start_time))
 
 
-def upload_output(file_name):
+def upload_output(file_name, bucket):
   start_time = time.time()
   s3 = boto3.resource("s3")
-  s3.Object("shjoyner-ec2-tide", file_name).put(Body=open(file_name, "rb"))
+  s3.Object(bucket, file_name).put(Body=open(file_name, "rb"))
   end_time = time.time()
   print("UPLOAD DURATION: {0:f}".format(end_time - start_time))
 
 
-def run_tide(file_name):
+def run_tide(file_name, bucket):
   start_time = time.time()
   os.remove("TN_CSF_062617_01.mzML")
-  download_input(file_name)
+  download_input(file_name, bucket)
   #species = identify_species(file_name)
   species = "normalHuman"
   fasta_dir = "{0:s}-index".format(species)
@@ -192,7 +192,7 @@ def run_tide(file_name):
   tide_dir = tide(species, fasta_dir, file_name)
   end_time = time.time()
   print("TIDE DURATION: {0:f}".format(end_time - start_time))
-  upload_output("{0:s}/tide-search.txt".format(tide_dir))
+  upload_output("{0:s}/tide-search.txt".format(tide_dir), bucket)
   #per_dir = percolator(species, tide_dir)
 #  upload_output("{0:s}/percolator.target.psms.txt".format(per_dir))
   end_time = time.time()
@@ -202,18 +202,18 @@ def run_tide(file_name):
 def ssw_test(file_name):
   start_time = time.time()
   output_file = "output.txt"
-  cmd = "./ssw_test -p fasta {0:s} > {1:s}".format(file_name, output_file)
+  cmd = "./ssw_test -p uniprot-all.fasta {0:s} > {1:s}".format(file_name, output_file)
   subprocess.call(cmd, shell=True)
   end_time = time.time()
   print("SSW DURATION: {0:f}".format(end_time - start_time))
   return output_file
 
 
-def run_ssw(file_name):
+def run_ssw(file_name, bucket):
   start_time = time.time()
-  download_input(file_name)
+  download_input(file_name, bucket)
   output_file = ssw_test(file_name)
-  upload_output(output_file)
+  upload_output(output_file, bucket)
   end_time = time.time()
   print("TOTAL DURATION: {0:f}".format(end_time - start_time))
 
@@ -221,13 +221,15 @@ def run_ssw(file_name):
 def main():
   parser = argparse.ArgumentParser()
   parser.add_argument('--file', type=str, required=True, help="File to analyze")
+  parser.add_argument('--bucket', type=str, required=True, help="Bucket to read and write to")
   parser.add_argument('--application', type=str, required=True, help="Application to run")
   args = parser.parse_args()
 
   if args.application == "tide":
-    run_tide(args.file)
+    run_tide(args.file, args.bucket)
   elif args.application == "ssw":
-    run_ssw(args.file)
+    run_ssw(args.file, args.bucket)
+
 
 if __name__ == "__main__":
   main()

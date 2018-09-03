@@ -1,7 +1,6 @@
 import argparse
 import boto3
 import datetime
-from enum import Enum
 import json
 import os
 import paramiko
@@ -292,6 +291,7 @@ def create_dependency_chain(stats, iterations, params):
   layers_to_count = {}
   dependencies = {}
 
+  stats = stats[0]
   stats = list(filter(lambda s: s["name"] not in ["load", "total"], stats))
 
   if params["model"] == "ec2":
@@ -357,8 +357,8 @@ def run(params, thread_id):
   total_failed_attempts = 0.0
   iterations = params["iterations"]
 
-  stats = None
   for i in range(iterations):
+    stats = None
     process_iteration_params(params, i)
     if params["stats"]:
       [results, upload_duration, duration, failed_attempts] = benchmark(i, params, thread_id)
@@ -372,19 +372,21 @@ def run(params, thread_id):
     total_duration += duration
     total_failed_attempts += failed_attempts
 
-  if params["stats"]:
-    dir_path = "results/{0:f}-{1:d}".format(params["now"], params["nonce"])
-    os.makedirs(dir_path)
-    with open("{0:s}/stats".format(dir_path), "w+") as f:
-      f.write(json.dumps({"stats": stats}, indent=4, sort_keys=True))
-
-    #for s in stats:
-    #  print("AVERAGE {0:s}".format(s[0]["name"]))
-    #  print_stats(calculate_average_results(s, iterations))
+    if params["stats"]:
+      print("stats", stats)
+      dir_path = "results/{0:s}/{1:f}-{2:d}".format(params["ec2"]["application"], params["now"], params["nonce"])
+      os.makedirs(dir_path)
+      with open("{0:s}/stats".format(dir_path), "w+") as f:
+        f.write(json.dumps({"stats": stats}, indent=4, sort_keys=True))
+    clear_buckets(params)
+    with open("results/{0:s}/{1:f}-{2:d}".format(params["folder"], params["now"], params["nonce"]), "w+") as f:
+      f.write(str(duration) + "\n")
+      f.write(str(failed_attempts) + "\n")
 
   avg_upload_duration = total_upload_duration / iterations
   avg_duration = total_duration / iterations
   avg_failed_attempts = total_failed_attempts / iterations
+  print("ITERATIONS + FAILED ATTEMPTS", total_failed_attempts + iterations)
   return [avg_upload_duration, avg_duration, avg_failed_attempts]
 
 
@@ -442,14 +444,15 @@ def clear_buckets(params):
   s3 = setup_connection("s3", params)
   num_steps = len(params["pipeline"]) + 1
   bucket = s3.Bucket(params["bucket"])
-  log_bucket = s3.Bucket("shjoyner-logs")
+  log_bucket = s3.Bucket(params["log"]) if "log" in params else None
   for i in range(num_steps):
     prefix = "{0:d}/{1:f}-{2:d}/".format(i, params["now"], params["nonce"])
     done = False
     while not done:
       try:
         bucket.objects.filter(Prefix=prefix).delete()
-        log_bucket.objects.filter(Prefix=prefix).delete()
+        if log_bucket:
+          log_bucket.objects.filter(Prefix=prefix).delete()
         done = True
       except Exception as e:
         pass
@@ -503,7 +506,7 @@ def wait_for_completion(start_time, params, thread_id):
 
   # Give ourselves time as we need to wait for each part of the pipeline
   prefix = "{0:d}/".format(len(params["pipeline"]))
-  timeout = 60 * len(params["pipeline"])
+  timeout = 120 * len(params["pipeline"])
   check_objects(client, params["bucket"], prefix, 1, timeout, params, thread_id)
   time.sleep(10)  # Wait a little to make sure percolator logs are on the server
 
@@ -579,60 +582,15 @@ def file_count(bucket_name, params):
   return count
 
 
-def parse_mult_logs(client, params, lparams, step):
-  [events, messages] = fetch_events(client, lparams["name"], params["now"], params["nonce"], step, "REPORT RequestId")
-  if len(events) == 0:
-    raise BenchmarkException("Can't find events for", lparams["name"])
-  max_billed_duration = 0
-  min_billed_duration = 5*60*1000
-  total_billed_duration = 0
-  total_memory_used = 0
-  min_timestamp = events[0]["timestamp"]
-  max_timestamp = events[0]["timestamp"]
-  min_memory = 4000
-  max_memory = 0
-  durations = []
-
-  for event in events:
-    min_timestamp = min(min_timestamp, event["timestamp"])
-    max_timestamp = max(max_timestamp, event["timestamp"])
-    m = REPORT.match(event["message"])
-    duration = int(m.group(3))
-    memory_used = int(m.group(5))
-    min_memory = min(memory_used, min_memory)
-    max_memory = max(memory_used, max_memory)
-    min_billed_duration = min(min_billed_duration, duration)
-    max_billed_duration = max(max_billed_duration, duration)
-    total_billed_duration += duration
-    total_memory_used += memory_used
-    durations.append(duration)
-
-#  cost = calculate_cost(total_billed_duration, params["functions"][lparams["name"]]["memory_size"])
-  messages = []
-
-  return {
-    "name": lparams["name"],
-    "billed_duration": 0,
-    "max_duration": 0,
-    "memory_used": 0,
-    "cost": 0,
-    "messages": messages
-  }
-
-
-def parse_analyze_logs(client, params):
-  return parse_mult_logs(client, params, "analyze_spectra")
-
-
 def parse_logs(params, upload_timestamp, upload_duration, total_duration):
   stats = []
   stats.append(load_stats(upload_duration))
-  s3 = boto3.resource("s3")
-  log_bucket = s3.Bucket("shjoyner-logs")
-  data_bucket = s3.Bucket("shjoyner-tide")
+  s3 = util.s3(params)
+  log_bucket = s3.Bucket(params["log"])
+  data_bucket = s3.Bucket(params["bucket"])
 
-  for i in range(len(params["pipeline"])):
-    done = False
+  for i in range(0):#len(params["pipeline"])):
+    done = True
     content_length = 0
     while not done:
       try:
@@ -640,15 +598,16 @@ def parse_logs(params, upload_timestamp, upload_duration, total_duration):
         content_length = 0
         prefix = "{0:d}/{1:f}-{2:d}".format(i + 1, params["now"], params["nonce"])
         for obj in data_bucket.objects.filter(Prefix=prefix):
-          o = s3.Object("shjoyner-tide", obj.key)
+          o = s3.Object(params["bucket"], obj.key)
           content_length += o.content_length
 
         for obj in log_bucket.objects.filter(Prefix=prefix):
-          o = s3.Object("shjoyner-logs", obj.key)
+          o = s3.Object(params["log"], obj.key)
           content_length += o.content_length
           messages += o.get()["Body"].read().decode("utf-8").split("\n")
         done = True
       except Exception as e:
+        print(log_bucket, data_bucket)
         print(e)
         done = False
 
@@ -693,33 +652,6 @@ def lambda_benchmark(params, thread_id):
 #############################
 
 
-class NoSortEc2Stage(Enum):
-  LOAD = 0
-  CREATE = 1
-  INITIATE = 2
-  SETUP = 3
-  DOWNLOAD = 4
-  TIDE = 5
-  PERCOLATOR = 6
-  UPLOAD = 7
-  TERMINATE = 8
-  TOTAL = 9
-
-
-class SortEc2Stage(Enum):
-  LOAD = 0
-  CREATE = 1
-  INITIATE = 2
-  SETUP = 3
-  DOWNLOAD = 4
-  SORT = 5
-  TIDE = 6
-  PERCOLATOR = 7
-  UPLOAD = 8
-  TERMINATE = 9
-  TOTAL = 10
-
-
 def calculate_results(duration, cost):
   milliseconds = duration * 1000
   return {
@@ -738,6 +670,7 @@ def create_instance(params):
     ami = params["ec2"]["ami"]
 
   start_time = time.time()
+  print("Creating")
   instances = ec2.create_instances(
     ImageId=ami,
     InstanceType=params["ec2"]["type"],
@@ -781,6 +714,7 @@ def cexec(client, command, error=False):
 def connect(instance, params):
   client = paramiko.SSHClient()
   pem = params["ec2"]["key"] + ".pem"
+  print(pem)
   key = paramiko.RSAKey.from_private_key_file(pem)
   client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
   time.sleep(10)
@@ -835,18 +769,21 @@ def setup_instance(client, p):
     time.sleep(3)
     cexec(client, "sudo apt install python3-pip -y")
     cexec(client, "pip3 install boto3")
-    items.append("crux")
+    items.append("ssw_test")
+#    items.append("crux")
     cexec(client, "mkdir ~/.aws")
     cexec(client, "touch ~/.aws/credentials")
     cmd = 'echo "[default]\naws_access_key_id={0:s}\naws_secret_access_key={1:s}" >> ~/.aws/credentials'.format(p["access_key"], p["secret_key"])
     cexec(client, cmd)
-  cexec(client, "chmod u+x crux")
+
+#  cexec(client, "chmod u+x crux")
 
   for item in items:
     sftp.put(item, item.split("/")[-1])
 
   if not p["ec2"]["use_ami"]:
-    cexec(client, "sudo chmod +x crux")
+    if p["ec2"]["application"]:
+      cexec(client, "sudo chmod +x crux")
 
   sftp.close()
   end_time = time.time()
@@ -868,7 +805,8 @@ def download_input(client, params):
 
 def run_ec2_script(client, params):
   start_time = time.time()
-  stdout = cexec(client, "python3 ec2_script.py --file {0:s} --application tide".format(params["input_name"]))
+  print("FILE", params["input_name"])
+  stdout = cexec(client, "python3 ec2_script.py --file {0:s} --application {1:s} --bucket {2:s}".format(params["input_name"], params["ec2"]["application"], params["bucket"]))
   end_time = time.time()
   print(stdout)
   duration = end_time - start_time
@@ -888,7 +826,6 @@ def run_ec2_script(client, params):
         "memory_used": 0,
         "name": m.group(1).lower()
       })
-      print("name", stats[-1]["name"])
 
   return stats
 
@@ -966,7 +903,7 @@ def main():
   parser.add_argument('--parameters', type=str, required=True, help="File containing parameters")
   args = parser.parse_args()
   params = json.loads(open(args.parameters).read())
-  [access_key, secret_key] = util.get_credentials("maccoss")
+  [access_key, secret_key] = util.get_credentials(params["ec2"]["key"])
   params["access_key"] = access_key
   params["secret_key"] = secret_key
   run(params, 0)
