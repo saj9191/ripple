@@ -8,7 +8,7 @@ def map_file(bucket_name, key, input_format, output_format, offsets, params):
   client = boto3.client("lambda")
   util.print_read(input_format, key, params)
 
-  if params["ranges"]:
+  if util.is_set(params, "ranges"):
     [bucket_name, key, ranges] = pivot.get_pivot_ranges(bucket_name, key)
     prefix = util.key_prefix(key)
     objects = util.get_objects(bucket_name, prefix=prefix)
@@ -61,11 +61,8 @@ def map_file(bucket_name, key, input_format, output_format, offsets, params):
     else:
       raise Exception("Need to specify field for map key")
 
-    if params["ranges"]:
-      payload["Records"][0]["s3"]["extra_params"]["pivots"] = ranges
-
-    if params["ranges"]:
-      payload["pivots"] = ranges
+    if util.is_set(params, "ranges"):
+      payload["Records"][0]["s3"]["pivots"] = ranges
 
     response = client.invoke(
       FunctionName=params["output_function"],

@@ -48,6 +48,12 @@ WRITE_COUNT = 0
 BYTE_COUNT = 0
 
 
+def is_set(params, key):
+  if key not in params:
+    return False
+  return params[key]
+
+
 def s3(params):
   [access_key, secret_key] = get_credentials("maccoss")
   session = boto3.Session(

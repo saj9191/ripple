@@ -54,7 +54,7 @@ class Iterator:
     s3 = boto3.resource("s3")
     iterators = []
     values = []
-    if params["sort"]:
+    if util.is_set(params, "sort"):
       for key in keys:
         obj = s3.Object(bucket_name, key)
         iterator = cls(obj, {}, params["batch_size"], params["chunk_size"])
@@ -67,7 +67,7 @@ class Iterator:
     last = None
     with open(temp_name, "w+") as f:
       first = True
-      while params["sort"] and len(iterators) > 0:
+      while util.is_set(params, "sort") and len(iterators) > 0:
         element = heapq.heappop(iterators)
         next_value = element.values.pop(0)
         assert(last is None or last <= next_value[0])

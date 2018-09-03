@@ -6,7 +6,6 @@ import util
 
 
 def split_file(bucket_name, key, input_format, output_format, offsets, params):
-  util.print_read(input_format, key, params)
   batch_size = params["batch_size"]
   chunk_size = params["chunk_size"]
 
@@ -14,14 +13,13 @@ def split_file(bucket_name, key, input_format, output_format, offsets, params):
   s3 = boto3.resource("s3")
   format_lib = importlib.import_module(params["format"])
 
-  if params["ranges"]:
+  if util.is_set(params, "ranges"):
     [input_bucket, input_key, ranges] = pivot.get_pivot_ranges(bucket_name, key)
   else:
     input_bucket = bucket_name
     input_key = key
 
   obj = s3.Object(input_bucket, input_key)
-  print("bucket", input_bucket, "input", input_key)
   iterator_class = getattr(format_lib, "Iterator")
   iterator = iterator_class(obj, offsets, batch_size, chunk_size)
 
@@ -51,8 +49,9 @@ def split_file(bucket_name, key, input_format, output_format, offsets, params):
       }]
     }
 
-    if params["ranges"]:
+    if util.is_set(params, "ranges"):
       payload["Records"][0]["s3"]["extra_params"]["pivots"] = ranges
+
     response = client.invoke(
       FunctionName=params["output_function"],
       InvocationType="Event",
