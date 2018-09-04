@@ -46,6 +46,7 @@ READ_COUNT = 0
 LIST_COUNT = 0
 WRITE_COUNT = 0
 BYTE_COUNT = 0
+START_TIME = None
 
 
 def check_output(command):
@@ -64,7 +65,7 @@ def is_set(params, key):
 
 
 def s3(params):
-  [access_key, secret_key] = get_credentials("maccoss")
+  [access_key, secret_key] = get_credentials(params["ec2"]["key"])
   session = boto3.Session(
            aws_access_key_id=access_key,
            aws_secret_access_key=secret_key,
@@ -208,6 +209,8 @@ def current_last_file(bucket_name, current_key):
 
 
 def lambda_setup(event, context):
+  global START_TIME
+  START_TIME = time.time()
   s3 = event["Records"][0]["s3"]
   bucket_name = s3["bucket"]["name"]
   key = s3["object"]["key"]
@@ -223,7 +226,6 @@ def lambda_setup(event, context):
   params["token"] = random.randint(1, 100*1000*1000)
   params["request_id"] = context.aws_request_id
   params["key_fields"] = key_fields
-  params["f"] = open("/tmp/log", "w+")
 
   for value in ["object", "offsets", "pivots"]:
     if value in s3:
@@ -243,19 +245,27 @@ def show_duration(context, m, p):
   global WRITE_COUNT
   READ_COUNT += 1
   WRITE_COUNT += 1
-  with open(LOG_NAME, "a+") as f:
-    msg = "STEP {0:d} TOKEN {1:d} READ COUNT {2:d} WRITE COUNT {3:d} LIST COUNT {4:d} BYTE COUNT {5:d}\n"
-    msg = msg.format(m["prefix"], p["token"], READ_COUNT, WRITE_COUNT, LIST_COUNT, BYTE_COUNT)
-    print(msg)
-    f.write(msg)
-    duration = p["timeout"] * 1000 - context.get_remaining_time_in_millis()
-    msg = "{8:f} - TIMESTAMP {0:f} NONCE {1:d} STEP {2:d} BIN {3:d} FILE {4:d} REQUEST ID {5:s} TOKEN {6:d} DURATION {7:d}"
-    msg = msg.format(m["timestamp"], m["nonce"], p["prefix"], m["bin"], m["file_id"], p["request_id"], p["token"], duration, time.time())
-    print(msg)
-    msg += "\n"
-    f.write(msg)
+
+  msg = "STEP {0:d} TOKEN {1:d} READ COUNT {2:d} WRITE COUNT {3:d} LIST COUNT {4:d} BYTE COUNT {5:d}\n"
+  msg = msg.format(m["prefix"], p["token"], READ_COUNT, WRITE_COUNT, LIST_COUNT, BYTE_COUNT)
+  print(msg)
+  duration = p["timeout"] * 1000 - context.get_remaining_time_in_millis()
+  msg = "{8:f} - TIMESTAMP {0:f} NONCE {1:d} STEP {2:d} BIN {3:d} FILE {4:d} REQUEST ID {5:s} TOKEN {6:d} DURATION {7:d}"
+  msg = msg.format(m["timestamp"], m["nonce"], p["prefix"], m["bin"], m["file_id"], p["request_id"], p["token"], duration, time.time())
+  print(msg)
+
+  log_results = {
+    "start_time": START_TIME,
+    "read_count": READ_COUNT,
+    "write_count": WRITE_COUNT,
+    "list_count": LIST_COUNT,
+    "byte_count": BYTE_COUNT,
+    "duration": duration,
+  }
+  log_results = {**p, **m, **log_results}
+
   s3 = boto3.resource("s3")
-  s3.Object(p["log"], file_name(p["bucket_format"])).put(Body=open(LOG_NAME, "rb"))
+  s3.Object(p["log"], file_name(p["bucket_format"])).put(Body=str.encode(json.dumps(log_results)))
 
 
 def print_request(m, params):

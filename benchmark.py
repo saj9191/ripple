@@ -96,7 +96,10 @@ def process_iteration_params(params, iteration):
   if params["model"] == "ec2":
     params["key"] = params["input_name"]
   else:
-    params["key"] = util.file_name(m)
+    if util.is_set(params, "trigger"):
+      params["key"] = params["input_name"]
+    else:
+      params["key"] = util.file_name(m)
 
 
 def upload_input(p, thread_id=0):
@@ -105,11 +108,33 @@ def upload_input(p, thread_id=0):
   key = p["key"]
 
   start = time.time()
-  if "sample_input" in p and p["sample_input"]:
+  if util.is_set(p, "trigger"):
+    client = util.setup_client("lambda", p)
+    payload = {
+      "Records": [{
+        "s3": {
+          "bucket": {
+            "name": p["bucket"],
+          },
+          "object": {
+            "key": p["input_name"],
+          }
+        }
+      }]
+    }
+    client.invoke(
+      FunctionName=p["pipeline"][0]["name"],
+      InvocationType="Event",
+      Payload=json.JSONEncoder().encode(payload)
+    )
+
+  elif "sample_input" in p and p["sample_input"]:
     print("Thread {0:d}: Moving {1:s} to s3://{2:s}".format(thread_id, p["input_name"], bucket_name), flush=True)
+#    subprocess.check_output("s3cmd sync s3://{0:s}/{1:s} s3://{2:s}/{3:s}".format(p["sample_bucket"], p["input_name"], bucket_name, key), shell=True)
     s3.Object(bucket_name, key).copy_from(CopySource={"Bucket": p["sample_bucket"], "Key": p["input_name"]}, StorageClass=p["storage_class"])
   else:
     print("Uploading {0:s} to s3://{1:s}".format(p["input"], bucket_name), flush=True)
+#    subprocess.check_output("s3cmd put data/{0:s} s3://{1:s}/{2:s}".format(p["input_name"], bucket_name, key), shell=True)
     s3.Object(bucket_name, key).put(Body=open("data/{0:s}".format(p["input"]), 'rb'), StorageClass=p["storage_class"])
   end = time.time()
 
@@ -373,11 +398,11 @@ def run(params, thread_id):
     total_failed_attempts += failed_attempts
 
     if params["stats"]:
-      print("stats", stats)
       dir_path = "results/{0:s}/{1:f}-{2:d}".format(params["ec2"]["application"], params["now"], params["nonce"])
       os.makedirs(dir_path)
       with open("{0:s}/stats".format(dir_path), "w+") as f:
         f.write(json.dumps({"stats": stats}, indent=4, sort_keys=True))
+
     clear_buckets(params)
     with open("results/{0:s}/{1:f}-{2:d}".format(params["folder"], params["now"], params["nonce"]), "w+") as f:
       f.write(str(duration) + "\n")
@@ -450,7 +475,8 @@ def clear_buckets(params):
     done = False
     while not done:
       try:
-        bucket.objects.filter(Prefix=prefix).delete()
+        if i != 0 or not util.is_set(params, "trigger"):
+          bucket.objects.filter(Prefix=prefix).delete()
         if log_bucket:
           log_bucket.objects.filter(Prefix=prefix).delete()
         done = True
@@ -486,7 +512,7 @@ def check_objects(client, bucket_name, prefix, count, timeout, params, thread_id
     now = time.time()
     found = set()
     objects = util.get_objects(bucket_name, prefix)
-    done = (len(objects) == count)
+    done = (len(objects) >= count)
     end = datetime.datetime.now()
     if not done:
       if (end - start).total_seconds() > timeout:
@@ -495,7 +521,7 @@ def check_objects(client, bucket_name, prefix, count, timeout, params, thread_id
         print("Thread {0:d}: Last stage with output files is {1:d}".format(thread_id, current_stage))
         print("Could not find", expected.difference(found))
         raise BenchmarkException("Could not find bucket {0:s} prefix {1:s}".format(bucket_name, prefix))
-      time.sleep(10)
+      time.sleep(30)
     else:
       now = end.strftime("%H:%M:%S")
       print("{0:s}: Thread {1:d}. Found {2:s}".format(now, thread_id, prefix), flush=True)
@@ -583,28 +609,28 @@ def file_count(bucket_name, params):
 
 
 def parse_logs(params, upload_timestamp, upload_duration, total_duration):
+  print("Parsing logs")
   stats = []
   stats.append(load_stats(upload_duration))
   s3 = util.s3(params)
   log_bucket = s3.Bucket(params["log"])
   data_bucket = s3.Bucket(params["bucket"])
+  messages = []
 
-  for i in range(0):#len(params["pipeline"])):
-    done = True
-    content_length = 0
+  count = 0
+  for i in range(len(params["pipeline"])):
+    print("pipeline", i)
+    done = False
     while not done:
       try:
         messages = []
-        content_length = 0
         prefix = "{0:d}/{1:f}-{2:d}".format(i + 1, params["now"], params["nonce"])
-        for obj in data_bucket.objects.filter(Prefix=prefix):
-          o = s3.Object(params["bucket"], obj.key)
-          content_length += o.content_length
-
         for obj in log_bucket.objects.filter(Prefix=prefix):
           o = s3.Object(params["log"], obj.key)
-          content_length += o.content_length
-          messages += o.get()["Body"].read().decode("utf-8").split("\n")
+          messages.append(o.get()["Body"].read().decode("utf-8"))
+          count += 1
+          if count % 1000 == 0:
+            print("Processed", count)
         done = True
       except Exception as e:
         print(log_bucket, data_bucket)
@@ -614,20 +640,12 @@ def parse_logs(params, upload_timestamp, upload_duration, total_duration):
     step = params["pipeline"][i]
     stats.append({
       "name": step["name"],
-      "billed_duration": [0],
-      "max_duration": 0,
-      "memory_used": 0,
-      "cost": 0,
-      "content_length": content_length,
       "messages": messages
     })
 
   stats.append({
     "name": "total",
-    "billed_duration": [total_duration],
-    "max_duration": total_duration,
-    "memory_used": 0,
-    "cost": 0,
+    "duration": total_duration,
     "messages": [],
   })
   return stats
