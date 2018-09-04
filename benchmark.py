@@ -537,60 +537,6 @@ def wait_for_completion(start_time, params, thread_id):
   time.sleep(10)  # Wait a little to make sure percolator logs are on the server
 
 
-def fetch(client, log_name, timestamp, nonce, step, filter_pattern, extra_args={}):
-  log_events = []
-  next_token = None
-  args = {
-    "logGroupName": "/aws/lambda/{0:s}".format(log_name),
-    "startTime": int(timestamp),
-  }
-  args = {**args, **extra_args}
-
-  more = True
-  while more:
-    args["filterPattern"] = "TIMESTAMP {0:f} NONCE {1:d} STEP {2:d} ".format(timestamp / 1000, nonce, step)
-    if next_token:
-      args["nextToken"] = next_token
-    response = client.filter_log_events(**args)
-    assert(response["ResponseMetadata"]["HTTPStatusCode"] == 200)
-
-    log_events += response["events"]
-    if "nextToken" not in response:
-      more = False
-    else:
-      next_token = response["nextToken"]
-
-  messages = list(map(lambda l: [l["timestamp"], l["message"]], log_events))
-  args["filterPattern"] = filter_pattern
-
-  les = {}
-  for event in log_events:
-    if event["logStreamName"] not in les:
-      les[event["logStreamName"]] = 0
-    if "FILE" in event["message"]:
-      les[event["logStreamName"]] += 1
-
-  events = []
-  for name in les.keys():
-    count = les[name]
-    args["logStreamNames"] = [name]
-    args["limit"] = count
-    response = client.filter_log_events(**args)
-    assert(response["ResponseMetadata"]["HTTPStatusCode"] == 200)
-    es = response["events"]
-    messages += list(map(lambda e: [e["timestamp"], e["message"]], es))
-    events += es
-
-  return [events, messages]
-
-
-def fetch_events(client, log_name, start_time, nonce, step, filter_pattern, extra_args={}):
-  events = fetch(client, log_name, start_time * 1000, nonce, step, filter_pattern, extra_args)
-  if len(events) == 0:
-    raise BenchmarkException("Could not find any events")
-  return events
-
-
 def calculate_cost(duration, memory_size):
   # Cost per 100ms
   millisecond_cost = MEMORY_PARAMETERS["lambda"][str(memory_size)]
