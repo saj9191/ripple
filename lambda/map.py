@@ -62,6 +62,7 @@ def map_file(bucket_name, key, input_format, output_format, offsets, params):
       raise Exception("Need to specify field for map key")
 
     if util.is_set(params, "ranges"):
+      payload["Records"][0]["s3"]["extra_params"]["pivots"] = ranges
       payload["Records"][0]["s3"]["pivots"] = ranges
 
     response = client.invoke(
