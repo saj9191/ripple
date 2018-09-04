@@ -4,13 +4,10 @@
 	"iterations": 1,
 	"region": "us-west-2",
 	"folder": "tide-lambda",
-	"tag": "tide",
 	"timeout": 300,
-	"num_bins": 15,
+	"num_bins": 20,
 	"bucket": "shjoyner-tide",
 	"storage_class": "STANDARD",
-	"account": 469290334000,
-	"role": "LambdaExecution",
 	"log": "shjoyner-log",
 	"sample_input": true,
 	"num_output": 1,
@@ -122,6 +119,37 @@
 		}
 	},
 	"pipeline": [{
+		"name": "top-mzML",
+		"identifier": "tic",
+		"number": 1000,
+		"batch_size": 4000,
+		"chunk_size": 100000000
+	}, {
+		"name": "map-species",
+		"map_bucket": "shjoyner-fasta",
+		"input_key_value": "key",
+		"bucket_key_value": "species",
+		"ranges": false,
+		"directories": true,
+		"output_function": "tide",
+		"ranges": false
+	}, {
+	  "name": "tide",
+	  "num_threads": 0
+	}, {
+	  "name": "confidence",
+	  "database_bucket": "shjoyner-fasta"
+	}, {
+	  "name": "find-species-match",
+	  "identifier": "q-value",
+	  "find": "max sum",
+	  "batch_size": 1000,
+	  "chunk_size": 100000
+	}, {
+	  "name": "initiate-split",
+	  "input_key_prefix": "0",
+	  "output_function": "split-mzML"
+	}, {
 	  "name": "split-mzML",
 	  "ranges": false,
 	  "batch_size": 4000,
@@ -154,13 +182,21 @@
 	  "chunk_size": 10000000,
 	  "sort": false
 	}, {
+	  "name": "handle-specie-match",
+	  "match_prefix": "5",
+	  "output_function": "tide"
+	}, {
 	  "name": "tide",
-	  "num_threads": 0,
-		"species": "normalHuman"
+	  "num_threads": 0
 	}, {
 	  "name": "combine-tsv-files",
 	  "batch_size": 4000,
 	  "chunk_size": 10000000,
 	  "sort": false
+	}, {
+	  "name": "percolator",
+	  "max_train": 10000,
+	  "output": "peptides",
+	  "database_bucket": "shjoyner-fasta"
 	}]
 }

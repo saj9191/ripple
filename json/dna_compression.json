@@ -1,9 +1,10 @@
 {
-	"input_name": "methyl_test.methyl",
+	"input_name": "0/1536083947.373491-91/1/1-1-dna.methyl",
 	"model": "lambda",
-	"iterations": 1,
+	"iterations": 10,
 	"region": "us-west-2",
-	"folder": "dna-compression-lambda",
+	"folder": "dna_compression",
+	"trigger": true,
 	"timeout": 300,
 	"tag": "dna-compression",
 	"bucket": "maccoss-methyl",
@@ -13,6 +14,7 @@
 	"account": 999145429263,
 	"role": "service-role/lambdaFullAccessRole",
 	"sample_input": false,
+	"sample_bucket": "maccoss-methyl-data",
 	"stats": true,
 	"setup": true,
 	"ec2": {
@@ -59,18 +61,11 @@
 	},
 	"pipeline": [{
 		"name": "split-methyl",
-		"batch_size": 4000,
+		"batch_size": 10000,
 		"chunk_size": 1000000
 	}, {
-	  "name": "compress-methyl",
-		"block_size": 4000
+	  "name": "compress-methyl"
 	}, {
-	  "name": "decompress-methyl",
-		"block_size": 4000
-	}, {
-	  "name": "combine-methyl",
-		"batch_size": 4000,
-		"chunk_size": 1000000,
-		"sort": false
+	  "name": "decompress-methyl"
 	}]
 }

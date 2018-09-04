@@ -1,6 +1,6 @@
 {
 	"input_name": "small.fasta",
-	"model": "lambda",
+	"model": "ec2",
 	"iterations": 10,
 	"folder": "ssw-ec2",
 	"region": "us-west-2",
@@ -9,8 +9,8 @@
 	"timeout": 300,
 	"num_bins": 300,
 	"num_output": 300,
-	"log": "maccoss-log",
-	"bucket": "maccoss-ssw",
+	"log": "maccoss-ec2",
+	"bucket": "maccoss-ec2",
 	"account": 999145429263,
 	"role": "service-role/lambdaFullAccessRole",
 	"stats": true,
