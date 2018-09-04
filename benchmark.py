@@ -533,7 +533,7 @@ def wait_for_completion(start_time, params, thread_id):
   # Give ourselves time as we need to wait for each part of the pipeline
   prefix = "{0:d}/".format(len(params["pipeline"]))
   timeout = 120 * len(params["pipeline"])
-  check_objects(client, params["bucket"], prefix, 1, timeout, params, thread_id)
+  check_objects(client, params["bucket"], prefix, params["num_output"], timeout, params, thread_id)
   time.sleep(10)  # Wait a little to make sure percolator logs are on the server
 
 
