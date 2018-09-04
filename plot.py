@@ -1,14 +1,12 @@
 import json
-import math
 import matplotlib
 import numpy as np
-import sys
 from matplotlib.font_manager import FontProperties
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 
-COLORS = ["red", "blue", "yellow", "green", "orange", "purple"]
+COLORS = ["red", "cyan", "yellow", "purple", "orange", "green", "blue"]
 
 
 def graph(key, dependencies, heights, num_offsets, runtimes, lefts, num_threads, parent_id, layer=0, thread_id=0):
@@ -131,7 +129,7 @@ def runtime_plot(num_layers, num_results, lefts, runtimes, heights, num_threads,
       color = dark_colors[i % len(dark_colors)]
     else:
       edgecolors = list(map(lambda r: "black" if r > 0 else "none", runtime))
-      color = colors[i % len(colors)]
+      color = COLORS[i % len(COLORS)]
 
     if len(heights) > i:
       height = heights[i] if heights[i] == 1 else heights[i]
@@ -266,50 +264,14 @@ def ec2_accumulation_plot(results, params):
   plt.close()
 
 
-def accumulation_plot(num_results, num_layers, results, pipeline, params):
-  points = []
-  regions = {}
-
-  for result in results:
-    dep_folder = "{0:f}-{1:d}".format(result.params["now"], result.params["nonce"])
-    dependencies = json.loads(open("{0:s}/{1:s}/deps".format(params["folder"], dep_folder)).read())
-    keys = dependencies.keys()
-    offset = -1 * dependencies[list(filter(lambda k: k.startswith("6:"), keys))[0]]["timestamp"]
-
-    for key in keys:
-      if ":" not in key:
-        continue
-      layer = int(key.split(":")[0])
-      if layer <= 5 or layer == num_layers - 1:
-        continue
-      start = dependencies[key]["timestamp"] + offset
-      end = start + math.ceil(dependencies[key]["duration"] / 1000)
-      points.append([start, 1])
-      points.append([end, -1])
-
-      if layer not in regions:
-        regions[layer] = [sys.maxsize, 0]
-
-      regions[layer][0] = min(regions[layer][0], start)
-      regions[layer][1] = max(regions[layer][1], end)
-
-  points.sort()
-  x = []
-  y = []
-  count = 0
-  for point in points:
-    count += point[1]
-    x.append(point[0])
-    y.append(count)
-
+def accumulation_plot(x, y, regions, pipeline, title, plot_name, folder):
   fig = plt.figure()
   ax = fig.add_subplot(1, 1, 1)
 
-  colors = ["red", "blue", "yellow", "green", "orange", "purple"]
   legends = []
   alpha = 0.3
-  for layer in range(6, num_layers - 1):
-    color = colors[layer % len(colors)]
+  for layer in regions.keys():
+    color = COLORS[layer % len(COLORS)]
     ax.axvspan(regions[layer][0], regions[layer][1], facecolor=color, alpha=alpha)
     legends.append(matplotlib.lines.Line2D([0], [0], color=color, alpha=alpha, label=pipeline[layer]["name"]))
 
@@ -317,10 +279,10 @@ def accumulation_plot(num_results, num_layers, results, pipeline, params):
   fontP.set_size('x-small')
   fig.tight_layout(rect=[0.05, 0.05, 0.80, 0.90])
   fig.legend(handles=legends, loc="upper right", prop=fontP, bbox_to_anchor=(1.0, 0.95))
-  plt.xlim([points[0][0], points[-1][0]])
-  plt.title("Average Accumulation (Lambda)".format(num_results))
+  plt.xlim([0, x[-1]])
+  plt.title(title)
   ax.plot(x, y, color="black")
-  plot_name = "results/{0:s}/accumulation.png".format(params["folder"])
+  plot_name = "{0:s}/{1:s}.png".format(folder, plot_name)
   plt.xlabel("Runtime (seconds)")
   plt.ylabel("Number of Lambda Processes")
   print(plot_name)
@@ -335,37 +297,21 @@ def plot(results, pipeline, params):
   #[dependencies, lefts, runtimes, heights, num_threads] = get_plot_data(results, num_layers, params)
   #runtime_plot(num_layers, num_results, lefts, runtimes, heights, num_threads, pipeline, params)
   #error_plot(num_results, num_layers, results, pipeline, params)
-  if params["model"] == "ec2":
-    ec2_accumulation_plot(results, params)
-  else:
-    accumulation_plot(num_results, num_layers, results, pipeline, params)
+#  if params["model"] == "ec2":
+#    ec2_accumulation_plot(results, params)
+#  else:
+  accumulation_plot(num_results, num_layers, results, pipeline, params)
 
 
-def comparison(name, title, lambda_results, ec2_results, ylabel, params={}):
-  print("lambda", lambda_results, "ec2", ec2_results)
+def comparison(name, title, lambda_result, ec2_result, ylabel, params={}):
   fig = plt.figure()
   ax = fig.add_subplot(1, 1, 1)
   ind = range(2)
-  offsets = list(map(lambda i: 0, ind))
-  lambda_keys = sorted(list(map(lambda k: int(k), lambda_results.keys())))
-  ec2_keys = sorted(list(map(lambda k: int(k), ec2_results.keys())))
 
-  i = 0
-  for key in lambda_keys:
-    lambda_num = lambda_results[str(key)]
-    ax.bar([0], [lambda_num], color="red", bottom=offsets[0])
-    offsets[0] += lambda_num
-    i += 1
+  ax.bar([0], [lambda_result], color="red", bottom=0)
+  ax.bar([1], [ec2_result], color="blue", bottom=0)
 
-
-  i = 0
-  for key in ec2_keys:
-    ec2_num = ec2_results[str(key)]
-    ax.bar([1], [ec2_num], color="blue", bottom=offsets[1])
-    offsets[1] += ec2_num
-    i += 1
-
-  print(offsets)
+  print("Comparison", lambda_result, ec2_result)
   plt.xticks(ind, ("Lambda", "EC2"))
   plt.title(title)
   plt.ylabel(ylabel)
