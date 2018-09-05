@@ -99,19 +99,15 @@ class Iterator:
     if self.content_length == 0:
       return ({"offsets": []}, False)
     # Plus one is so we get end byte of value
-    while len(self.offsets) < (self.batch_size + 1) and self.current_offset < self.content_length:
+    while len(self.offsets) == 0 and self.current_offset < self.content_length:
       self.updateOffsets()
 
     if len(self.offsets) == 0 and self.current_offset >= self.content_length:
       return ({"offsets": []}, False)
 
-    count = min(len(self.offsets), self.batch_size)
-    self.seen_count += count
-    offsets = self.offsets[:count]
-    self.offsets = self.offsets[count:]
-    if len(self.offsets) > 0:
-      offsets.append(self.offsets[0] - 1)
-    else:
+    offsets = self.offsets[:]
+    self.offsets = self.offsets[:0]
+    if len(offsets) == 0:
       offsets.append(self.endByte())
     return ({"offsets": offsets}, self.more())
 
@@ -121,26 +117,24 @@ class Iterator:
     stream = util.read(self.obj, start_byte, end_byte)
     stream = self.remainder + stream
     start_byte -= len(self.remainder)
-    done = False
-    while not done:
-      index = stream.index(self.identifier) if self.identifier in stream else -1
-      done = (index == -1)
-      if index != -1:
-        offset = index + len(self.identifier)
-        self.offsets.append(start_byte + offset)
-        start_byte += offset
-        stream = stream[offset:]
-        self.current_offset = start_byte
+
+    index = stream.rindex(self.identifier) if self.identifier in stream else -1
+    if index != -1:
+      self.offsets.append(start_byte)
+      self.offsets.append(start_byte + index)
+      start_byte += index + 1
+      self.current_offset = end_byte + 1
+      stream = stream[index + 1:]
+    else:
+      if end_byte == self.content_length:
+        self.offsets.append(self.content_length)
+        self.current_offset = self.content_length
       else:
-        if end_byte == self.content_length:
-          self.offsets.append(self.content_length)
-          self.current_offset = self.content_length
-        else:
-          self.current_offset = start_byte
-      self.remainder = stream
+        self.current_offset = start_byte
+    self.remainder = stream
 
   def more(self):
-    return self.seen_count < self.total_count
+    return self.current_offset < self.content_length
 
   def endByte(self):
     return self.current_offset

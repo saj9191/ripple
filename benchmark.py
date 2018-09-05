@@ -81,8 +81,14 @@ def process_params(params):
 
 def process_iteration_params(params, iteration):
   now = time.time()
-  params["now"] = now
-  params["nonce"] = random.randint(1, 1000)
+  if util.is_set(params, "trigger"):
+    input_format = util.parse_file_name(params["input_name"])
+    params["now"] = input_format["timestamp"]
+    params["nonce"] = input_format["nonce"]
+  else:
+    params["now"] = now
+    params["nonce"] = random.randint(1, 1000)
+
   m = {
     "prefix": "0",
     "timestamp": params["now"],
@@ -398,6 +404,8 @@ def run(params, thread_id):
     total_failed_attempts += failed_attempts
 
     if params["stats"]:
+      if util.is_set(params, "trigger"):
+        params["now"] = time.time()
       dir_path = "results/{0:s}/{1:f}-{2:d}".format(params["ec2"]["application"], params["now"], params["nonce"])
       os.makedirs(dir_path)
       with open("{0:s}/stats".format(dir_path), "w+") as f:

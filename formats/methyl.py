@@ -9,7 +9,8 @@ class Iterator(iterator.Iterator):
   def __init__(self, obj, offsets, batch_size, chunk_size):
     iterator.Iterator.__init__(self, Iterator, obj, batch_size, chunk_size)
     self.identifier = Iterator.IDENTIFIER
-    self.offsets = [0]
+    if len(offsets) != 0 and len(offsets["offsets"]) != 0:
+      self.current_offset = offsets["offsets"][0]
 
   def more(self):
     return self.current_offset < self.content_length
@@ -36,6 +37,3 @@ class Iterator(iterator.Iterator):
       for i in range(len(keys)):
         key = keys[i]
         bucket.download_fileobj(key, f)
-#        obj = s3.Object(bucket_name, key)
-#        content = util.read(obj, 0, obj.content_length)
-#        f.write(content)
