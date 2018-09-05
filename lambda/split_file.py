@@ -24,11 +24,12 @@ def split_file(bucket_name, key, input_format, output_format, offsets, params):
   iterator = iterator_class(obj, offsets, batch_size, chunk_size)
 
   more = True
-  file_id = 0
+  file_id = params["file_id"] - 1 if "file_id" in params else 0
 
   while more:
     file_id += 1
     [offsets, more] = iterator.nextOffsets()
+
     payload = {
       "Records": [{
         "s3": {
@@ -52,15 +53,30 @@ def split_file(bucket_name, key, input_format, output_format, offsets, params):
     if util.is_set(params, "ranges"):
       payload["Records"][0]["s3"]["extra_params"]["pivots"] = ranges
 
-    response = client.invoke(
-      FunctionName=params["output_function"],
-      InvocationType="Event",
-      Payload=json.JSONEncoder().encode(payload)
-    )
-    assert(response["ResponseMetadata"]["HTTPStatusCode"] == 202)
+    if params["context"].get_remaining_time_in_millis() < 10*1000:
+      payload["Records"][0]["s3"]["extra_params"]["prefix"] = input_format["prefix"]
+      payload["Records"][0]["s3"]["object"]["key"] = key
+      payload["Records"][0]["s3"]["extra_params"]["file_id"] = payload["Records"][0]["s3"]["object"]["file_id"]
+      print("sending", payload)
+      response = client.invoke(
+        FunctionName=params["name"],
+        InvocationType="Event",
+        Payload=json.JSONEncoder().encode(payload)
+      )
+      assert(response["ResponseMetadata"]["HTTPStatusCode"] == 202)
+      return
+    else:
+      response = client.invoke(
+        FunctionName=params["output_function"],
+        InvocationType="Event",
+        Payload=json.JSONEncoder().encode(payload)
+      )
+      assert(response["ResponseMetadata"]["HTTPStatusCode"] == 202)
 
 
 def handler(event, context):
   [bucket_name, key, params] = util.lambda_setup(event, context)
+  params["context"] = context
   m = util.run(bucket_name, key, params, split_file)
+  del params["context"]
   util.show_duration(context, m, params)
