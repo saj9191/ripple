@@ -273,18 +273,27 @@ def accumulation_plot(x, y, regions, pipeline, title, plot_name, folder):
   for layer in regions.keys():
     color = COLORS[layer % len(COLORS)]
     ax.axvspan(regions[layer][0], regions[layer][1], facecolor=color, alpha=alpha)
-    legends.append(matplotlib.lines.Line2D([0], [0], color=color, alpha=alpha, label=pipeline[layer]["name"]))
+    legends.append(matplotlib.lines.Line2D([0], [0], color=color, alpha=alpha, label=pipeline[layer]["name"], linewidth=4))
 
-  fontP = FontProperties()
-  fontP.set_size('x-small')
-  fig.tight_layout(rect=[0.05, 0.05, 0.80, 0.90])
-  fig.legend(handles=legends, loc="upper right", prop=fontP, bbox_to_anchor=(1.0, 0.95))
-  plt.xlim([0, x[-1]])
-  plt.title(title)
+  fontP = FontProperties(family="Arial", size="small")
+  legend = fig.legend(handles=legends, loc="upper right", prop=fontP, bbox_to_anchor=(0.90, 0.87), framealpha=1, borderpad=1)
+
+  frame = legend.get_frame()
+  frame.set_facecolor("white")
+  plt.xlim([0, regions[len(regions) - 1][1]])
   ax.plot(x, y, color="black")
+
+  for side in ["right", "top"]:
+    ax.spines[side].set_visible(False)
+
+  for side in ["left", "bottom"]:
+    ax.spines[side].set_linewidth(3)
+
   plot_name = "{0:s}/{1:s}.png".format(folder, plot_name)
-  plt.xlabel("Runtime (seconds)")
-  plt.ylabel("Number of Lambda Processes")
+  font_size=12
+  ax.tick_params(axis='both', which='major', labelsize=font_size)
+  plt.xlabel("Runtime (seconds)", size=font_size)
+  plt.ylabel("Number of Lambda Processes", size=font_size)
   print(plot_name)
   fig.savefig(plot_name)
   print("Accumulation plot", plot_name)
