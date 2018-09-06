@@ -1,0 +1,80 @@
+{
+	"input_name": "ENCFF369TZO.bed",
+	"model": "ec2",
+	"iterations": 10,
+	"region": "us-west-2",
+	"folder": "methyl",
+	"num_output": 144,
+	"trigger": true,
+	"timeout": 300,
+	"tag": "methyl",
+	"bucket": "maccoss-ec2",
+	"storage_class": "STANDARD",
+	"log": "maccoss-log",
+	"num_bins": 1,
+	"account": 999145429263,
+	"role": "service-role/lambdaFullAccessRole",
+	"sample_input": false,
+	"sample_bucket": "maccoss-methyl-data",
+	"stats": true,
+	"setup": true,
+	"ec2": {
+		"application": "methyl",
+		"ami": "ami-09908e282013b16a4",
+		"default_ami": "ami-51537029",
+		"key": "maccoss",
+		"security": "sg-4ea90530",
+		"subnet": "subnet-03990a59",
+		"timeout": 20,
+		"type": "t2.medium",
+		"wait_for_tests": false,
+		"use_ami": false
+	},
+	"dependencies": {
+		"common": [
+			"formats/iterator.py",
+			"formats/pivot.py",
+			"util.py"
+		],
+		"formats": {
+			"methyl": []	
+		}
+	},
+	"functions": {
+		"split-methyl": {
+			"file": "split_file",
+			"format": "methyl",
+			"memory_size": 1024,
+			"output_function": "compress-methyl"
+		},
+		"compress-methyl": {
+			"file": "application",
+			"application": "compress_methyl",
+			"program_bucket": "ripple-programs",
+			"memory_size": 1024,
+		  "action": "compress"
+		},
+		"decompress-methyl": {
+			"file": "application",
+			"application": "compress_methyl",
+			"program_bucket": "ripple-programs",
+			"memory_size": 1024,
+		  "action": "decompress",
+			"suffix": "outfileArInt.methyl"
+		},
+		"combine-methyl": {
+			"file": "combine_files",
+			"format": "methyl",
+			"memory_size": 1024
+		}
+	},
+	"pipeline": [{
+		"name": "split-methyl",
+		"batch_size": 50000000,
+		"chunk_size": 100000000
+	}, {
+	  "name": "compress-methyl"
+	}, {
+	  "name": "decompress-methyl"
+	}]
+}
