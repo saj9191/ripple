@@ -175,8 +175,11 @@ def download_input(file_name, bucket):
 
 def upload_output(file_name, bucket):
   start_time = time.time()
-  s3 = boto3.resource("s3")
-  s3.Object(bucket, file_name).put(Body=open(file_name, "rb"))
+  client = boto3.client("s3")
+  tc = boto3.s3.transfer.TransferConfig()
+  t = boto3.s3.transfer.S3Transfer(client=client, config=tc)
+  t.upload_file(file_name, bucket, file_name)
+#  s3.Object(bucket, file_name).put(Body=open(file_name, "rb"))
   end_time = time.time()
   print("UPLOAD DURATION: {0:f}".format(end_time - start_time))
 
@@ -218,6 +221,43 @@ def run_ssw(file_name, bucket):
   print("TOTAL DURATION: {0:f}".format(end_time - start_time))
 
 
+def run_methyl(file_name, bucket):
+  s3 = boto3.resource("s3")
+  start_time = time.time()
+  download_input(file_name, bucket)
+  input_name = "/tmp/input"
+  output_dir = "compressed"
+  os.rename(file_name, input_name)
+  cmd = "./output compress {0:s} {1:s}".format(input_name, output_dir)
+  st = time.time()
+  subprocess.call(cmd, shell=True)
+  et = time.time()
+  print("COMPRESS DURATION: {0:f}".format(et - st))
+
+  st = time.time()
+  compressed_dir = "{0:s}/compressed_input".format(output_dir)
+
+  decompress_input = None
+  for subdir, dirs, files in os.walk(compressed_dir):
+    for f in files:
+      if "ArInt" in f:
+        decompress_input = f
+      file_name = "{0:s}/{1:s}".format(compressed_dir, f)
+      s3.Object(bucket, f).put(Body=open(file_name, "rb"))
+  et = time.time()
+  print("CUPLOAD DURATION: {0:f}".format(et - st))
+
+  output_dir = "decompressed"
+  cmd = "./output decompress {0:s}/{1:s} {2:s}".format(compressed_dir, decompress_input, output_dir)
+  st = time.time()
+  subprocess.call(cmd, shell=True)
+  et = time.time()
+  print("DECOMPRESS DURATION: {0:f}".format(et - st))
+  upload_output("{0:s}/reconstructed_input-0".format(output_dir), bucket)
+  end_time = time.time()
+  print("METHYL DURATION: {0:f}".format(end_time - start_time))
+
+
 def main():
   parser = argparse.ArgumentParser()
   parser.add_argument('--file', type=str, required=True, help="File to analyze")
@@ -229,6 +269,8 @@ def main():
     run_tide(args.file, args.bucket)
   elif args.application == "ssw":
     run_ssw(args.file, args.bucket)
+  elif args.application == "methyl":
+    run_methyl(args.file, args.bucket)
 
 
 if __name__ == "__main__":
