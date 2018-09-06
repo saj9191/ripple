@@ -70,10 +70,28 @@ class Iterator(iterator.Iterator):
   def getCount(self):
     return self.total_count
 
+  def more(self):
+    return self.current_offset < self.spectra_list_offset
+
   def nextOffsets(self):
-    [offsets, more] = iterator.Iterator.nextOffsets(self)
-    offsets["header"] = {"start": 0, "end": self.header_length}
-    return [offsets, more]
+    if self.content_length == 0 or (len(self.offsets) == 0 and not self.more()):
+      return ({"offsets": []}, False)
+
+    # Plus one is so we get end byte of value
+    while len(self.offsets) < (self.batch_size + 1) and self.more():
+      self.updateOffsets()
+
+    offsets = self.offsets[:self.batch_size]
+    self.offsets = self.offsets[self.batch_size:]
+
+    if len(self.offsets) > 0:
+      end = min(self.offsets[0], self.spectra_list_offset)
+    else:
+      end = self.spectra_list_offset
+    o = {"offsets": [offsets[0], end - 1]}
+    o["header"] = {"start": 0, "end": self.header_length}
+
+    return (o, len(self.offsets) > 0 or self.more())
 
   def updateOffsets(self):
     start_byte = self.current_offset
