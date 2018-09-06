@@ -81,7 +81,7 @@ def process_params(params):
 
 def process_iteration_params(params, iteration):
   now = time.time()
-  if util.is_set(params, "trigger"):
+  if params["model"] == "lambda" and util.is_set(params, "trigger"):
     input_format = util.parse_file_name(params["input_name"])
     params["now"] = input_format["timestamp"]
     params["nonce"] = input_format["nonce"]
@@ -411,10 +411,8 @@ def run(params, thread_id):
       with open("{0:s}/stats".format(dir_path), "w+") as f:
         f.write(json.dumps({"stats": stats}, indent=4, sort_keys=True))
 
-    clear_buckets(params)
-    with open("results/{0:s}/{1:f}-{2:d}".format(params["folder"], params["now"], params["nonce"]), "w+") as f:
-      f.write(str(duration) + "\n")
-      f.write(str(failed_attempts) + "\n")
+    if params["model"] == "lambda":
+      clear_buckets(params)
 
   avg_upload_duration = total_upload_duration / iterations
   avg_duration = total_duration / iterations
@@ -644,6 +642,12 @@ def create_instance(params):
   start_time = time.time()
   print("Creating")
   instances = ec2.create_instances(
+    BlockDeviceMappings=[{
+      "DeviceName": "/dev/sda1",
+      "Ebs": {
+          "VolumeSize": 50,
+      }
+    }],
     ImageId=ami,
     InstanceType=params["ec2"]["type"],
     KeyName=params["ec2"]["key"],
@@ -732,6 +736,14 @@ def setup_instance(client, p):
   start_time = time.time()
   sftp = client.open_sftp()
   items = ["formats/iterator.py", "formats/mzML.py", "ec2_script.py", "util.py"]
+  if p["ec2"]["application"] == "ssw":
+    program = "ssw_test"
+  elif p["ec2"]["application"] == "methyl":
+    program = "output"
+  else:
+    program = "crux"
+
+  print("program", program)
   if not p["ec2"]["use_ami"]:
     cexec(client, "sudo apt-get update -y")
     time.sleep(3)
@@ -741,21 +753,17 @@ def setup_instance(client, p):
     time.sleep(3)
     cexec(client, "sudo apt install python3-pip -y")
     cexec(client, "pip3 install boto3")
-    items.append("ssw_test")
-#    items.append("crux")
+    items.append(program)
     cexec(client, "mkdir ~/.aws")
     cexec(client, "touch ~/.aws/credentials")
     cmd = 'echo "[default]\naws_access_key_id={0:s}\naws_secret_access_key={1:s}" >> ~/.aws/credentials'.format(p["access_key"], p["secret_key"])
     cexec(client, cmd)
 
-#  cexec(client, "chmod u+x crux")
-
   for item in items:
     sftp.put(item, item.split("/")[-1])
 
   if not p["ec2"]["use_ami"]:
-    if p["ec2"]["application"]:
-      cexec(client, "sudo chmod +x crux")
+    cexec(client, "chmod u+x {0:s}".format(program))
 
   sftp.close()
   end_time = time.time()
@@ -777,8 +785,9 @@ def download_input(client, params):
 
 def run_ec2_script(client, params):
   start_time = time.time()
-  print("FILE", params["input_name"])
-  stdout = cexec(client, "python3 ec2_script.py --file {0:s} --application {1:s} --bucket {2:s}".format(params["input_name"], params["ec2"]["application"], params["bucket"]))
+  cmd = "python3 ec2_script.py --file {0:s} --application {1:s} --bucket {2:s}".format(params["input_name"], params["ec2"]["application"], params["bucket"])
+  print(cmd)
+  stdout = cexec(client, cmd)
   end_time = time.time()
   print(stdout)
   duration = end_time - start_time
@@ -835,7 +844,10 @@ def terminate_instance(instance, client, params):
 def ec2_benchmark(params):
   print("EC2 benchmark")
   start_time = time.time()
-  [upload_timestamp, upload_duration] = upload_input(params)
+  if not util.is_set(params, "trigger"):
+    upload_duration = upload_input(params)[1]
+  else:
+    upload_duration = 0
 
   stats = []
   stats.append(load_stats(upload_duration))
