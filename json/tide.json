@@ -1,5 +1,5 @@
 {
-	"input_name": "TN_CSF_062617_01.mzML",
+	"input_name": "TN_CSF_062617_87.mzML",
 	"model": "lambda",
 	"iterations": 1,
 	"region": "us-west-2",
@@ -18,7 +18,7 @@
 	"setup": true,
 	"sample_bucket": "shjoyner-als",
 	"ec2": {
-		"application": "tide",
+		"application": "tide100",
 		"ami": "ami-0f19431450f72a526",
 		"cost": 0.0464,
 		"default_ami": "ami-51537029",
@@ -125,7 +125,7 @@
 	  "name": "split-mzML",
 	  "ranges": false,
 	  "batch_size": 4000,
-	  "chunk_size": 10000000,
+	  "chunk_size": 5000000,
 	  "output_function": "find-mzML-pivots"
 	}, {
 	  "name": "find-mzML-pivots",
