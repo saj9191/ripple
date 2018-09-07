@@ -131,7 +131,7 @@ class Iterator(iterator.Iterator):
     content = util.read(obj, start_byte, end_byte)
     index = content.rfind(Iterator.SPECTRUM_LIST_CLOSE_TAG)
     if index != -1:
-      content = content[:index - 1]
+      content = content[:index]
 
     root = ET.fromstring("<data>" + content.strip() + "</data>")
     spectra = root.iter("spectrum")
