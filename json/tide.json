@@ -3,7 +3,7 @@
 	"model": "lambda",
 	"iterations": 1,
 	"region": "us-west-2",
-	"folder": "tide-lambda",
+	"folder": "tide",
 	"tag": "tide",
 	"timeout": 300,
 	"num_bins": 15,
