@@ -164,6 +164,7 @@ def combine_instance(bucket_name, key):
 
 def run(bucket_name, key, params, func):
   clear_tmp()
+
   input_format = parse_file_name(key)
   output_format = dict(input_format)
   output_format["prefix"] = params["prefix"] + 1
@@ -196,7 +197,8 @@ def run(bucket_name, key, params, func):
   make_folder(output_format)
 
   prefix = "-".join(file_name(bucket_format).split("-")[:-1])
-  objects = get_objects(bucket_name, prefix)
+  objects = get_objects(params["log"], prefix, params)
+  print(prefix, len(objects))
   if len(objects) == 0:
     func(bucket_name, key, input_format, output_format, offsets, params)
 
@@ -272,12 +274,16 @@ def show_duration(context, m, p):
 
 
 def print_request(m, params):
+  if is_set(params, "test"):
+    return
+
   msg = "{7:f} - TIMESTAMP {0:f} NONCE {1:d} STEP {2:d} BIN {3:d} FILE {4:d} REQUEST ID {5:s} TOKEN {6:d}"
   msg = msg.format(m["timestamp"], m["nonce"], params["prefix"], m["bin"], m["file_id"], params["request_id"], params["token"], time.time())
   if "parent_token" in params:
     msg += " INVOKED BY TOKEN {0:d}".format(params["parent_token"])
   print(msg)
   msg += "\n"
+
   with open(LOG_NAME, "a+") as f:
     f.write(msg)
 
@@ -291,6 +297,9 @@ def print_write(m, key, params):
 
 
 def print_action(m, key, action, params):
+  if is_set(params, "test"):
+    return
+
   msg = "{8:f} - TIMESTAMP {0:f} NONCE {1:d} STEP {2:d} BIN {3:d} {4:s} REQUEST ID {5:s} TOKEN {6:d} FILE NAME {7:s}"
   msg = msg.format(m["timestamp"], m["nonce"], params["prefix"], m["bin"], action, params["request_id"], params["token"], key, time.time())
   print(msg)
@@ -410,8 +419,9 @@ def get_key_regex(m):
   return re.compile(file_format(m))
 
 
-def clear_tmp():
-  subprocess.call("rm -rf /tmp/*", shell=True)
+def clear_tmp(params={}):
+  if not is_set(params, "test"):
+    subprocess.call("rm -rf /tmp/*", shell=True)
 
 
 def have_all_files(bucket_name, prefix):
