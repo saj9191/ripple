@@ -27,10 +27,7 @@ class Request(threading.Thread):
     self.failed_attempts = 0
 
   def run(self):
-    [access_key, secret_key] = util.get_credentials("default")
     self.params["input_name"] = self.file_name
-    self.params["access_key"] = access_key
-    self.params["secret_key"] = secret_key
     print("Thread {0:d}: Processing file {1:s}".format(self.thread_id, self.file_name))
     [upload_duration, duration, failed_attempts] = benchmark.run(self.params, self.thread_id)
     self.upload_duration = upload_duration
@@ -108,7 +105,7 @@ def run(args, params):
     file_names = [params["input_name"]]
 
   setup.setup(params)
-  for i in [2]:
+  for i in [0]:
     requests = []
     num_requests = max(i * 50, 1)
     for j in range(num_requests):
@@ -131,7 +128,6 @@ def main():
   params["setup"] = False
   params["stats"] = False
   params["iterations"] = 1
-  params["sample_input"] = True
   params["params_name"] = args.parameters
   run(args, params)
 

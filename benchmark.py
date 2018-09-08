@@ -134,13 +134,11 @@ def upload_input(p, thread_id=0):
       Payload=json.JSONEncoder().encode(payload)
     )
 
-  elif "sample_input" in p and p["sample_input"]:
+  elif util.is_set(p, "sample_input"):
     print("Thread {0:d}: Moving {1:s} to s3://{2:s}".format(thread_id, p["input_name"], bucket_name), flush=True)
-#    subprocess.check_output("s3cmd sync s3://{0:s}/{1:s} s3://{2:s}/{3:s}".format(p["sample_bucket"], p["input_name"], bucket_name, key), shell=True)
     s3.Object(bucket_name, key).copy_from(CopySource={"Bucket": p["sample_bucket"], "Key": p["input_name"]}, StorageClass=p["storage_class"])
   else:
     print("Uploading {0:s} to s3://{1:s}".format(p["input"], bucket_name), flush=True)
-#    subprocess.check_output("s3cmd put data/{0:s} s3://{1:s}/{2:s}".format(p["input_name"], bucket_name, key), shell=True)
     s3.Object(bucket_name, key).put(Body=open("data/{0:s}".format(p["input"]), 'rb'), StorageClass=p["storage_class"])
   end = time.time()
 
