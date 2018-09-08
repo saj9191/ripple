@@ -163,7 +163,7 @@ def combine_instance(bucket_name, key):
 
 
 def run(bucket_name, key, params, func):
-  clear_tmp()
+  clear_tmp(params)
 
   input_format = parse_file_name(key)
   output_format = dict(input_format)
