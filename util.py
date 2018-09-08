@@ -91,7 +91,7 @@ def download(bucket, file):
 def get_objects(bucket_name, prefix=None, params={}):
   global LIST_COUNT
   LIST_COUNT += 1
-  if params["s3"]:
+  if "s3" in params and params["s3"]:
     s3 = params["s3"]
   else:
     s3 = boto3.resource("s3")
@@ -198,7 +198,6 @@ def run(bucket_name, key, params, func):
 
   prefix = "-".join(file_name(bucket_format).split("-")[:-1])
   objects = get_objects(params["log"], prefix, params)
-  print(prefix, len(objects))
   if len(objects) == 0:
     func(bucket_name, key, input_format, output_format, offsets, params)
 

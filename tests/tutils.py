@@ -35,5 +35,21 @@ class Objects:
 
 
 class Object:
-  def __init__(self, name):
+  def __init__(self, name, content=""):
     self.name = name
+    self.content = content
+    self.content_length = len(content)
+
+  def get(self, Range):
+    parts = Range.split("=")[1].split("-")
+    start = int(parts[0])
+    end = min(int(parts[1]), self.content_length - 1)
+    return {"Body": Content(self.content[start : end + 1])}
+
+
+class Content:
+  def __init__(self, content):
+    self.content = content
+
+  def read(self):
+    return str.encode(self.content)

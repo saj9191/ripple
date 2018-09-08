@@ -50,7 +50,6 @@ class Iterator:
 
   @classmethod
   def combine(cls, bucket_name, keys, temp_name, params):
-    print("Combining", len(keys))
     s3 = boto3.resource("s3")
     iterators = []
     values = []
@@ -99,18 +98,25 @@ class Iterator:
     if self.content_length == 0:
       return ({"offsets": []}, False)
     # Plus one is so we get end byte of value
-    while len(self.offsets) == 0 and self.current_offset < self.content_length:
+    while len(self.offsets) <= 1 and self.current_offset < self.content_length:
       self.updateOffsets()
 
     if len(self.offsets) == 0 and self.current_offset >= self.content_length:
       return ({"offsets": []}, False)
 
+    start = self.offsets[0]
     if len(self.offsets) == 1:
       end = self.content_length
+      self.offsets = []
     else:
       end = self.offsets[1]
-    o = {"offsets": [self.offsets[0], end]}
-    self.offsets = self.offsets[self.batch_size:]
+      if self.offsets[1] + 1 >= self.content_length:
+        self.offsets = []
+      else:
+        self.offsets = self.offsets[1:]
+        self.offsets[0] = end + 1
+
+    o = {"offsets": [start, end]}
     return (o, self.more())
 
   def updateOffsets(self):
@@ -119,10 +125,9 @@ class Iterator:
     stream = util.read(self.obj, start_byte, end_byte)
     stream = self.remainder + stream
     start_byte -= len(self.remainder)
-
     index = stream.rindex(self.identifier) if self.identifier in stream else -1
     if index != -1:
-      self.offsets.append(start_byte)
+      #self.offsets.append(start_byte)
       self.offsets.append(start_byte + index)
       start_byte += index + 1
       self.current_offset = end_byte + 1
@@ -136,7 +141,7 @@ class Iterator:
     self.remainder = stream
 
   def more(self):
-    return self.current_offset < self.content_length
+    return len(self.offsets) > 0 or self.current_offset < self.content_length
 
   def endByte(self):
     return self.current_offset
