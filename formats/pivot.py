@@ -38,8 +38,11 @@ class Iterator(iterator.Iterator):
     return [Iterator.get(self.obj, start_byte, end_byte, identifier), more]
 
 
-def get_pivot_ranges(bucket_name, key):
-  s3 = boto3.resource("s3")
+def get_pivot_ranges(bucket_name, key, params={}):
+  if "s3" in params:
+    s3 = params["s3"]
+  else:
+    s3 = boto3.resource("s3")
   ranges = []
 
   obj = s3.Object(bucket_name, key)
