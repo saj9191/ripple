@@ -88,10 +88,13 @@ def download(bucket, file):
   return path
 
 
-def get_objects(bucket_name, prefix=None):
+def get_objects(bucket_name, prefix=None, params={}):
   global LIST_COUNT
   LIST_COUNT += 1
-  s3 = boto3.resource("s3")
+  if params["s3"]:
+    s3 = params["s3"]
+  else:
+    s3 = boto3.resource("s3")
   bucket = s3.Bucket(bucket_name)
   found = False
   while not found:
@@ -102,7 +105,7 @@ def get_objects(bucket_name, prefix=None):
         objects = bucket.objects.filter(Prefix=prefix)
       found = True
     except Exception as e:
-      print("get_objects", e)
+      print("ERROR, util.get_objects", e)
       found = False
 
   return list(objects)
