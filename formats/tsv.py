@@ -52,12 +52,14 @@ class Iterator(iterator.Iterator):
 
   @classmethod
   def combine(cls, bucket_name, keys, temp_name, params):
-    s3 = boto3.resource("s3")
+    if "s3" in params:
+      s3 = params["s3"]
+    else:
+      s3 = boto3.resource("s3")
     if params["sort"]:
       raise Exception("Not implement")
 
     with open(temp_name, "w+") as f:
-      f.write("\t".join(Iterator.HEADER_ITEMS))
       for i in range(len(keys)):
         key = keys[i]
         obj = s3.Object(bucket_name, key)

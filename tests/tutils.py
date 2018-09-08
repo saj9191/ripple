@@ -13,6 +13,9 @@ class S3:
   def Bucket(self, bucket_name):
     return self.buckets[bucket_name]
 
+  def Object(self, bucket_name, key):
+    return list(self.buckets[bucket_name].objects.filter(Prefix=key))[0]
+
 
 class Bucket:
   def __init__(self, name, objects):

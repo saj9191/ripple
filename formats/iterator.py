@@ -50,7 +50,10 @@ class Iterator:
 
   @classmethod
   def combine(cls, bucket_name, keys, temp_name, params):
-    s3 = boto3.resource("s3")
+    if "s3" in params:
+      s3 = params["s3"]
+    else:
+      s3 = boto3.resource("s3")
     iterators = []
     values = []
     if util.is_set(params, "sort"):
