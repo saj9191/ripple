@@ -22,7 +22,7 @@ class Iterator:
     self.seen_count = 0
     self.total_count = None
     self.remainder = ""
-    self.offsets = []
+    self.offsets = [0]
     self.obj = obj
     self.cls = cls
 

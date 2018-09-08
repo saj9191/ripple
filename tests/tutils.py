@@ -25,6 +25,9 @@ class Bucket:
   def objects(self):
     return self.objects
 
+  def download_fileobj(self, key, f):
+    obj = list(self.objects.filter(Prefix=key))[0]
+    f.write(str.encode(obj.content))
 
 class Objects:
   def __init__(self, objects):
