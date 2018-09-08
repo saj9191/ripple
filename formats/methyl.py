@@ -12,9 +12,6 @@ class Iterator(iterator.Iterator):
     if len(offsets) != 0 and len(offsets["offsets"]) != 0:
       self.current_offset = offsets["offsets"][0]
 
-  def more(self):
-    return self.current_offset < self.content_length
-
   def fromArray(items, includeHeader=False):
     assert(not includeHeader)
     items = list(map(lambda item: item.strip(), items))
