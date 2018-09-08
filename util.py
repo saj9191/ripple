@@ -65,7 +65,7 @@ def is_set(params, key):
 
 
 def s3(params):
-  [access_key, secret_key] = get_credentials(params["ec2"]["key"])
+  [access_key, secret_key] = get_credentials(params["credential_profile"])
   session = boto3.Session(
            aws_access_key_id=access_key,
            aws_secret_access_key=secret_key,
