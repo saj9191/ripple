@@ -6,7 +6,6 @@ import math
 import os
 import plot
 import re
-import shutil
 import sys
 import time
 import util
@@ -90,38 +89,31 @@ def trigger_plot(folder):
 def iterate(bucket_name, params):
   s3 = boto3.resource("s3")
   bucket = s3.Bucket(bucket_name)
-  folder = "results/{0:s}".format(bucket_name)
+  folder = "results/{0:s}".format(params["folder"])
   [access_key, secret_key] = util.get_credentials(params["ec2"]["key"])
   params["access_key"] = access_key
   params["secret_key"] = secret_key
-  params["stats"] = True
+  params["stats"] = False
   params["sample_input"] = True
   params["setup"] = False
 
-  objects = list(bucket.objects.all())
+  objects = list(bucket.objects.all())[32:]
   data_bucket = s3.Bucket(params["bucket"])
   for obj in objects:
     params["input_name"] = obj.key
     [upload_duration, duration, failed_attempts] = benchmark.run(params, 0)
-#    stats = benchmark.parse_logs(params, params["now"] * 1000, upload_duration, duration)
     dir_path = "{0:s}/{1:f}-{2:d}".format(folder, params["now"], params["nonce"])
     os.makedirs(dir_path)
     data_bucket.objects.all().delete()
-    continue
 
+    stats = benchmark.parse_logs(params, params["now"] * 1000, upload_duration, duration)
     with open("{0:s}/params".format(dir_path), "w+") as f:
       f.write(json.dumps(params, indent=4, sort_keys=True))
 
-    stats = json.loads(open("results/{0:f}-{1:d}/stats".format(params["now"], params["nonce"])).read())["stats"]
     with open("{0:s}/stats".format(dir_path), "w+") as f:
       f.write(json.dumps({"stats": stats}, indent=4, sort_keys=True))
 
-    deps = benchmark.create_dependency_chain(stats, 1, params)
-    with open("{0:s}/deps".format(dir_path), "w+") as f:
-      f.write(json.dumps(deps, indent=4, sort_keys=True, default=benchmark.serialize))
-
-    for key in deps["layers_to_cost"].keys():
-      print("Layer", key, "Cost", deps["layers_to_cost"][key] / deps["layers_to_count"][key])
+    benchmark.clear_buckets(params)
 
 
 def cost(folder, params):
@@ -183,8 +175,7 @@ def get_lambda_results(folder, params):
     for d in dirs:
       file_name = "{0:s}/{1:s}/stats".format(folder, d)
       s = json.load(open(file_name))["stats"]
-      if "messages" in s[1][0].keys():
-        stats.append(s)
+      stats.append(s)
 
   memory = json.loads(open("json/memory.json").read())
   layers_to_duration = {}
@@ -204,52 +195,54 @@ def get_lambda_results(folder, params):
     nonce = None
     duration = 0
     for i in range(len(pipeline)):
-      stage = pipeline[i]
+      stat = pipeline[i]
       layer = i - 1
 
-      for stat in stage:
-        name = stat["name"]
-        if name not in ["load", "total"]:
-          if layer not in layers_to_duration:
-            layers_to_duration[layer] = {"timestamp": 0, "duration": 0}
-            layers_to_cost[layer] = 0
-            layers_to_count[layer] = 0
-            layers_to_write_count[layer] = 0
-            layers_to_read_count[layer] = 0
-            layers_to_list_count[layer] = 0
-          if layer not in result_regions:
-            result_regions[layer] = [sys.maxsize, 0]
+      name = stat["name"]
+      if name not in ["load", "total"]:
+        if layer not in layers_to_duration:
+          layers_to_duration[layer] = {"timestamp": 0, "duration": 0}
+          layers_to_cost[layer] = 0
+          layers_to_count[layer] = 0
+          layers_to_write_count[layer] = 0
+          layers_to_read_count[layer] = 0
+          layers_to_list_count[layer] = 0
+        if layer not in result_regions:
+          result_regions[layer] = [sys.maxsize, 0]
 
-          assert(layer != 0 or len(stat["messages"]) == 1)
-          for message in stat["messages"]:
-            jmessage = json.loads(message)
-            if layer == 0:
+        for message in stat["messages"]:
+          jmessage = json.loads(message)
+          if layer == 0:
+            if start_time is None:
               start_time = jmessage["start_time"]
               timestamp = jmessage["timestamp"]
               nonce = jmessage["nonce"]
-            assert(timestamp == jmessage["timestamp"])
-            assert(nonce == jmessage["nonce"])
-            start = jmessage["start_time"] - start_time
-            end = start + math.ceil(jmessage["duration"] / 1000)
-            duration = max(duration, end)
-            result_regions[layer][0] = min(result_regions[layer][0], start)
-            result_regions[layer][1] = max(result_regions[layer][1], end)
+            else:
+              start_time = min(start_time, jmessage["start_time"])
+          assert(timestamp == jmessage["timestamp"])
+          assert(nonce == jmessage["nonce"])
+          start = jmessage["start_time"] - start_time
+          assert(start >= 0)
+          end = start + math.ceil(jmessage["duration"] / 1000)
+          duration = max(duration, end)
+          result_regions[layer][0] = min(result_regions[layer][0], start)
+          result_regions[layer][1] = max(result_regions[layer][1], end)
 
-            points.append([start, 1])
-            points.append([end, -1])
-            layers_to_duration[layer]["timestamp"] += jmessage["start_time"]
-            layers_to_duration[layer]["duration"] += jmessage["duration"]
-            function_name = params["pipeline"][layer]["name"]
-            memory_size = str(params["functions"][function_name]["memory_size"])
-            layers_to_cost[layer] += int(jmessage["duration"] / 100) * memory["lambda"][memory_size]
-            layers_to_cost[layer] += (jmessage["read_count"] / 1000) * 0.0004
-            layers_to_cost[layer] += (jmessage["write_count"] / 1000) * 0.005
-            layers_to_cost[layer] += (jmessage["list_count"] / 1000) * 0.005
-            layers_to_write_count[layer] += jmessage["write_count"]
-            layers_to_read_count[layer] += jmessage["read_count"]
-            layers_to_list_count[layer] += jmessage["list_count"]
-            layers_to_cost[layer] += (jmessage["byte_count"] / 1024 / 1024 / 1024) * 0.023
-            layers_to_count[layer] += 1
+          points.append([start, 1, layer])
+          points.append([end, -1, layer])
+          layers_to_duration[layer]["timestamp"] += jmessage["start_time"]
+          layers_to_duration[layer]["duration"] += jmessage["duration"]
+          function_name = params["pipeline"][layer]["name"]
+          memory_size = str(params["functions"][function_name]["memory_size"])
+          layers_to_cost[layer] += int(jmessage["duration"] / 100) * memory["lambda"][memory_size]
+          layers_to_cost[layer] += (jmessage["read_count"] / 1000) * 0.0004
+          layers_to_cost[layer] += (jmessage["write_count"] / 1000) * 0.005
+          layers_to_cost[layer] += (jmessage["list_count"] / 1000) * 0.005
+          layers_to_write_count[layer] += jmessage["write_count"]
+          layers_to_read_count[layer] += jmessage["read_count"]
+          layers_to_list_count[layer] += jmessage["list_count"]
+          layers_to_cost[layer] += (jmessage["byte_count"] / 1024 / 1024 / 1024) * 0.023
+          layers_to_count[layer] += 1
 
     for layer in result_regions.keys():
       if layer not in regions:
@@ -272,19 +265,26 @@ def get_lambda_results(folder, params):
     average_cost += layers_to_cost[layer]
 
   points.sort()
-  x = []
-  y = []
-  print("Length", len(stats))
-  count = 0
-  for point in points:
-    count += point[1]
-    x.append(point[0])
-    y.append(float(count) / len(stats))
+  layer_to_count = {}
+  layer_to_x = {}
+  layer_to_y = {}
+  for layer in layers_to_duration:
+    layer_to_count[layer] = 0
+    layer_to_x[layer] = []
+    layer_to_y[layer] = []
 
-  print("Last point", x[-1])
+  for point in points:
+    layer = point[2]
+    layer_to_count[layer] += point[1]
+    layer_to_x[layer].append(point[0])
+    count = 0
+    for i in range(0, layer + 1):
+      count += layer_to_count[i]
+    layer_to_y[layer].append(float(count) / len(stats))
+
   average_duration /= len(stats)
-  print("Duration", average_duration)
-  return [average_duration, layers_to_cost, regions, x, y]
+  print(average_duration)
+  return [average_duration, layers_to_cost, regions, layer_to_x, layer_to_y]
 
 
 def get_ec2_results(folder):
@@ -297,19 +297,20 @@ def get_ec2_results(folder):
 
   layers_to_averages = {}
   layers_to_cost = {}
+  layers_to_names = {}
   for stat in stats:
     layer = 0
     for s in stat:
       s = s[0]
-      i = str(layer)
       if "name" not in s:
         s["name"] = "termination"
+      layers_to_names[layer] = s["name"]
       if s["name"] not in ["load", "total"]:
-        if i not in layers_to_averages:
-          layers_to_averages[i] = 0
-          layers_to_cost[i] = 0
-        layers_to_averages[i] += s["max_duration"]
-        layers_to_cost[i] += s["cost"]
+        if layer not in layers_to_averages:
+          layers_to_averages[layer] = 0
+          layers_to_cost[layer] = 0
+        layers_to_averages[layer] += s["max_duration"]
+        layers_to_cost[layer] += s["cost"]
         layer += 1
 
   average_cost = 0
@@ -324,14 +325,14 @@ def get_ec2_results(folder):
 
 
 def what():
-  for subdir, dirs, files in os.walk("results/tide-ec2-failures"):
-    if subdir == "results/tide-ec2-failures":
-      for f in files:
-        if os.path.isdir("results/tide/{0:s}".format(f)):
-          shutil.move("results/tide/{0:s}".format(f), "results/tide-ec2/{0:s}".format(f))
+  params = json.loads(open("json/tide.json").read())
+  lambda_folder = "results/tide"
+  ec2_folder = "results/tide-ec2"
+  render("Tide", "tide", lambda_folder, ec2_folder, params, True)
+  return
 
   params = json.loads(open("json/smith-waterman.json").read())
-  lambda_folder = "results/ssw"
+  lambda_folder = "results/ssw-lambda"
   ec2_folder = "results/ssw-ec2"
   render("Smith Waterman", "ssw", lambda_folder, ec2_folder, params)
 
@@ -340,14 +341,15 @@ def what():
   ec2_folder = "results/tide-ec2"
   render("Tide", "tide", lambda_folder, ec2_folder, params)
 
+  params = json.loads(open("json/dna-compression.json").read())
+  lambda_folder = "results/methyl-lambda"
+  ec2_folder = "results/methyl-ec2"
+  render("Methyl DNA Compression", "methyl", lambda_folder, ec2_folder, params)
 
-def render(title, name, lambda_folder, ec2_folder, params):
+
+def render(title, name, lambda_folder, ec2_folder, params, compare=True):
   [lambda_duration, ssw_lambda_cost, ssw_regions, ssw_x, ssw_y] = get_lambda_results(lambda_folder, params)
   lambda_cost = sum(ssw_lambda_cost.values())
-
-  [ssw_ec2_duration, ssw_ec2_cost] = get_ec2_results(ec2_folder)
-  ec2_duration = sum(ssw_ec2_duration.values())
-  ec2_cost = sum(ssw_ec2_cost.values())
 
   plot.accumulation_plot(
       ssw_x,
@@ -358,6 +360,15 @@ def render(title, name, lambda_folder, ec2_folder, params):
       "{0:s}_accumulation".format(name),
       lambda_folder
   )
+  if not compare:
+    return
+
+  [ssw_ec2_duration, ssw_ec2_cost] = get_ec2_results(ec2_folder)
+  ec2_duration = sum(ssw_ec2_duration.values())
+  ec2_cost = sum(ssw_ec2_cost.values())
+
+  print(ssw_lambda_cost)
+  print(ec2_cost)
   plot.comparison(
       "{0:s}_runtime_comparison".format(name),
       "{0:s} Runtime Comparison".format(title),
@@ -376,18 +387,6 @@ def render(title, name, lambda_folder, ec2_folder, params):
   )
   return
 
-  #plot.accumulation_plot(ssw_x, ssw_y, ssw_regions, params["pipeline"], "Smith Waterman Average Lambda Processes", "ssw_accumulation", folder)
-  params = json.loads(open("json/tide.json").read())
-  [tide_ec2_duration, tide_ec2_cost] = get_ec2_results("results/tide-ec2")
-  folder = "results/tide-lambda"
-  [tide_lambda_duration, tide_lambda_cost, tide_regions, tide_x, tide_y] = get_lambda_results("results/tide", params)
-  plot.accumulation_plot(tide_x, tide_y, tide_regions, params["pipeline"], "Tide Average Lambda Processes", "tide_accumulation", folder)
-
-  for key in tide_lambda_duration:
-    tide_lambda_duration[key] = tide_lambda_duration[key]["duration"]
-
-  plot.comparison("tide_runtime_comparison", "Tide Runtime Comparison", tide_lambda_duration, tide_ec2_duration, "Runtime (Seconds)", params)
-  plot.comparison("tide_cost_comparison", "Tide Waterman Cost Comparison", tide_lambda_cost, tide_ec2_cost, "Cost ($)", params)
 
 if __name__ == "__main__":
   main()

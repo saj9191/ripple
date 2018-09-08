@@ -6,7 +6,6 @@ import json
 import os
 import plot
 import setup
-import shutil
 import threading
 import time
 import util
@@ -42,28 +41,10 @@ class Request(threading.Thread):
     msg = msg.format(self.thread_id, self.upload_duration, self.duration, self.failed_attempts)
     print(msg)
     stats = benchmark.parse_logs(self.params, self.params["now"] * 1000, self.upload_duration, self.duration)
-    dir_path = "results/{0:f}-{1:d}".format(self.params["now"], self.params["nonce"])
+    dir_path = "results/tide100/{0:f}-{1:d}".format(self.params["now"], self.params["nonce"])
     os.makedirs(dir_path)
     with open("{0:s}/stats".format(dir_path), "w+") as f:
       f.write(json.dumps({"stats": stats}, indent=4, sort_keys=True))
-
-    deps = benchmark.create_dependency_chain(stats, 1)
-    print("Writing deps to", dir_path)
-    with open("{0:s}/deps".format(dir_path), "w+") as f:
-      f.write(json.dumps(deps, indent=4, sort_keys=True, default=benchmark.serialize))
-
-    match_stage = -1
-    pipeline = self.params["pipeline"]
-    for i in range(len(pipeline)):
-      if self.params["functions"][pipeline[i]["name"]]["file"] == "match":
-        match_stage = i + 1
-
-    if match_stage != -1:
-      prefix = "{0:d}/{1:f}-{2:d}".format(match_stage, self.params["now"], self.params["nonce"])
-      objects = util.get_objects(self.params["bucket"], prefix)
-      for obj in objects:
-        content = obj.get()["Body"].read().decode("utf-8")
-        print("Thread {0:d}: {1:s}\n".format(self.thread_id, content), self.file_name)
     benchmark.clear_buckets(self.params)
 
 
@@ -105,16 +86,6 @@ def launch_threads(requests, file_names, params):
   if not os.path.isdir(folder):
     os.makedirs(folder)
 
-  shutil.copyfile(params["params_name"], "{0:s}/params.json".format(folder))
-
-  with open("{0:s}/files".format(folder), "w+") as f:
-    for thread in threads:
-      file = "{0:f}-{1:d}".format(thread.params["now"], thread.params["nonce"])
-      f.write("{0:s}\n".format(file))
-      input_file = "results/{0:s}".format(file)
-      shutil.copytree(input_file, "{0:s}/{1:s}".format(folder, file))
-      shutil.rmtree(input_file)
-
   params["timestamp"] = now
   plot.plot(threads, params["pipeline"], params)
 
@@ -134,7 +105,7 @@ def run(args, params):
   file_names = list(map(lambda o: o.key, s3.Bucket(params["sample_bucket"]).objects.all()))
 
   setup.setup(params)
-  for i in range(1, 5):
+  for i in [2]:
     requests = []
     num_requests = max(i * 50, 1)
     for j in range(num_requests):
@@ -151,7 +122,7 @@ def main():
   parser.add_argument("--num_requests", type=int, required=True, help="Number of requests to send throughout the day")
   args = parser.parse_args()
   params = json.loads(open(args.parameters).read())
-  [access_key, secret_key] = util.get_credentials("default")
+  [access_key, secret_key] = util.get_credentials(params["credential_profile"])
   params["access_key"] = access_key
   params["secret_key"] = secret_key
   params["setup"] = False

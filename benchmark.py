@@ -165,22 +165,13 @@ def load_stats(upload_duration):
 
 
 def benchmark(i, params, thread_id=0):
-  done = False
-  failed_attempts = 0
-  while not done:
-    try:
-      if params["model"] == "lambda":
-        results = lambda_benchmark(params, thread_id)
-      elif params["model"] == "ec2":
-        results = ec2_benchmark(params)
+  failed = False
+  if params["model"] == "lambda":
+    [failed, results] = lambda_benchmark(params, thread_id)
+  elif params["model"] == "ec2":
+    results = ec2_benchmark(params)
 
-      done = True
-    except BenchmarkException as e:
-      failed_attempts += 1
-      print("Error during iteration {0:d}".format(i), e, flush=True)
-      clear_buckets(params)
-
-  return results + [failed_attempts]
+  return results + [failed]
 
 
 def serialize(obj):
@@ -392,16 +383,16 @@ def run(params, thread_id):
     stats = None
     process_iteration_params(params, i)
     if params["stats"]:
-      [results, upload_duration, duration, failed_attempts] = benchmark(i, params, thread_id)
+      [results, upload_duration, duration, failed] = benchmark(i, params, thread_id)
       if stats is None:
         stats = list(map(lambda i: [], range(len(results))))
       for j in range(len(results)):
         stats[j].append(results[j])
     else:
-      [upload_duration, duration, failed_attempts] = benchmark(i, params, thread_id)
+      [upload_duration, duration, failed] = benchmark(i, params, thread_id)
     total_upload_duration += upload_duration
     total_duration += duration
-    total_failed_attempts += failed_attempts
+    total_failed_attempts += (1 if failed else 0)
 
     if params["stats"]:
       if util.is_set(params, "trigger"):
@@ -409,10 +400,10 @@ def run(params, thread_id):
       dir_path = "results/{0:s}/{1:f}-{2:d}".format(params["ec2"]["application"], params["now"], params["nonce"])
       os.makedirs(dir_path)
       with open("{0:s}/stats".format(dir_path), "w+") as f:
-        f.write(json.dumps({"stats": stats}, indent=4, sort_keys=True))
+        f.write(json.dumps({"stats": stats, "failed": failed}, indent=4, sort_keys=True))
 
-    if params["model"] == "lambda":
-      clear_buckets(params)
+#    if params["model"] == "lambda":
+#      clear_buckets(params)
 
   avg_upload_duration = total_upload_duration / iterations
   avg_duration = total_duration / iterations
@@ -526,11 +517,12 @@ def check_objects(client, bucket_name, prefix, count, timeout, params, thread_id
         current_stage = find_current_stage(bucket_name, params)
         print("Thread {0:d}: Last stage with output files is {1:d}".format(thread_id, current_stage))
         print("Could not find", expected.difference(found))
-        raise BenchmarkException("Could not find bucket {0:s} prefix {1:s}".format(bucket_name, prefix))
+        return True
       time.sleep(30)
     else:
       now = end.strftime("%H:%M:%S")
       print("{0:s}: Thread {1:d}. Found {2:s}".format(now, thread_id, prefix), flush=True)
+  return False
 
 
 def wait_for_completion(start_time, params, thread_id):
@@ -539,8 +531,9 @@ def wait_for_completion(start_time, params, thread_id):
   # Give ourselves time as we need to wait for each part of the pipeline
   prefix = "{0:d}/".format(len(params["pipeline"]))
   timeout = 120 * len(params["pipeline"])
-  check_objects(client, params["bucket"], prefix, params["num_output"], timeout, params, thread_id)
+  failed = check_objects(client, params["bucket"], prefix, params["num_output"], timeout, params, thread_id)
   time.sleep(10)  # Wait a little to make sure percolator logs are on the server
+  return failed
 
 
 def calculate_cost(duration, memory_size):
@@ -571,7 +564,6 @@ def parse_logs(params, upload_timestamp, upload_duration, total_duration):
 
   count = 0
   for i in range(len(params["pipeline"])):
-    print("pipeline", i)
     done = False
     while not done:
       try:
@@ -606,15 +598,18 @@ def parse_logs(params, upload_timestamp, upload_duration, total_duration):
 def lambda_benchmark(params, thread_id):
   [upload_timestamp, upload_duration] = upload_input(params, thread_id)
   start_time = time.time()
-  wait_for_completion(upload_timestamp, params, thread_id)
+  failed = wait_for_completion(upload_timestamp, params, thread_id)
   end_time = time.time()
   total_duration = end_time - start_time
   results = [upload_duration, total_duration]
 
+  print("WTF1", params["stats"])
   if params["stats"]:
+    print("WTF")
     stats = parse_logs(params, upload_timestamp, upload_duration, total_duration)
     results = [stats] + results
-  return results
+    print("result length", len(results))
+  return [failed, results]
 
 
 #############################
@@ -887,7 +882,7 @@ def main():
   parser.add_argument('--parameters', type=str, required=True, help="File containing parameters")
   args = parser.parse_args()
   params = json.loads(open(args.parameters).read())
-  [access_key, secret_key] = util.get_credentials(params["ec2"]["key"])
+  [access_key, secret_key] = util.get_credentials(params["credential_profile"])
   params["access_key"] = access_key
   params["secret_key"] = secret_key
   run(params, 0)

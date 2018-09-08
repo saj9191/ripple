@@ -96,7 +96,7 @@ def upload_functions(client, params):
     file = "{0:s}.py".format(fparams["file"])
     shutil.copyfile("lambda/{0:s}".format(file), "{0:s}/{1:s}".format(zip_directory, file))
     files.append(file)
-    for file in params["dependencies"]["common"]:
+    for file in ["formats/iterator.py", "formats/pivot.py", "util.py"]:
       files.append(copy_file(zip_directory, file))
 
     if "application" in fparams:
@@ -104,7 +104,7 @@ def upload_functions(client, params):
 
     if "format" in fparams:
       form = fparams["format"]
-      if form in params["dependencies"]["formats"]:
+      if "dependencies" in params and form in params["dependencies"]["formats"]:
         for file in params["dependencies"]["formats"][form]:
           files.append(copy_file(zip_directory, file))
       files.append(copy_file(zip_directory, "formats/{0:s}.py".format(form)))
@@ -227,7 +227,7 @@ def main():
   parser.add_argument('--parameters', type=str, required=True, help="File containing parameters")
   args = parser.parse_args()
   params = json.loads(open(args.parameters).read())
-  [access_key, secret_key] = util.get_credentials(params["ec2"]["key"])
+  [access_key, secret_key] = util.get_credentials(params["credential_profile"])
   params["access_key"] = access_key
   params["secret_key"] = secret_key
   setup(params)
