@@ -4,9 +4,10 @@ import numpy as np
 from matplotlib.font_manager import FontProperties
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
 
 
-COLORS = ["red", "cyan", "yellow", "purple", "orange", "green", "blue"]
+#colors = ["red", "cyan", "yellow", "purple", "orange", "green", "blue"]
 
 
 def graph(key, dependencies, heights, num_offsets, runtimes, lefts, num_threads, parent_id, layer=0, thread_id=0):
@@ -71,8 +72,6 @@ def get_heights(key, dependencies, heights, layer=0):
 def get_plot_data(results, num_layers, params):
   layer_to_count = {}
   dep_file = "results/{0:s}/{1:f}-{2:d}/deps".format(params["folder"], results[0].params["now"], results[0].params["nonce"])
- # dep_file_format = "results/concurrency{0:d}/{1:f}/{2:f}-{3:d}/deps"
-  #dep_file = dep_file_format.format(len(results), params["timestamp"], results[0].params["now"], results[0].params["nonce"])
   dependencies = json.loads(open(dep_file).read())
   for key in dependencies.keys():
     if ":" not in key:
@@ -129,7 +128,6 @@ def runtime_plot(num_layers, num_results, lefts, runtimes, heights, num_threads,
       color = dark_colors[i % len(dark_colors)]
     else:
       edgecolors = list(map(lambda r: "black" if r > 0 else "none", runtime))
-      color = COLORS[i % len(COLORS)]
 
     if len(heights) > i:
       height = heights[i] if heights[i] == 1 else heights[i]
@@ -198,7 +196,6 @@ def error_plot(num_results, num_layers, results, pipeline, params):
 
 
 def ec2_accumulation_plot(results, params):
-  points = []
   regions = {}
 
   labels = []
@@ -265,39 +262,85 @@ def ec2_accumulation_plot(results, params):
 
 
 def accumulation_plot(x, y, regions, pipeline, title, plot_name, folder):
+  if plot_name.startswith("ssw"):
+    offset = 5
+    colors = ["purple", "cyan", "blue", "red", "orange", "green", "black"]
+  elif plot_name.startswith("methyl"):
+    colors = ["purple", "cyan", "black"]
+    offset = 3
+  else:
+    colors = ["purple", "cyan", "blue", "red", "orange", "green", "brown", "black"]
+    offset = 1
+
   fig = plt.figure()
-  ax = fig.add_subplot(1, 1, 1)
+  rows = 12
+  ax1 = plt.subplot2grid((rows, 1), (0, 0), rowspan=rows - 1)
 
   legends = []
-  alpha = 0.3
+  alpha = 1
   for layer in regions.keys():
-    color = COLORS[layer % len(COLORS)]
-    ax.axvspan(regions[layer][0], regions[layer][1], facecolor=color, alpha=alpha)
-    legends.append(matplotlib.lines.Line2D([0], [0], color=color, alpha=alpha, label=pipeline[layer]["name"], linewidth=4))
-
+    color = colors[layer % len(colors)]
+    patch = mpatches.Patch(facecolor=color, edgecolor="black", label=pipeline[layer]["name"], linewidth=1, linestyle="solid")
+    legends.append(patch)
   fontP = FontProperties(family="Arial", size="small")
   legend = fig.legend(handles=legends, loc="upper right", prop=fontP, bbox_to_anchor=(0.90, 0.87), framealpha=1, borderpad=1)
 
   frame = legend.get_frame()
   frame.set_facecolor("white")
-  plt.xlim([0, regions[len(regions) - 1][1]])
-  ax.plot(x, y, color="black")
+  max_x = regions[len(regions) - 1][1]
+  plt.xlim([0, max_x])
+  plt.xticks([])
+
+  for layer in x:
+    px = []
+    py = []
+    color = colors[layer % len(colors)]
+    x0 = regions[layer][0]
+    x1 = regions[layer][1]
+    max_y = 0
+    for i in range(len(x[layer])):
+      if (x0 <= x[layer][i] and x[layer][i] <= x1):
+        px.append(x[layer][i])
+        py.append(y[layer][i])
+      elif x[layer][i] > x1:
+        max_y = max(y[layer][i], max_y)
+    px.append(x1)
+    py.append(max_y)
+    ax1.plot(px, py, color=color)
 
   for side in ["right", "top"]:
-    ax.spines[side].set_visible(False)
+    ax1.spines[side].set_visible(False)
 
   for side in ["left", "bottom"]:
-    ax.spines[side].set_linewidth(3)
+    ax1.spines[side].set_linewidth(3)
 
-  plot_name = "{0:s}/{1:s}.png".format(folder, plot_name)
-  font_size=12
-  ax.tick_params(axis='both', which='major', labelsize=font_size)
-  plt.xlabel("Runtime (seconds)", size=font_size)
+  font_size = 16
   plt.ylabel("Number of Lambda Processes", size=font_size)
+
+  ax2 = plt.subplot2grid((rows, 1), (rows - 1, 0))
+  line_width = 4.0
+  for layer in regions.keys():
+    y = 0.4 * (layer % 3)
+    color = colors[layer % len(colors)]
+    x0 = max(regions[layer][0], offset)
+    x1 = min(regions[layer][1], max_x - offset)
+    ax2.plot([x0, x1], [y, y], color="black", linewidth=line_width + 2)
+    ax2.plot([x0, x1], [y, y], color="white", linewidth=line_width)
+    ax2.plot([x0, x1], [y, y], color=color, linewidth=line_width, alpha=alpha)
+
+  for side in ["bottom", "left", "right", "top"]:
+    ax2.spines[side].set_visible(False)
+
+  plt.xlim([0, max_x])
+  plt.ylim([-0.5, 1.0])
+  plt.yticks([])
+  plot_name = "{0:s}/{1:s}.png".format(folder, plot_name)
+  plt.xlabel("Runtime (seconds)", size=font_size)
   print(plot_name)
   fig.savefig(plot_name)
   print("Accumulation plot", plot_name)
   plt.close()
+  return
 
 
 def plot(results, pipeline, params):
