@@ -102,7 +102,10 @@ def run(args, params):
            region_name=params["region"]
   )
   s3 = session.resource("s3")
-  file_names = list(map(lambda o: o.key, s3.Bucket(params["sample_bucket"]).objects.all()))
+  if "sample_bucket" in params:
+    file_names = list(map(lambda o: o.key, s3.Bucket(params["sample_bucket"]).objects.all()))
+  else:
+    file_names = [params["input_name"]]
 
   setup.setup(params)
   for i in [2]:
