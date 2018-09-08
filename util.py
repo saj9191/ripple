@@ -375,7 +375,6 @@ def make_folder(file_format):
 
 
 def file_name(m):
-  m["created"] = time.time()
   return file_format(m)
 
 
