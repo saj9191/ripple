@@ -105,11 +105,13 @@ class Iterator:
     if len(self.offsets) == 0 and self.current_offset >= self.content_length:
       return ({"offsets": []}, False)
 
-    offsets = self.offsets[:]
-    self.offsets = self.offsets[:0]
-    if len(offsets) == 0:
-      offsets.append(self.endByte())
-    return ({"offsets": offsets}, self.more())
+    if len(self.offsets) == 1:
+      end = self.content_length
+    else:
+      end = self.offsets[1]
+    o = {"offsets": [self.offsets[0], end]}
+    self.offsets = self.offsets[self.batch_size:]
+    return (o, self.more())
 
   def updateOffsets(self):
     start_byte = self.current_offset
