@@ -18,20 +18,7 @@
 	"sample_bucket": "maccoss-methyl-data",
 	"stats": true,
 	"setup": true,
-	"ec2": {
-		"application": "dna",
-		"key": "maccoss"
-	},
-	"dependencies": {
-		"common": [
-			"formats/iterator.py",
-			"formats/pivot.py",
-			"util.py"
-		],
-		"formats": {
-			"methyl": []	
-		}
-	},
+	"credential_profile": "maccoss",
 	"functions": {
 		"split-methyl": {
 			"file": "split_file",

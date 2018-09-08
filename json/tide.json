@@ -10,6 +10,7 @@
 	"bucket": "shjoyner-tide",
 	"storage_class": "STANDARD",
 	"account": 469290334000,
+	"credential_profile": "shjoyner",
 	"role": "LambdaExecution",
 	"log": "shjoyner-log",
 	"sample_input": true,
@@ -17,29 +18,8 @@
 	"stats": true,
 	"setup": true,
 	"sample_bucket": "shjoyner-als",
-	"ec2": {
-		"application": "tide100",
-		"ami": "ami-0f19431450f72a526",
-		"cost": 0.0464,
-		"default_ami": "ami-51537029",
-		"key": "shjoyner",
-		"security": "sg-0ba2948732738fa18",
-		"subnet": "subnet-55d14c0f",
-		"timeout": 20,
-		"type": "t2.large",
-		"wait_for_tests": false,
-		"use_ami": true
-	},
 	"dependencies": {
-		"common": [
-			"formats/iterator.py",
-			"formats/pivot.py",
-			"util.py"
-		],
 		"formats": {
-			"mzML": [
-				"header.mzML"
-			],
 			"percolator": [
 				"formats/tsv.py"
 			],

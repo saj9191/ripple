@@ -15,30 +15,7 @@
 	"role": "service-role/lambdaFullAccessRole",
 	"stats": true,
 	"setup": true,
-	"ec2": {
-		"application": "ssw",
-		"ami": "ami-09908e282013b16a4",
-		"default_ami": "ami-51537029",
-		"key": "maccoss",
-		"security": "sg-4ea90530",
-		"subnet": "subnet-03990a59",
-		"timeout": 20,
-		"type": "t2.medium",
-		"wait_for_tests": false,
-		"use_ami": true
-	},
-	"dependencies": {
-		"common": [
-			"formats/iterator.py",
-			"formats/pivot.py",
-			"util.py"
-		],
-		"formats": {
-			"blast": [
-				"formats/blast.py"
-			]
-		}
-	},
+	"credential_profile": "maccoss",
 	"functions": {
 		"map-fasta": {
 			"file": "map",
