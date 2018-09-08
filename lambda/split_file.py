@@ -9,8 +9,8 @@ def split_file(bucket_name, key, input_format, output_format, offsets, params):
   batch_size = params["batch_size"]
   chunk_size = params["chunk_size"]
 
-  client = boto3.client("lambda")
-  s3 = boto3.resource("s3")
+  s3 = params["s3"] if "s3" in params else boto3.resource("s3")
+  client = params["client"] if "client" else boto3.client("lambda")
   format_lib = importlib.import_module(params["format"])
 
   if util.is_set(params, "ranges"):
@@ -57,7 +57,6 @@ def split_file(bucket_name, key, input_format, output_format, offsets, params):
       payload["Records"][0]["s3"]["extra_params"]["prefix"] = input_format["prefix"]
       payload["Records"][0]["s3"]["object"]["key"] = key
       payload["Records"][0]["s3"]["extra_params"]["file_id"] = payload["Records"][0]["s3"]["object"]["file_id"]
-      print("sending", payload)
       response = client.invoke(
         FunctionName=params["name"],
         InvocationType="Event",

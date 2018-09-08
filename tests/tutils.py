@@ -59,3 +59,29 @@ class Content:
 
   def read(self):
     return str.encode(self.content)
+
+
+class Context:
+  def __init__(self, milliseconds_left):
+    self.milliseconds_left = milliseconds_left
+
+  def get_remaining_time_in_millis(self):
+    return self.milliseconds_left
+
+
+class Client:
+  def __init__(self):
+    self.invokes = []
+
+  def invoke(self, FunctionName, InvocationType, Payload):
+    self.invokes.append({
+      "name": FunctionName,
+      "type": InvocationType,
+      "payload": Payload
+    })
+
+    return {
+      "ResponseMetadata": {
+        "HTTPStatusCode": 202
+      }
+    }

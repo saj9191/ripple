@@ -21,18 +21,12 @@ class Iterator(iterator.Iterator):
     assert(file_key is not None)
 
     pivots = sorted(pivots)
-    print(pivots)
     super_pivots = []
     num_bins = params["num_bins"]
-    print("num_bins", num_bins)
-    print("num pivots", len(pivots))
     increment = int((len(pivots) + num_bins - 1)/ num_bins)
-    print("increment", increment)
     super_pivots = pivots[0::increment]
-    print("Before", super_pivots)
     if super_pivots[-1] != pivots[-1]:
       super_pivots.append(pivots[-1])
-    print("After", super_pivots)
     spivots = list(map(lambda p: str(p), super_pivots))
     content = "{0:s}\n{1:s}\n{2:s}".format(file_bucket, file_key, "\t".join(spivots))
     with open(temp_name, "w+") as f:
