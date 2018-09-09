@@ -7,10 +7,8 @@ class Iterator(iterator.Iterator):
   IDENTIFIER = "\n"
 
   def __init__(self, obj, offsets, batch_size, chunk_size):
-    iterator.Iterator.__init__(self, Iterator, obj, batch_size, chunk_size)
+    iterator.Iterator.__init__(self, Iterator, obj, batch_size, chunk_size, offsets)
     self.identifier = Iterator.IDENTIFIER
-    if len(offsets) != 0 and len(offsets["offsets"]) != 0:
-      self.current_offset = offsets["offsets"][0]
 
   def fromArray(items, includeHeader=False):
     assert(not includeHeader)

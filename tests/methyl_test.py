@@ -34,6 +34,14 @@ class IteratorMethods(unittest.TestCase):
     self.assertEqual(offsets["offsets"][0], 6)
     self.assertEqual(offsets["offsets"][1], 17)
 
+    # Specify offsets
+    it = methyl.Iterator(obj, {"offsets": [6, 11]}, 1, 10)
+    [offsets, more] = it.nextOffsets()
+    self.assertFalse(more)
+    self.assertEqual(offsets["offsets"][0], 6)
+    self.assertEqual(offsets["offsets"][1], 11)
+
+
   def test_next(self):
     obj = Object("test.methyl", "A B C\na b c\n1 2 3\n")
 

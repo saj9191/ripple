@@ -14,15 +14,19 @@ class Element():
 
 
 class Iterator:
-  def __init__(self, cls, obj, batch_size, chunk_size):
+  def __init__(self, cls, obj, batch_size, chunk_size, offsets={}):
     self.batch_size = batch_size
     self.chunk_size = chunk_size
-    self.content_length = obj.content_length
-    self.current_offset = 0
+    if len(offsets) != 0 and len(offsets["offsets"]) != 0:
+      self.current_offset = offsets["offsets"][0]
+      self.content_length = offsets["offsets"][1]
+    else:
+      self.current_offset = 0
+      self.content_length = obj.content_length
+    self.offsets = [self.current_offset]
     self.seen_count = 0
     self.total_count = None
     self.remainder = ""
-    self.offsets = [0]
     self.obj = obj
     self.cls = cls
 
