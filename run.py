@@ -169,7 +169,7 @@ def main():
     iterate(args.iterate, params)
 
 
-def get_lambda_results(folder, params):
+def get_lambda_results(folder, params, concurrency=False):
   stats = []
   for subdir, dirs, files in os.walk(folder):
     for d in dirs:
@@ -280,7 +280,9 @@ def get_lambda_results(folder, params):
     count = 0
     for i in range(0, layer + 1):
       count += layer_to_count[i]
-    layer_to_y[layer].append(float(count) / len(stats))
+    if not concurrency:
+      count = float(count) / len(stats)
+    layer_to_y[layer].append(count)
 
   average_duration /= len(stats)
   print(average_duration)
@@ -325,10 +327,10 @@ def get_ec2_results(folder):
 
 
 def what():
-  params = json.loads(open("json/tide.json").read())
-  lambda_folder = "results/tide"
+  params = json.loads(open("json/dna-compression.json").read())
+  lambda_folder = "results/compression100"
   ec2_folder = "results/tide-ec2"
-  render("Tide", "tide", lambda_folder, ec2_folder, params, True)
+  render("Methyl DNA Compression", "methyl_dna_compression_100", lambda_folder, ec2_folder, params, compare=False, concurrency=True)
   return
 
   params = json.loads(open("json/smith-waterman.json").read())
@@ -347,8 +349,8 @@ def what():
   render("Methyl DNA Compression", "methyl", lambda_folder, ec2_folder, params)
 
 
-def render(title, name, lambda_folder, ec2_folder, params, compare=True):
-  [lambda_duration, ssw_lambda_cost, ssw_regions, ssw_x, ssw_y] = get_lambda_results(lambda_folder, params)
+def render(title, name, lambda_folder, ec2_folder, params, compare=True, concurrency=False):
+  [lambda_duration, ssw_lambda_cost, ssw_regions, ssw_x, ssw_y] = get_lambda_results(lambda_folder, params, concurrency)
   lambda_cost = sum(ssw_lambda_cost.values())
 
   plot.accumulation_plot(

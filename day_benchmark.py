@@ -38,7 +38,7 @@ class Request(threading.Thread):
     msg = msg.format(self.thread_id, self.upload_duration, self.duration, self.failed_attempts)
     print(msg)
     stats = benchmark.parse_logs(self.params, self.params["now"] * 1000, self.upload_duration, self.duration)
-    dir_path = "results/tide100/{0:f}-{1:d}".format(self.params["now"], self.params["nonce"])
+    dir_path = "results/{0:s}/{1:f}-{2:d}".format(self.params["folder"], self.params["now"], self.params["nonce"])
     os.makedirs(dir_path)
     with open("{0:s}/stats".format(dir_path), "w+") as f:
       f.write(json.dumps({"stats": stats}, indent=4, sort_keys=True))
@@ -79,7 +79,7 @@ def launch_threads(requests, file_names, params):
     thread.join()
 
   now = time.time()
-  folder = "results/concurrency{0:d}/{1:f}".format(len(threads), now)
+  folder = "results/{0:s}/{1:f}".format(params["folder"], now)
   if not os.path.isdir(folder):
     os.makedirs(folder)
 
@@ -105,9 +105,9 @@ def run(args, params):
     file_names = [params["input_name"]]
 
   setup.setup(params)
-  for i in [0]:
+  for i in [2]:
     requests = []
-    num_requests = max(i * 50, 1)
+    num_requests = int(max(i * 50, 1))
     for j in range(num_requests):
       requests.append(i)
     done = False

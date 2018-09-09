@@ -135,8 +135,20 @@ def upload_input(p, thread_id=0):
     )
 
   elif util.is_set(p, "sample_input"):
+    config = boto3.s3.transfer.TransferConfig(multipart_threshold=1024*25, max_concurrency=2,
+                                              multipart_chunksize=1024*25, use_threads=False)
+    copy_source = {
+      "Bucket": p["sample_bucket"],
+      "Key": p["input_name"]
+    }
+    done = False
     print("Thread {0:d}: Moving {1:s} to s3://{2:s}".format(thread_id, p["input_name"], bucket_name), flush=True)
-    s3.Object(bucket_name, key).copy_from(CopySource={"Bucket": p["sample_bucket"], "Key": p["input_name"]}, StorageClass=p["storage_class"])
+    while not done:
+      try:
+        s3.Bucket(bucket_name).copy(copy_source, key, Config=config)
+        done = True
+      except Exception as e:
+        print("ERROR: upload_input", e)
   else:
     print("Uploading {0:s} to s3://{1:s}".format(p["input"], bucket_name), flush=True)
     s3.Object(bucket_name, key).put(Body=open("data/{0:s}".format(p["input"]), 'rb'), StorageClass=p["storage_class"])
@@ -395,7 +407,7 @@ def run(params, thread_id):
     if params["stats"]:
       if util.is_set(params, "trigger"):
         params["now"] = time.time()
-      dir_path = "results/{0:s}/{1:f}-{2:d}".format(params["ec2"]["application"], params["now"], params["nonce"])
+      dir_path = "results/{0:s}/{1:f}-{2:d}".format(params["folder"], params["now"], params["nonce"])
       os.makedirs(dir_path)
       with open("{0:s}/stats".format(dir_path), "w+") as f:
         f.write(json.dumps({"stats": stats, "failed": failed}, indent=4, sort_keys=True))
@@ -528,7 +540,7 @@ def wait_for_completion(start_time, params, thread_id):
 
   # Give ourselves time as we need to wait for each part of the pipeline
   prefix = "{0:d}/".format(len(params["pipeline"]))
-  timeout = 120 * len(params["pipeline"])
+  timeout = 300 * len(params["pipeline"])
   failed = check_objects(client, params["bucket"], prefix, params["num_output"], timeout, params, thread_id)
   time.sleep(10)  # Wait a little to make sure percolator logs are on the server
   return failed
