@@ -25,7 +25,6 @@ def split_file(bucket_name, key, input_format, output_format, offsets, params):
 
   more = True
   file_id = params["file_id"] - 1 if "file_id" in params else 0
-
   while more:
     file_id += 1
     [offsets, more] = iterator.nextOffsets()
@@ -56,8 +55,8 @@ def split_file(bucket_name, key, input_format, output_format, offsets, params):
     if params["context"].get_remaining_time_in_millis() < 20*1000:
       payload["Records"][0]["s3"]["extra_params"]["prefix"] = input_format["prefix"]
       payload["Records"][0]["s3"]["object"]["key"] = key
-      payload["Records"][0]["s3"]["extra_params"]["file_id"] = payload["Records"][0]["s3"]["object"]["file_id"]
-      payload["Records"][0]["s3"]["extra_params"]["id"] = input_format["file_id"]
+      payload["Records"][0]["s3"]["extra_params"]["file_id"] = file_id
+      payload["Records"][0]["s3"]["extra_params"]["id"] = file_id
       payload["Records"][0]["s3"]["offsets"]["offsets"][-1] = iterator.content_length
       params["bucket_format"]["last"] = False
 
