@@ -58,6 +58,7 @@ def split_file(bucket_name, key, input_format, output_format, offsets, params):
       payload["Records"][0]["s3"]["object"]["key"] = key
       payload["Records"][0]["s3"]["extra_params"]["file_id"] = payload["Records"][0]["s3"]["object"]["file_id"]
       payload["Records"][0]["s3"]["extra_params"]["id"] = input_format["file_id"]
+      payload["Records"][0]["s3"]["offsets"]["offsets"][-1] = iterator.content_length
       params["bucket_format"]["last"] = False
 
       response = client.invoke(

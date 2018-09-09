@@ -168,6 +168,9 @@ def run(bucket_name, key, params, func):
   input_format = parse_file_name(key)
   output_format = dict(input_format)
   output_format["prefix"] = params["prefix"] + 1
+  if "id" in params:
+    params["file_id"] = params["id"]
+    output_format["file_id"] = params["id"]
 
   print_request(input_format, params)
 
