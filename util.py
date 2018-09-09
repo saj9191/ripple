@@ -103,12 +103,13 @@ def get_objects(bucket_name, prefix=None, params={}):
         objects = bucket.objects.all()
       else:
         objects = bucket.objects.filter(Prefix=prefix)
+      objects = list(objects)
       found = True
     except Exception as e:
       print("ERROR, util.get_objects", e)
       found = False
 
-  return list(objects)
+  return objects
 
 
 def read(obj, start_byte, end_byte):
