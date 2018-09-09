@@ -10,7 +10,7 @@ def split_file(bucket_name, key, input_format, output_format, offsets, params):
   chunk_size = params["chunk_size"]
 
   s3 = params["s3"] if "s3" in params else boto3.resource("s3")
-  client = params["client"] if "client" else boto3.client("lambda")
+  client = params["client"] if "client" in params else boto3.client("lambda")
   format_lib = importlib.import_module(params["format"])
 
   if util.is_set(params, "ranges"):
