@@ -10,9 +10,12 @@ def run_application(bucket_name, key, input_format, output_format, offsets, para
     temp_file = util.download(bucket_name, key)
   else:
     obj = s3.Object(bucket_name, key)
+    format_lib = importlib.import_module(params["format"])
+    iterator_class = getattr(format_lib, "Iterator")
+    iterator = iterator_class(obj, offsets, 0, 0)
     temp_file = "/tmp/{0:s}".format(key)
     with open(temp_file, "w") as f:
-      f.write(util.read(obj, offsets["offsets"][0], offsets["offsets"][-1]))
+      f.write(util.read(obj, iterator.current_offset, iterator.content_length))
 
   application_lib = importlib.import_module(params["application"])
   application_method = getattr(application_lib, "run")

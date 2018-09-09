@@ -1,5 +1,4 @@
 import boto3
-import importlib
 import json
 import pivot
 import util
@@ -41,13 +40,10 @@ def invoke(client, name, payload):
 
 
 def split_file(bucket_name, key, input_format, output_format, offsets, params):
-  batch_size = params["batch_size"]
-  chunk_size = params["chunk_size"]
   split_size = params["split_size"]
 
   s3 = params["s3"] if "s3" in params else boto3.resource("s3")
   client = params["client"] if "client" in params else boto3.client("lambda")
-  format_lib = importlib.import_module(params["format"])
 
   if util.is_set(params, "ranges"):
     [input_bucket, input_key, ranges] = pivot.get_pivot_ranges(bucket_name, key)
@@ -56,41 +52,28 @@ def split_file(bucket_name, key, input_format, output_format, offsets, params):
     input_key = key
 
   obj = s3.Object(input_bucket, input_key)
-  if util.is_set(params, "fine_grain"):
-    iterator_class = getattr(format_lib, "Iterator")
-    iterator = iterator_class(obj, offsets, batch_size, chunk_size)
 
   more = True
   file_id = params["file_id"] - 1 if "file_id" in params else 0
   while more:
     file_id += 1
-    if util.is_set(params, "fine_grain"):
-      [offsets, more] = iterator.nextOffsets()
-      payload = create_payload(input_bucket, input_key, offsets, params["token"], output_format["prefix"], file_id, more)
-    else:
-      offsets = {
-        "offsets": [(file_id - 1) * split_size, min(obj.content_length, (file_id) * split_size)],
-        "adjust": True,
-      }
-      more = (offsets["offsets"][-1] != obj.content_length)
-      payload = create_payload(input_bucket, input_key, offsets, params["token"], output_format["prefix"])
+    offsets = {
+      "offsets": [(file_id - 1) * split_size, min(obj.content_length, (file_id) * split_size) - 1],
+      "adjust": True,
+    }
+    more = (offsets["offsets"][-1] != (obj.content_length - 1))
+    payload = create_payload(input_bucket, input_key, offsets, params["token"], output_format["prefix"], file_id, more)
 
     s3_params = payload["Records"][0]["s3"]
-    obj_params = s3_params["object"]
 
     if util.is_set(params, "ranges"):
       s3_params["extra_params"]["pivots"] = ranges
 
-    if not util.is_set(params, "fine_grain"):
-      s3_params["extra_params"]["fine_grain"] = True
-      obj_params["bin"] = file_id - 1
-      invoke(client, params["name"], payload)
-    elif params["context"].get_remaining_time_in_millis() < 20*1000:
+    if params["context"].get_remaining_time_in_millis() < 20*1000:
       s3_params["extra_params"]["prefix"] = input_format["prefix"]
       s3_params["object"]["key"] = key
       s3_params["extra_params"]["file_id"] = file_id
       s3_params["extra_params"]["id"] = file_id
-      s3_params["offsets"]["offsets"][-1] = iterator.content_length
       params["bucket_format"]["last"] = False
 
       invoke(client, params["name"], payload)

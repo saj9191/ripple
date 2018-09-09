@@ -33,12 +33,11 @@ params = {
   "bucket_format": dict(input_format),
   "file": "split_file",
   "log": "log",
-  "fine_grain": True,
-  "split_size": 10,
+  "split_size": 20,
 }
 
 
-def get_payload(bucket_name, key, token, prefix, offsets, bin=None):
+def get_payload(bucket_name, key, token, prefix, offsets=None):
   payload = {
     "Records": [{
       "s3": {
@@ -52,22 +51,20 @@ def get_payload(bucket_name, key, token, prefix, offsets, bin=None):
           "token": token,
           "prefix": prefix,
         },
-        "offsets": {
-          "offsets": offsets,
-        }
       }
     }]
   }
-  if bin is not None:
-    payload["Records"][0]["s3"]["extra_params"]["fine_grain"] = True
-    payload["Records"][0]["s3"]["object"]["bin"] = bin
-    payload["Records"][0]["s3"]["offsets"]["adjust"] = True
 
+  if offsets is not None:
+    payload["Records"][0]["s3"]["offsets"] = {
+      "offsets": offsets,
+      "adjust": True,
+    }
   return payload
 
 
 def get_invoke(name, bucket_name, key, token, prefix, offsets, file_id, more, bin=None):
-  payload = get_payload(bucket_name, key, token, prefix, offsets, bin)
+  payload = get_payload(bucket_name, key, token, prefix, offsets)
   if bin is None:
     payload["Records"][0]["s3"]["object"]["file_id"] = file_id
     payload["Records"][0]["s3"]["object"]["more"] = more
@@ -96,29 +93,8 @@ class SplitFunction(unittest.TestCase):
     split_file.split_file(bucket1.name, object1.name, input_format, output_format, {}, p)
     self.assertEqual(len(client.invokes), 2)
 
-    invoke1 = get_invoke("an-output-function", bucket1.name, object1.name, token=45, prefix=1, offsets=[0, 17], file_id=1, more=True)
-    invoke2 = get_invoke("an-output-function", bucket1.name, object1.name, token=45, prefix=1, offsets=[18, 35], file_id=2, more=False)
-
-    expected_invokes = [invoke1, invoke2]
-    self.check_payload_equality(expected_invokes, client.invokes)
-
-  def test_fine_grain_trigger(self):
-    p = dict(params)
-    p["client"] = Client()
-    p["context"] = Context(30*1000)
-    p["name"] = "split-file"
-    p["fine_grain"] = False
-    p["split_size"] = 20
-    client = p["client"]
-
-    input_format = util.parse_file_name(object1.name)
-    output_format = dict(input_format)
-    output_format["prefix"] = 1
-    split_file.split_file(bucket1.name, object1.name, input_format, output_format, {}, p)
-    self.assertEqual(len(client.invokes), 2)
-
-    invoke1 = get_invoke("split-file", bucket1.name, object1.name, token=45, prefix=1, offsets=[0, 20], file_id=1, more=True, bin=0)
-    invoke2 = get_invoke("split-file", bucket1.name, object1.name, token=45, prefix=1, offsets=[20, 36], file_id=2, more=False, bin=1)
+    invoke1 = get_invoke("an-output-function", bucket1.name, object1.name, token=45, prefix=1, offsets=[0, 19], file_id=1, more=True)
+    invoke2 = get_invoke("an-output-function", bucket1.name, object1.name, token=45, prefix=1, offsets=[20, 35], file_id=2, more=False)
 
     expected_invokes = [invoke1, invoke2]
     self.check_payload_equality(expected_invokes, client.invokes)
@@ -136,7 +112,7 @@ class SplitFunction(unittest.TestCase):
     split_file.split_file(bucket1.name, object1.name, input_format, output_format, {}, p)
     self.assertEqual(len(client.invokes), 1)
 
-    payload = get_payload(bucket1.name, object1.name, token=45, prefix=0, offsets=[0, object1.content_length])
+    payload = get_payload(bucket1.name, object1.name, token=45, prefix=0, offsets=[0,19])
     payload["Records"][0]["s3"]["object"]["file_id"] = 1
     payload["Records"][0]["s3"]["object"]["more"] = True
     payload["Records"][0]["s3"]["extra_params"]["file_id"] = 1
@@ -156,13 +132,12 @@ class SplitFunction(unittest.TestCase):
     p["client"] = Client()
     p["context"] = Context(50 * 1000)
     client = p["client"]
-    p["offsets"] = {"offsets": [18, 35]}
     p["prefix"] = 0
     p["id"] = 2
     p["object"] = {"more": True, "file_id": 2}
 
     util.run(bucket1.name, object1.name, p, split_file.split_file)
-    payload = get_payload(bucket1.name, object1.name, token=45, prefix=1, offsets=[18, 35])
+    payload = get_payload(bucket1.name, object1.name, token=45, prefix=1, offsets=[20, 35])
     payload["Records"][0]["s3"]["object"]["file_id"] = 2
     payload["Records"][0]["s3"]["object"]["more"] = False
     invoke = {

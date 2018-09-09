@@ -1,11 +1,12 @@
 {
-	"input_name": "0/1536083947.373491-91/1/1-1-dna.methyl",
+	"input_name": "ENCFF369TZO.bed",
+	"sample_bucket": "maccoss-methyl-data",
+	"sample_input": true,
 	"model": "lambda",
 	"iterations": 10,
 	"region": "us-west-2",
-	"folder": "dna_compression",
+	"folder": "compression100",
 	"num_output": 144,
-	"trigger": true,
 	"timeout": 300,
 	"tag": "dna-compression",
 	"bucket": "maccoss-methyl",
@@ -14,8 +15,6 @@
 	"num_bins": 1,
 	"account": 999145429263,
 	"role": "service-role/lambdaFullAccessRole",
-	"sample_input": false,
-	"sample_bucket": "maccoss-methyl-data",
 	"stats": true,
 	"setup": true,
 	"credential_profile": "maccoss",
@@ -23,23 +22,23 @@
 		"split-methyl": {
 			"file": "split_file",
 			"format": "methyl",
-			"memory_size": 1024,
-			"output_function": "compress-methyl"
+			"memory_size": 1024
 		},
 		"compress-methyl": {
 			"file": "application",
+			"format": "methyl",
 			"application": "compress_methyl",
 			"program_bucket": "ripple-programs",
 			"memory_size": 1024,
-		  "action": "compress"
+			"action": "compress"
 		},
 		"decompress-methyl": {
 			"file": "application",
 			"application": "compress_methyl",
 			"program_bucket": "ripple-programs",
 			"memory_size": 1024,
-		  "action": "decompress",
-			"suffix": "outfileArInt.methyl"
+			"action": "decompress",
+			"suffix": "outfileArInt.bed"
 		},
 		"combine-methyl": {
 			"file": "combine_files",
@@ -49,11 +48,11 @@
 	},
 	"pipeline": [{
 		"name": "split-methyl",
-		"batch_size": 50000000,
-		"chunk_size": 100000000
+		"split_size": 100000000,
+		"output_function": "compress-methyl"
 	}, {
-	  "name": "compress-methyl"
+		"name": "compress-methyl"
 	}, {
-	  "name": "decompress-methyl"
+		"name": "decompress-methyl"
 	}]
 }
