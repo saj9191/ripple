@@ -53,10 +53,13 @@ def split_file(bucket_name, key, input_format, output_format, offsets, params):
     if util.is_set(params, "ranges"):
       payload["Records"][0]["s3"]["extra_params"]["pivots"] = ranges
 
-    if params["context"].get_remaining_time_in_millis() < 10*1000:
+    if params["context"].get_remaining_time_in_millis() < 20*1000:
       payload["Records"][0]["s3"]["extra_params"]["prefix"] = input_format["prefix"]
       payload["Records"][0]["s3"]["object"]["key"] = key
       payload["Records"][0]["s3"]["extra_params"]["file_id"] = payload["Records"][0]["s3"]["object"]["file_id"]
+      payload["Records"][0]["s3"]["extra_params"]["id"] = input_format["file_id"]
+      params["bucket_format"]["last"] = False
+
       response = client.invoke(
         FunctionName=params["name"],
         InvocationType="Event",
