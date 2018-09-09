@@ -33,11 +33,13 @@ params = {
   "bucket_format": dict(input_format),
   "file": "split_file",
   "log": "log",
+  "fine_grain": True,
+  "split_size": 10,
 }
 
 
-def get_payload(bucket_name, key, token, prefix, offsets):
-  return {
+def get_payload(bucket_name, key, token, prefix, offsets, bin=None):
+  payload = {
     "Records": [{
       "s3": {
         "bucket": {
@@ -56,9 +58,34 @@ def get_payload(bucket_name, key, token, prefix, offsets):
       }
     }]
   }
+  if bin is not None:
+    payload["Records"][0]["s3"]["extra_params"]["fine_grain"] = True
+    payload["Records"][0]["s3"]["object"]["bin"] = bin
+
+  return payload
+
+
+def get_invoke(name, bucket_name, key, token, prefix, offsets, file_id, more, bin=None):
+  payload = get_payload(bucket_name, key, token, prefix, offsets, bin)
+  if bin is None:
+    payload["Records"][0]["s3"]["object"]["file_id"] = file_id
+    payload["Records"][0]["s3"]["object"]["more"] = more
+
+  return {
+    "name": name,
+    "type": "Event",
+    "payload": json.JSONEncoder().encode(payload),
+  }
 
 
 class SplitFunction(unittest.TestCase):
+  def check_payload_equality(self, expected_invokes, actual_invokes):
+    self.assertEqual(len(expected_invokes), len(actual_invokes))
+    for i in range(len(expected_invokes)):
+      expected_invokes[i]["payload"] = json.JSONDecoder().decode(expected_invokes[i]["payload"])
+      actual_invokes[i]["payload"] = json.JSONDecoder().decode(actual_invokes[i]["payload"])
+      self.assertDictEqual(expected_invokes[i], actual_invokes[i])
+
   def test_basic(self):
     p = dict(params)
     p["client"] = Client()
@@ -68,37 +95,32 @@ class SplitFunction(unittest.TestCase):
     split_file.split_file(bucket1.name, object1.name, input_format, output_format, {}, p)
     self.assertEqual(len(client.invokes), 2)
 
-    payload = get_payload(bucket1.name, object1.name, token=45, prefix=1, offsets=[0, 17])
-
-    payload1 = dict(payload)
-    payload1["Records"][0]["s3"]["object"]["file_id"] = 1
-    payload1["Records"][0]["s3"]["object"]["more"] = True
-
-    invoke1 = {
-      "name": "an-output-function",
-      "type": "Event",
-      "payload": json.JSONEncoder().encode(payload1),
-    }
-
-    payload2 = dict(payload)
-    payload2["Records"][0]["s3"]["object"]["file_id"] = 2
-    payload2["Records"][0]["s3"]["object"]["more"] = False
-    payload1["Records"][0]["s3"]["offsets"] = {
-      "offsets": [18, 35]
-    }
-
-    invoke2 = {
-      "name": "an-output-function",
-      "type": "Event",
-      "payload": json.JSONEncoder().encode(payload2),
-    }
+    invoke1 = get_invoke("an-output-function", bucket1.name, object1.name, token=45, prefix=1, offsets=[0, 17], file_id=1, more=True)
+    invoke2 = get_invoke("an-output-function", bucket1.name, object1.name, token=45, prefix=1, offsets=[18, 35], file_id=2, more=False)
 
     expected_invokes = [invoke1, invoke2]
-    self.assertEqual(len(expected_invokes), len(client.invokes))
-    for i in range(len(expected_invokes)):
-      client.invokes[i]["payload"] = json.JSONDecoder().decode(client.invokes[i]["payload"])
-      expected_invokes[i]["payload"] = json.JSONDecoder().decode(expected_invokes[i]["payload"])
-      self.assertDictEqual(expected_invokes[i], client.invokes[i])
+    self.check_payload_equality(expected_invokes, client.invokes)
+
+  def test_fine_grain_trigger(self):
+    p = dict(params)
+    p["client"] = Client()
+    p["context"] = Context(30*1000)
+    p["name"] = "split-file"
+    p["fine_grain"] = False
+    p["split_size"] = 20
+    client = p["client"]
+
+    input_format = util.parse_file_name(object1.name)
+    output_format = dict(input_format)
+    output_format["prefix"] = 1
+    split_file.split_file(bucket1.name, object1.name, input_format, output_format, {}, p)
+    self.assertEqual(len(client.invokes), 2)
+
+    invoke1 = get_invoke("split-file", bucket1.name, object1.name, token=45, prefix=1, offsets=[0, 20], file_id=1, more=True, bin=0)
+    invoke2 = get_invoke("split-file", bucket1.name, object1.name, token=45, prefix=1, offsets=[20, 36], file_id=2, more=False, bin=1)
+
+    expected_invokes = [invoke1, invoke2]
+    self.check_payload_equality(expected_invokes, client.invokes)
 
   def test_next_invoke_trigger(self):
     p = dict(params)
@@ -126,11 +148,7 @@ class SplitFunction(unittest.TestCase):
     }
 
     expected_invokes = [invoke]
-    self.assertEqual(len(expected_invokes), len(client.invokes))
-    for i in range(len(expected_invokes)):
-      client.invokes[i]["payload"] = json.JSONDecoder().decode(client.invokes[i]["payload"])
-      expected_invokes[i]["payload"] = json.JSONDecoder().decode(expected_invokes[i]["payload"])
-      self.assertDictEqual(expected_invokes[i], client.invokes[i])
+    self.check_payload_equality(expected_invokes, client.invokes)
 
   def test_next_invoke(self):
     p = dict(params)
@@ -153,11 +171,7 @@ class SplitFunction(unittest.TestCase):
     }
 
     expected_invokes = [invoke]
-    self.assertEqual(len(expected_invokes), len(client.invokes))
-    for i in range(len(expected_invokes)):
-      client.invokes[i]["payload"] = json.JSONDecoder().decode(client.invokes[i]["payload"])
-      expected_invokes[i]["payload"] = json.JSONDecoder().decode(expected_invokes[i]["payload"])
-      self.assertDictEqual(expected_invokes[i], client.invokes[i])
+    self.check_payload_equality(expected_invokes, client.invokes)
 
 
 if __name__ == "__main__":

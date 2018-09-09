@@ -5,9 +5,45 @@ import pivot
 import util
 
 
+def create_payload(bucket, key, offsets, token, prefix, file_id=None, more=None):
+  payload = {
+    "Records": [{
+      "s3": {
+        "bucket": {
+          "name": bucket
+        },
+        "object": {
+          "key": key,
+        },
+        "offsets": offsets,
+        "extra_params": {
+          "token": token,
+          "prefix": prefix
+        }
+      }
+    }]
+  }
+  if file_id is not None:
+    payload["Records"][0]["s3"]["object"]["file_id"] = file_id
+  if more is not None:
+    payload["Records"][0]["s3"]["object"]["more"] = more
+
+  return payload
+
+
+def invoke(client, name, payload):
+  response = client.invoke(
+    FunctionName=name,
+    InvocationType="Event",
+    Payload=json.JSONEncoder().encode(payload)
+  )
+  assert(response["ResponseMetadata"]["HTTPStatusCode"] == 202)
+
+
 def split_file(bucket_name, key, input_format, output_format, offsets, params):
   batch_size = params["batch_size"]
   chunk_size = params["chunk_size"]
+  split_size = params["split_size"]
 
   s3 = params["s3"] if "s3" in params else boto3.resource("s3")
   client = params["client"] if "client" in params else boto3.client("lambda")
@@ -20,60 +56,44 @@ def split_file(bucket_name, key, input_format, output_format, offsets, params):
     input_key = key
 
   obj = s3.Object(input_bucket, input_key)
-  iterator_class = getattr(format_lib, "Iterator")
-  iterator = iterator_class(obj, offsets, batch_size, chunk_size)
+  if util.is_set(params, "fine_grain"):
+    iterator_class = getattr(format_lib, "Iterator")
+    iterator = iterator_class(obj, offsets, batch_size, chunk_size)
 
   more = True
   file_id = params["file_id"] - 1 if "file_id" in params else 0
   while more:
     file_id += 1
-    [offsets, more] = iterator.nextOffsets()
+    if util.is_set(params, "fine_grain"):
+      [offsets, more] = iterator.nextOffsets()
+      payload = create_payload(input_bucket, input_key, offsets, params["token"], output_format["prefix"], file_id, more)
+    else:
+      offsets = {"offsets": [(file_id - 1) * split_size, min(obj.content_length, (file_id) * split_size)]}
+      more = (offsets["offsets"][-1] != obj.content_length)
+      payload = create_payload(input_bucket, input_key, offsets, params["token"], output_format["prefix"])
 
-    payload = {
-      "Records": [{
-        "s3": {
-          "bucket": {
-            "name": input_bucket
-          },
-          "object": {
-            "key": input_key,
-            "file_id": file_id,
-            "more": more
-          },
-          "offsets": offsets,
-          "extra_params": {
-            "token": params["token"],
-            "prefix": output_format["prefix"]
-          }
-        }
-      }]
-    }
+    s3_params = payload["Records"][0]["s3"]
+    obj_params = s3_params["object"]
 
     if util.is_set(params, "ranges"):
-      payload["Records"][0]["s3"]["extra_params"]["pivots"] = ranges
+      s3_params["extra_params"]["pivots"] = ranges
 
-    if params["context"].get_remaining_time_in_millis() < 20*1000:
-      payload["Records"][0]["s3"]["extra_params"]["prefix"] = input_format["prefix"]
-      payload["Records"][0]["s3"]["object"]["key"] = key
-      payload["Records"][0]["s3"]["extra_params"]["file_id"] = file_id
-      payload["Records"][0]["s3"]["extra_params"]["id"] = file_id
-      payload["Records"][0]["s3"]["offsets"]["offsets"][-1] = iterator.content_length
+    if not util.is_set(params, "fine_grain"):
+      s3_params["extra_params"]["fine_grain"] = True
+      obj_params["bin"] = file_id - 1
+      invoke(client, params["name"], payload)
+    elif params["context"].get_remaining_time_in_millis() < 20*1000:
+      s3_params["extra_params"]["prefix"] = input_format["prefix"]
+      s3_params["object"]["key"] = key
+      s3_params["extra_params"]["file_id"] = file_id
+      s3_params["extra_params"]["id"] = file_id
+      s3_params["offsets"]["offsets"][-1] = iterator.content_length
       params["bucket_format"]["last"] = False
 
-      response = client.invoke(
-        FunctionName=params["name"],
-        InvocationType="Event",
-        Payload=json.JSONEncoder().encode(payload)
-      )
-      assert(response["ResponseMetadata"]["HTTPStatusCode"] == 202)
+      invoke(client, params["name"], payload)
       return
     else:
-      response = client.invoke(
-        FunctionName=params["output_function"],
-        InvocationType="Event",
-        Payload=json.JSONEncoder().encode(payload)
-      )
-      assert(response["ResponseMetadata"]["HTTPStatusCode"] == 202)
+      invoke(client, params["output_function"], payload)
 
 
 def handler(event, context):
