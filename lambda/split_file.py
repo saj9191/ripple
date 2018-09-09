@@ -68,7 +68,10 @@ def split_file(bucket_name, key, input_format, output_format, offsets, params):
       [offsets, more] = iterator.nextOffsets()
       payload = create_payload(input_bucket, input_key, offsets, params["token"], output_format["prefix"], file_id, more)
     else:
-      offsets = {"offsets": [(file_id - 1) * split_size, min(obj.content_length, (file_id) * split_size)]}
+      offsets = {
+        "offsets": [(file_id - 1) * split_size, min(obj.content_length, (file_id) * split_size)],
+        "adjust": True,
+      }
       more = (offsets["offsets"][-1] != obj.content_length)
       payload = create_payload(input_bucket, input_key, offsets, params["token"], output_format["prefix"])
 

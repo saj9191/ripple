@@ -17,9 +17,17 @@ class Iterator:
   def __init__(self, cls, obj, batch_size, chunk_size, offsets={}):
     self.batch_size = batch_size
     self.chunk_size = chunk_size
+    self.obj = obj
+    self.cls = cls
     if len(offsets) != 0 and len(offsets["offsets"]) != 0:
       self.current_offset = offsets["offsets"][0]
       self.content_length = offsets["offsets"][1]
+      if util.is_set(offsets, "adjust"):
+        if self.current_offset != 0:
+          # Don't include identifier
+          self.current_offset -= (self.offset(self.current_offset) - len(self.identifier))
+        content = util.read(obj, max(self.content_length - 100, 0), self.content_length)
+        self.content_length -= self.offset(self.content_length)
     else:
       self.current_offset = 0
       self.content_length = obj.content_length
@@ -27,8 +35,12 @@ class Iterator:
     self.seen_count = 0
     self.total_count = None
     self.remainder = ""
-    self.obj = obj
-    self.cls = cls
+
+  def offset(self, index):
+    content = util.read(self.obj, max(index - 100, 0), index)
+    last_byte = len(content) - 1
+    offset = last_byte - content.rindex(self.identifier)
+    return offset
 
   # This is for the sort function
   def __lt__(self, other):

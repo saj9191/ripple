@@ -2,14 +2,13 @@ import inspect
 import os
 import sys
 import unittest
-import tutils
-from unittest.mock import MagicMock
 from tutils import S3, Bucket, Object
 
 currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
 parentdir = os.path.dirname(currentdir)
 sys.path.insert(0, parentdir + "/formats")
 import methyl
+
 
 class IteratorMethods(unittest.TestCase):
   def test_next_offsets(self):
@@ -40,6 +39,48 @@ class IteratorMethods(unittest.TestCase):
     self.assertFalse(more)
     self.assertEqual(offsets["offsets"][0], 6)
     self.assertEqual(offsets["offsets"][1], 11)
+
+  def test_adjust(self):
+    obj = Object("test.methyl", "A B C\na b c\n1 2 3\nD E F\nd e f\n")
+    offsets = {
+      "offsets": [8, 13],
+      "adjust": True
+    }
+
+    it = methyl.Iterator(obj, offsets, 1, 10)
+    [o, more] = it.next()
+    self.assertFalse(more)
+    self.assertEqual(o, ["a b c", ""])
+
+    # No adjustment needed
+    offsets = {
+      "offsets": [6, 11],
+      "adjust": True
+    }
+    it = methyl.Iterator(obj, offsets, 1, 10)
+    [o, more] = it.next()
+    self.assertFalse(more)
+    self.assertEqual(o, ["a b c", ""])
+
+    # Beginning of content
+    offsets = {
+      "offsets": [0, 7],
+      "adjust": True
+    }
+    it = methyl.Iterator(obj, offsets, 1, 10)
+    [o, more] = it.next()
+    self.assertFalse(more)
+    self.assertEqual(o, ["A B C", ""])
+
+    # Beginning of content
+    offsets = {
+      "offsets": [26, obj.content_length - 1],
+      "adjust": True
+    }
+    it = methyl.Iterator(obj, offsets, 1, 10)
+    [o, more] = it.next()
+    self.assertFalse(more)
+    self.assertEqual(o, ["d e f", ""])
 
 
   def test_next(self):

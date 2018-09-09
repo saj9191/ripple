@@ -61,6 +61,7 @@ def get_payload(bucket_name, key, token, prefix, offsets, bin=None):
   if bin is not None:
     payload["Records"][0]["s3"]["extra_params"]["fine_grain"] = True
     payload["Records"][0]["s3"]["object"]["bin"] = bin
+    payload["Records"][0]["s3"]["offsets"]["adjust"] = True
 
   return payload
 
