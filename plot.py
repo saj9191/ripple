@@ -111,49 +111,6 @@ def get_plot_data(results, num_layers, params):
   return [dependencies, lefts, runtimes, heights, num_threads]
 
 
-def runtime_plot(num_layers, num_results, lefts, runtimes, heights, num_threads, pipeline, params):
-  threads = range(1, num_threads + 1)
-  print("Num threads", num_threads)
-
-  fig = plt.figure()
-  ax = fig.add_subplot(1, 1, 1)
-  labels = []
-  legends = []
-  dark_colors = ["purple", "brown", "blue", "green"]
-  for i in range(num_layers):
-    left = lefts[i]
-    runtime = runtimes[i]
-    if i in [14, 15, 16, 17]:
-      edgecolors = list(map(lambda r: "none", runtime))
-      color = dark_colors[i % len(dark_colors)]
-    else:
-      edgecolors = list(map(lambda r: "black" if r > 0 else "none", runtime))
-
-    if len(heights) > i:
-      height = heights[i] if heights[i] == 1 else heights[i]
-    else:
-      height = 0
-    alpha = 0.4
-    p = ax.barh(threads, runtime, color=color, left=left, height=height, align="edge", edgecolor=edgecolors, linewidth=1, alpha=alpha)
-
-    legends.append(p[0])
-    labels.append(pipeline[i]["name"] + " ({0:d})".format(i))
-
-  fontP = FontProperties()
-  fontP.set_size('x-small')
-  fig.tight_layout(rect=[0, 0, 0.85, 0.94])
-  fig.legend(legends, labels, prop=fontP, loc="upper left", ncol=1, bbox_to_anchor=(0.75, 0.95))
-  plt.yticks([])
-  ax.set_ylim(0, num_threads)
-  ax.set_xlim(0, 500)
-  plt.xlabel("Runtime (seconds)")
-  plt.title("Runtime Concurrency {0:d} ({1:f})".format(num_results, params["timestamp"]))
-  plot_name = "results/concurrency{0:d}/{1:f}/plot-{0:d}.png".format(num_results, params["timestamp"])
-  print("plot", plot_name)
-  fig.savefig(plot_name)
-  plt.close()
-
-
 def error_plot(num_results, num_layers, results, pipeline, params):
   fig = plt.figure()
   ax = fig.add_subplot(1, 1, 1)
@@ -263,7 +220,7 @@ def ec2_accumulation_plot(results, params):
 
 def accumulation_plot(x, y, regions, pipeline, title, plot_name, folder):
   if plot_name.startswith("ssw"):
-    offset = 5
+    offset = 0
     colors = ["purple", "cyan", "blue", "red", "orange", "green", "black"]
   elif plot_name.startswith("methyl"):
     colors = ["purple", "cyan", "black"]
@@ -283,10 +240,8 @@ def accumulation_plot(x, y, regions, pipeline, title, plot_name, folder):
     patch = mpatches.Patch(facecolor=color, edgecolor="black", label=pipeline[layer]["name"], linewidth=1, linestyle="solid")
     legends.append(patch)
   fontP = FontProperties(family="Arial", size="small")
-  legend = fig.legend(handles=legends, loc="upper right", prop=fontP, bbox_to_anchor=(0.90, 0.87), framealpha=1, borderpad=1)
+  fig.legend(handles=legends, loc="upper right", prop=fontP, bbox_to_anchor=(1.02, 1.02), framealpha=0, borderpad=1)
 
-  frame = legend.get_frame()
-  frame.set_facecolor("white")
   max_x = regions[len(regions) - 1][1]
   plt.xlim([0, max_x])
   plt.xticks([])
@@ -300,11 +255,11 @@ def accumulation_plot(x, y, regions, pipeline, title, plot_name, folder):
     max_y = 0
     for i in range(len(x[layer])):
       if (x0 <= x[layer][i] and x[layer][i] <= x1):
-        px.append(x[layer][i])
+        px.append(min(x[layer][i], max_x - offset))
         py.append(y[layer][i])
       elif x[layer][i] > x1:
         max_y = max(y[layer][i], max_y)
-    px.append(x1)
+    px.append(min(x1, max_x - offset))
     py.append(max_y)
     ax1.plot(px, py, color=color)
 
