@@ -47,6 +47,7 @@ LIST_COUNT = 0
 WRITE_COUNT = 0
 BYTE_COUNT = 0
 START_TIME = None
+FOUND = False
 
 
 def check_output(command):
@@ -165,6 +166,8 @@ def combine_instance(bucket_name, key):
 
 def run(bucket_name, key, params, func):
   clear_tmp(params)
+  with open("/tmp/warm", "w+") as f:
+    f.write("warm")
 
   input_format = parse_file_name(key)
   output_format = dict(input_format)
@@ -218,7 +221,11 @@ def current_last_file(bucket_name, current_key):
 
 def lambda_setup(event, context):
   global START_TIME
+  global FOUND
   START_TIME = time.time()
+  if os.path.isfile("/tmp/warm"):
+    FOUND = True
+
   s3 = event["Records"][0]["s3"]
   bucket_name = s3["bucket"]["name"]
   key = s3["object"]["key"]
@@ -269,6 +276,7 @@ def show_duration(context, m, p):
     "list_count": LIST_COUNT,
     "byte_count": BYTE_COUNT,
     "duration": duration,
+    "found": FOUND,
   }
   log_results = {**p, **m, **log_results}
 
