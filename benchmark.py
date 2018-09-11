@@ -390,14 +390,9 @@ def run(params, thread_id):
   iterations = params["iterations"]
 
   for i in range(iterations):
-    stats = None
     process_iteration_params(params, i)
     if params["stats"]:
-      [results, upload_duration, duration, failed] = benchmark(i, params, thread_id)
-      if stats is None:
-        stats = list(map(lambda i: [], range(len(results))))
-      for j in range(len(results)):
-        stats[j].append(results[j])
+      [stats, upload_duration, duration, failed] = benchmark(i, params, thread_id)
     else:
       [upload_duration, duration, failed] = benchmark(i, params, thread_id)
     total_upload_duration += upload_duration
@@ -405,8 +400,6 @@ def run(params, thread_id):
     total_failed_attempts += (1 if failed else 0)
 
     if params["stats"]:
-      if util.is_set(params, "trigger"):
-        params["now"] = time.time()
       dir_path = "results/{0:s}/{1:f}-{2:d}".format(params["folder"], params["now"], params["nonce"])
       os.makedirs(dir_path)
       with open("{0:s}/stats".format(dir_path), "w+") as f:
@@ -482,8 +475,7 @@ def clear_buckets(params):
     done = False
     while not done:
       try:
-        if i != 0 or not util.is_set(params, "trigger"):
-          bucket.objects.filter(Prefix=prefix).delete()
+        bucket.objects.filter(Prefix=prefix).delete()
         if log_bucket:
           log_bucket.objects.filter(Prefix=prefix).delete()
         done = True
@@ -613,12 +605,9 @@ def lambda_benchmark(params, thread_id):
   total_duration = end_time - start_time
   results = [upload_duration, total_duration]
 
-  print("WTF1", params["stats"])
   if params["stats"]:
-    print("WTF")
     stats = parse_logs(params, upload_timestamp, upload_duration, total_duration)
     results = [stats] + results
-    print("result length", len(results))
   return [failed, results]
 
 
