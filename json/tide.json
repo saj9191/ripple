@@ -1,9 +1,9 @@
 {
 	"input_name": "TN_CSF_062617_87.mzML",
 	"model": "lambda",
-	"iterations": 1,
+	"iterations": 10,
 	"region": "us-west-2",
-	"folder": "tide",
+	"folder": "tide-files-lambda",
 	"tag": "tide",
 	"timeout": 300,
 	"num_bins": 15,
