@@ -400,13 +400,13 @@ def run(params, thread_id):
     total_failed_attempts += (1 if failed else 0)
 
     if params["stats"]:
-      dir_path = "results/{0:s}/{1:f}-{2:d}".format(params["folder"], params["now"], params["nonce"])
+      dir_path = "results/{0:s}/{1:s}/{2:f}-{3:d}".format(params["folder"], params["input_name"], params["now"], params["nonce"])
       os.makedirs(dir_path)
       with open("{0:s}/stats".format(dir_path), "w+") as f:
         f.write(json.dumps({"stats": stats, "failed": failed}, indent=4, sort_keys=True))
 
-#    if params["model"] == "lambda":
-#      clear_buckets(params)
+    if params["model"] == "lambda":
+      clear_buckets(params)
 
   avg_upload_duration = total_upload_duration / iterations
   avg_duration = total_duration / iterations
