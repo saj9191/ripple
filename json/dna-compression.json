@@ -5,7 +5,7 @@
 	"model": "lambda",
 	"iterations": 10,
 	"region": "us-west-2",
-	"folder": "compression100",
+	"folder": "methyl-lambda",
 	"num_output": 144,
 	"timeout": 300,
 	"tag": "dna-compression",
@@ -21,12 +21,12 @@
 	"functions": {
 		"split-methyl": {
 			"file": "split_file",
-			"format": "methyl",
+			"format": "new_line",
 			"memory_size": 1024
 		},
 		"compress-methyl": {
 			"file": "application",
-			"format": "methyl",
+			"format": "new_line",
 			"application": "compress_methyl",
 			"program_bucket": "ripple-programs",
 			"memory_size": 1024,
@@ -42,7 +42,7 @@
 		},
 		"combine-methyl": {
 			"file": "combine_files",
-			"format": "methyl",
+			"format": "new_line",
 			"memory_size": 1024
 		}
 	},
