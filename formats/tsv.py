@@ -27,14 +27,12 @@ class Iterator(iterator.Iterator):
     "original target sequence"
   ]
 
-  def __init__(self, obj, batch_size, chunk_size):
-    iterator.Iterator.__init__(self, Iterator, obj, batch_size, chunk_size)
+  def __init__(self, obj, batch_size, chunk_size, offsets={}):
     self.identifier = Iterator.IDENTIFIER
-    start_byte = 0
-    end_byte = start_byte + self.chunk_size
-    stream = util.read(self.obj, start_byte, end_byte)
+    iterator.Iterator.__init__(self, Iterator, obj, batch_size, chunk_size)
+    stream = util.read(obj, 0, chunk_size)
     self.current_offset = stream.index(Iterator.IDENTIFIER) + 1
-    self.offsets = [self.current_offset]
+    iterator.Iterator.__setup__(self, offsets)
 
   def fromArray(items, includeHeader=False):
     items = list(map(lambda item: item.strip(), items))

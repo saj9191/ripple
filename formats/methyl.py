@@ -8,7 +8,8 @@ class Iterator(iterator.Iterator):
 
   def __init__(self, obj, offsets, batch_size, chunk_size):
     self.identifier = Iterator.IDENTIFIER
-    iterator.Iterator.__init__(self, Iterator, obj, batch_size, chunk_size, offsets)
+    iterator.Iterator.__init__(self, Iterator, obj, batch_size, chunk_size)
+    iterator.Iterator.__setup__(self, offsets)
 
   def fromArray(items, includeHeader=False):
     assert(not includeHeader)

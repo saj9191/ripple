@@ -14,27 +14,32 @@ class Element():
 
 
 class Iterator:
-  def __init__(self, cls, obj, batch_size, chunk_size, offsets={}):
+  def __init__(self, cls, obj, batch_size, chunk_size):
     self.batch_size = batch_size
     self.chunk_size = chunk_size
     self.obj = obj
     self.cls = cls
+    self.seen_count = 0
+    self.total_count = None
+    self.remainder = ""
+    self.current_offset = 0
+    self.content_length = obj.content_length
+    self.indicator_at_beginning = False
+
+  def __setup__(self, offsets):
     if len(offsets) != 0 and len(offsets["offsets"]) != 0:
       self.current_offset = offsets["offsets"][0]
       self.content_length = offsets["offsets"][1]
       if util.is_set(offsets, "adjust"):
         if self.current_offset != 0:
           # Don't include identifier
-          self.current_offset -= (self.offset(self.current_offset) - len(self.identifier))
-        content = util.read(obj, max(self.content_length - 100, 0), self.content_length)
+          self.current_offset -= self.offset(self.current_offset)
+          if not self.indicator_at_beginning:
+            self.current_offset += len(self.identifier)
         self.content_length -= self.offset(self.content_length)
-    else:
-      self.current_offset = 0
-      self.content_length = obj.content_length
+        if self.indicator_at_beginning:
+          self.content_length += len(self.identifier)
     self.offsets = [self.current_offset]
-    self.seen_count = 0
-    self.total_count = None
-    self.remainder = ""
 
   def offset(self, index):
     content = util.read(self.obj, max(index - 100, 0), index)
