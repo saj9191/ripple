@@ -90,28 +90,25 @@ def iterate(bucket_name, params):
   s3 = boto3.resource("s3")
   bucket = s3.Bucket(bucket_name)
   folder = "results/{0:s}".format(params["folder"])
-  [access_key, secret_key] = util.get_credentials(params["ec2"]["key"])
+  [access_key, secret_key] = util.get_credentials(params["credential_profile"])
   params["access_key"] = access_key
   params["secret_key"] = secret_key
-  params["stats"] = False
+  params["stats"] = True
   params["sample_input"] = True
   params["setup"] = False
 
-  objects = list(bucket.objects.all())[32:]
+  objects = list(bucket.objects.all())
   data_bucket = s3.Bucket(params["bucket"])
   for obj in objects:
     params["input_name"] = obj.key
     [upload_duration, duration, failed_attempts] = benchmark.run(params, 0)
-    dir_path = "{0:s}/{1:f}-{2:d}".format(folder, params["now"], params["nonce"])
-    os.makedirs(dir_path)
+    dir_path = "{0:s}/{1:s}".format(folder, obj.key)
+    if not os.path.isdir(dir_path):
+      os.makedirs(dir_path)
     data_bucket.objects.all().delete()
 
-    stats = benchmark.parse_logs(params, params["now"] * 1000, upload_duration, duration)
     with open("{0:s}/params".format(dir_path), "w+") as f:
       f.write(json.dumps(params, indent=4, sort_keys=True))
-
-    with open("{0:s}/stats".format(dir_path), "w+") as f:
-      f.write(json.dumps({"stats": stats}, indent=4, sort_keys=True))
 
     benchmark.clear_buckets(params)
 
@@ -143,30 +140,75 @@ def cost(folder, params):
     total += layers_to_cost[s]
 
 
-def main():
-  parser = argparse.ArgumentParser()
-  parser.add_argument('--clear', action="store_true", help="Clear bucket files")
-  parser.add_argument('--plot', type=str, help="Plot graph")
-  parser.add_argument('--counts', action="store_true", help="Get read / write counts")
-  parser.add_argument('--parameters', type=str, help="JSON parameter file to use")
-  parser.add_argument('--iterate', type=str, help="Bucket to iterate through")
-  parser.add_argument('--what', action="store_true", help="ugh")
-  args = parser.parse_args()
+def comparison():
+  lambda_folder = "results/tide-files-lambda"
+  stats = []
 
-#  params = json.load(open(args.parameters))
-#  cost("results/shjoyner-als-lambda", params)
-  if args.what:
-    what()
-  if args.clear:
-    clear()
-  if args.plot:
-    trigger_plot(args.plot)
-  if args.counts:
-    params = json.load(open(args.parameters))
-    get_counts(params)
-  if args.iterate:
-    params = json.load(open(args.parameters))
-    iterate(args.iterate, params)
+  duration_stats = {}
+  for parent, folders, files in os.walk(lambda_folder):
+    for folder in folders:
+      f = "{0:s}/{1:s}".format(lambda_folder, folder)
+      for subparent, subdirs, files in os.walk(f):
+        if len(subdirs) > 0:
+          stats = []
+          for subdir in subdirs:
+            file_name = "{0:s}/{1:s}/stats".format(f, subdir)
+            s = json.load(open(file_name))["stats"]
+            stats.append(s)
+          durations = get_duration_stats(stats)
+          duration_stats[folder] = durations
+
+  plot.duration_statistics(lambda_folder, duration_stats)
+
+
+def get_duration_stats(stats):
+  layers_to_duration = {}
+  layers_to_count = {}
+  regions = []
+  points = []
+  for pipeline in stats:
+    result_regions = {}
+    start_time = None
+    duration = 0
+    for i in range(len(pipeline)):
+      stat = pipeline[i]
+      layer = i - 1
+      name = stat["name"]
+      if name not in ["load", "total"]:
+        if layer not in layers_to_duration:
+          layers_to_duration[layer] = {"timestamp": 0, "duration": 0}
+          layers_to_count[layer] = 0
+        if layer not in result_regions:
+          result_regions[layer] = [sys.maxsize, 0]
+
+        for message in stat["messages"]:
+          jmessage = json.loads(message)
+          if layer == 0:
+            if start_time is None:
+              start_time = jmessage["start_time"]
+            else:
+              start_time = min(start_time, jmessage["start_time"])
+          start = jmessage["start_time"] - start_time
+          end = start + math.ceil(jmessage["duration"] / 1000)
+          duration = max(duration, end)
+          result_regions[layer][0] = min(result_regions[layer][0], start)
+          result_regions[layer][1] = max(result_regions[layer][1], end)
+
+          points.append([start, 1, layer])
+          points.append([end, -1, layer])
+          layers_to_duration[layer]["timestamp"] += jmessage["start_time"]
+          layers_to_duration[layer]["duration"] += jmessage["duration"]
+          layers_to_count[layer] += 1
+
+    regions.append(result_regions)
+
+  durations = []
+  max_layer = len(regions[0]) - 1
+  for region in regions:
+    duration = region[max_layer][1]
+    durations.append(duration)
+
+  return durations
 
 
 def get_lambda_results(folder, params, concurrency=None):
@@ -334,7 +376,7 @@ def get_ec2_results(folder):
   return [layers_to_averages, layers_to_cost]
 
 
-def what():
+def accumulation():
   params = json.loads(open("json/dna-compression.json").read())
   lambda_folder = "results/compression100"
   ec2_folder = "results/methyl-ec2"
@@ -442,6 +484,36 @@ def regularize():
         os.mkdir("results/test-tide100/{0:s}".format(d))
         with open("results/test-tide100/{0:s}/stats".format(d), "w+") as f:
           f.write(json.dumps({"stats": stats}, indent=4, sort_keys=True))
+
+
+def main():
+  parser = argparse.ArgumentParser()
+  parser.add_argument('--clear', action="store_true", help="Clear bucket files")
+  parser.add_argument('--plot', type=str, help="Plot graph")
+  parser.add_argument('--counts', action="store_true", help="Get read / write counts")
+  parser.add_argument('--parameters', type=str, help="JSON parameter file to use")
+  parser.add_argument('--iterate', type=str, help="Bucket to iterate through")
+  parser.add_argument('--accumulation', action="store_true", help="Plot accumulation graph")
+  parser.add_argument('--comparison', action="store_true", help="Plot comparison graph")
+  args = parser.parse_args()
+
+#  params = json.load(open(args.parameters))
+#  cost("results/shjoyner-als-lambda", params)
+  if args.accumulation:
+    accumulation()
+  if args.comparison:
+    comparison()
+  if args.clear:
+    clear()
+  if args.plot:
+    trigger_plot(args.plot)
+  if args.counts:
+    params = json.load(open(args.parameters))
+    get_counts(params)
+  if args.iterate:
+    params = json.load(open(args.parameters))
+    iterate(args.iterate, params)
+
 
 if __name__ == "__main__":
   main()

@@ -7,9 +7,6 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 
 
-#colors = ["red", "cyan", "yellow", "purple", "orange", "green", "blue"]
-
-
 def graph(key, dependencies, heights, num_offsets, runtimes, lefts, num_threads, parent_id, layer=0, thread_id=0):
   if thread_id >= num_threads:
     print("Sad", "layer", layer, "thread_id", thread_id)
@@ -92,7 +89,6 @@ def get_plot_data(results, num_layers, params):
   for result in results:
     dep_folder = "{0:f}-{1:d}".format(result.params["now"], result.params["nonce"])
     dependencies = json.loads(open("results/{0:s}/{1:s}/deps".format(params["folder"], dep_folder)).read())
-    #dependencies = json.loads(open("results/concurrency{0:d}/{1:f}/{2:s}/deps".format(len(results), params["timestamp"], dep_folder)).read())
     root_key = list(filter(lambda k: k.startswith("0:"), dependencies.keys()))[0]
     get_length(root_key, dependencies)
     if len(heights) == 0:
@@ -149,72 +145,6 @@ def error_plot(num_results, num_layers, results, pipeline, params):
   plot_name = "results/concurrency{0:d}/{1:f}/error-{0:d}.png".format(num_results, params["timestamp"])
   fig.savefig(plot_name)
   print("Error plot", plot_name)
-  plt.close()
-
-
-def ec2_accumulation_plot(results, params):
-  regions = {}
-
-  labels = []
-  print(len(results))
-  for result in results:
-    dep_folder = "{0:f}-{1:d}".format(result.params["now"], result.params["nonce"])
-    stats = json.loads(open("{0:s}/{1:s}/stats".format(params["folder"], dep_folder)).read())["stats"]
-
-    layer = 0
-    start = 0
-    for stat in stats:
-      stat = stat[0]
-      if "name" not in stat:
-        stat["name"] = "terminate"
-      if stat["name"] in ["load", "total"]:
-        continue
-
-      labels.append(stat["name"])
-      if layer not in regions:
-        regions[layer] = [0, 0]
-
-      regions[layer][0] += start
-      if stat["name"] in ["download", "ssw", "upload"]:
-        duration = stat["billed_duration"][0]
-      else:
-        duration = stat["billed_duration"]
-      duration /= 1000.0
-      start += duration
-      regions[layer][1] += start
-      layer += 1
-
-  for layer in regions.keys():
-    for i in range(2):
-      regions[layer][i] = regions[layer][i] / len(results)
-
-  x = [0, regions[len(regions) - 1][1]]
-  y = [1, 1]
-
-  fig = plt.figure()
-  ax = fig.add_subplot(1, 1, 1)
-
-  colors = ["red", "blue", "yellow", "purple", "orange", "green", "magenta"]
-  legends = []
-  alpha = 0.3
-  for layer in range(len(regions)):
-    color = colors[layer % len(colors)]
-    ax.axvspan(regions[layer][0], regions[layer][1], facecolor=color, alpha=alpha)
-    legends.append(matplotlib.lines.Line2D([0], [0], color=color, alpha=alpha, label=labels[layer]))
-
-  fontP = FontProperties()
-  fontP.set_size('x-small')
-  fig.tight_layout(rect=[0.05, 0.05, 0.80, 0.90])
-  fig.legend(handles=legends, loc="upper right", prop=fontP, bbox_to_anchor=(1.0, 0.95))
-  plt.xlim(x)
-  plt.title("Average Accumulation (EC2)".format(len(results)))
-  ax.plot(x, y, color="black")
-  plot_name = "{0:s}/accumulation.png".format(params["folder"])
-  plt.xlabel("Runtime (seconds)")
-  plt.ylabel("Number of EC2 instances")
-  print(plot_name)
-  fig.savefig(plot_name)
-  print("Accumulation plot", plot_name)
   plt.close()
 
 
@@ -301,12 +231,6 @@ def accumulation_plot(x, y, regions, pipeline, title, plot_name, folder):
 def plot(results, pipeline, params):
   num_layers = len(pipeline)
   num_results = len(results)
-  #[dependencies, lefts, runtimes, heights, num_threads] = get_plot_data(results, num_layers, params)
-  #runtime_plot(num_layers, num_results, lefts, runtimes, heights, num_threads, pipeline, params)
-  #error_plot(num_results, num_layers, results, pipeline, params)
-#  if params["model"] == "ec2":
-#    ec2_accumulation_plot(results, params)
-#  else:
   accumulation_plot(num_results, num_layers, results, pipeline, params)
 
 
@@ -325,6 +249,20 @@ def comparison(name, title, lambda_result, ec2_result, ylabel, params={}):
   file_name = "{0:s}.png".format(name)
   fig.savefig(file_name)
   print("Comparison", file_name)
+  plt.close()
+
+
+def duration_statistics(folder, lambda_stats):
+  fig = plt.figure()
+  ax = fig.add_subplot(1, 1, 1)
+  y = lambda_stats.values()
+  ax.boxplot(y, whis="range")
+
+  plot_name = "{0:s}/box_plot.png".format(folder)
+  plt.ylabel("Runtime (seconds)")
+  print(plot_name)
+  fig.savefig(plot_name)
+  print("Box plot", plot_name)
   plt.close()
 
 
