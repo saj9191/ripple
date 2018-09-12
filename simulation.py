@@ -3,8 +3,11 @@ import benchmark
 import boto3
 from dateutil import parser
 import json
+import numpy as np
 import os
 import plot
+import random
+from scipy import special
 import setup
 import threading
 import time
@@ -25,8 +28,10 @@ class Request(threading.Thread):
     self.duration = 0
     self.upload_duration = 0
     self.failed_attempts = 0
+    self.alive = True
 
   def run(self):
+    time.sleep(self.time)
     self.params["input_name"] = self.file_name
     print("Thread {0:d}: Processing file {1:s}".format(self.thread_id, self.file_name))
     [upload_duration, duration, failed_attempts] = benchmark.run(self.params, self.thread_id)
@@ -43,6 +48,7 @@ class Request(threading.Thread):
     with open("{0:s}/stats".format(dir_path), "w+") as f:
       f.write(json.dumps({"stats": stats}, indent=4, sort_keys=True))
     benchmark.clear_buckets(self.params)
+    self.alive = False
 
 
 def parse_csv(file_name, num_requests):
@@ -92,6 +98,34 @@ def launch_threads(requests, file_names, params):
       f.write(msg)
 
 
+def create_request_distribution(distribution):
+  random.seed(0)
+  max_concurrency = 1000
+  time_range = 60 * 60  # 1 hour
+  requests = []
+  interval = 60  # Request every 60 seconds
+  num_intervals = int((time_range + interval) / interval)
+
+  if distribution == "uniform":
+    num_requests = 1
+    for i in range(0, time_range + 1, interval):
+      requests += [i] * num_requests
+  elif distribution == "zipfian":
+    # https://stackoverflowcom/questions/43601074/zipf-distribution-how-do-i-measure-zipf-distribution-using-python-numpy.
+    x = np.arange(0, num_intervals)
+    a = 2.
+    y = x**(-a) / special.zetac(a) * max_concurrency
+    y = random.shuffle(list(map(lambda i: int(i), list(y))))
+    for i in range(len(y)):
+      requests += [i * interval] * y[i]
+  elif distribution == "exponential":
+    for i in range(num_intervals):
+      num_requests = 2 ** i
+      requests += [i * interval] * num_requests
+
+  return requests
+
+
 def run(args, params):
   session = boto3.Session(
            aws_access_key_id=params["access_key"],
@@ -104,33 +138,48 @@ def run(args, params):
   else:
     file_names = [params["input_name"]]
 
+  folder = params["folder"]
+  with open("{0:s}/params".format(folder), "w+") as f:
+    f.write(json.dumps(params, indent=4, sort_keys=True))
+
   setup.setup(params)
-  for i in [2]:
-    requests = []
-    num_requests = int(max(i * 50, 1))
-    for j in range(num_requests):
-      requests.append(i)
-    done = False
-    while not done:
-      launch_threads(requests, file_names, params)
-      done = True
+  requests = create_request_distribution(args.distribution)
+
+  i = 0
+  time_delta = 100
+  current_time = 0
+  threads = []
+  while len(requests) > 0:
+    current_requests = list(filter(lambda r: r - time < time_delta, requests))
+    requests = list(filter(lambda r: r - time >= time_delta, requests))
+    for request in current_requests:
+      threads.append(Request(i, request - current_time, file_names[i % len(file_names)], params))
+      i += 1
+
+    threads = list(filter(lambda t: t.alive, threads))
+    if len(requests) > 0:
+      temp_time = current_time
+      current_time = requests[0]
+      time.sleep(current_time - temp_time)
+
+  while len(threads) > 0:
+    threads = list(filter(lambda t: t.alive, threads))
+    time.sleep(10)
 
 
 def main():
   parser = argparse.ArgumentParser()
   parser.add_argument("--parameters", type=str, required=True, help="File containing parameters")
-  parser.add_argument("--num_requests", type=int, required=True, help="Number of requests to send throughout the day")
+  parser.add_argument("--distribution", type=str, required=True, help="Distribution to use")
   args = parser.parse_args()
   params = json.loads(open(args.parameters).read())
   [access_key, secret_key] = util.get_credentials(params["credential_profile"])
   params["access_key"] = access_key
   params["secret_key"] = secret_key
   params["setup"] = False
-  params["stats"] = False
   params["iterations"] = 1
-  params["params_name"] = args.parameters
   run(args, params)
 
 
 if __name__ == "__main__":
-  main()
+  create_request_distribution("zipfian")
