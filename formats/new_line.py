@@ -6,7 +6,7 @@ import util
 class Iterator(iterator.Iterator):
   IDENTIFIER = "\n"
 
-  def __init__(self, obj, offsets, batch_size, chunk_size):
+  def __init__(self, obj, batch_size, chunk_size, offsets={}):
     self.identifier = Iterator.IDENTIFIER
     iterator.Iterator.__init__(self, Iterator, obj, batch_size, chunk_size)
     iterator.Iterator.__setup__(self, offsets)

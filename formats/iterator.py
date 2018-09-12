@@ -29,7 +29,7 @@ class Iterator:
   def __setup__(self, offsets):
     if len(offsets) != 0 and len(offsets["offsets"]) != 0:
       self.current_offset = offsets["offsets"][0]
-      self.content_length = offsets["offsets"][1]
+      self.content_length = offsets["offsets"][1] + 1
       if util.is_set(offsets, "adjust"):
         if self.current_offset != 0:
           # Don't include identifier
@@ -149,17 +149,23 @@ class Iterator:
     stream = util.read(self.obj, start_byte, end_byte)
     stream = self.remainder + stream
     start_byte -= len(self.remainder)
-    index = stream.rindex(self.identifier) if self.identifier in stream else -1
-    if index != -1:
-      #self.offsets.append(start_byte)
-      self.offsets.append(start_byte + index)
-      start_byte += index + 1
-      self.current_offset = end_byte + 1
-      stream = stream[index + 1:]
+    if end_byte == self.content_length:
+      self.offsets.append(self.content_length - 1)
+      self.current_offset = self.content_length
     else:
-      if end_byte == self.content_length:
-        self.offsets.append(self.content_length)
-        self.current_offset = self.content_length
+      index = stream.rindex(self.identifier) if self.identifier in stream else -1
+      if index != -1:
+        offset = start_byte + index
+        if self.indicator_at_beginning:
+          offset -= 1
+        self.offsets.append(offset)
+        start_byte += index + 1
+        self.current_offset = end_byte + 1
+
+        if not self.indicator_at_beginning:
+          index += 1
+
+        stream = stream[index:]
       else:
         self.current_offset = start_byte
     self.remainder = stream
