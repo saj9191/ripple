@@ -555,16 +555,13 @@ def file_count(bucket_name, params):
   return count
 
 
-def parse_logs(params, upload_timestamp, upload_duration, total_duration):
-  print("Parsing logs")
-  stats = []
-  stats.append(load_stats(upload_duration))
+
+def parse(stats, params):
+  count = 0
+  messages = []
   s3 = util.s3(params)
   log_bucket = s3.Bucket(params["log"])
   data_bucket = s3.Bucket(params["bucket"])
-  messages = []
-
-  count = 0
   for i in range(len(params["pipeline"])):
     done = False
     while not done:
@@ -588,6 +585,13 @@ def parse_logs(params, upload_timestamp, upload_duration, total_duration):
       "name": step["name"],
       "messages": messages
     })
+
+
+def parse_logs(params, upload_timestamp, upload_duration, total_duration):
+  print("Parsing logs")
+  stats = []
+  stats.append(load_stats(upload_duration))
+  parse(stats, params)
 
   stats.append({
     "name": "total",

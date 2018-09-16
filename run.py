@@ -7,6 +7,7 @@ import os
 import plot
 import re
 import setup
+import shutil
 import sys
 import time
 import util
@@ -256,6 +257,19 @@ def get_cost_stats(stats, folder, params):
   return costs
 
 
+def get_start_time(stats):
+  start_times = []
+  for pipeline in stats:
+    for i in range(len(pipeline)):
+      stat = pipeline[i]
+      name = stat["name"]
+      if name not in ["load", "total"]:
+        for message in stat["messages"]:
+          jmessage = json.loads(message)
+          start_times.append(jmessage["start_time"])
+  return min(start_times)
+
+
 def get_lambda_results(folder, params, concurrency=None):
   stats = []
   for subdir, dirs, files in os.walk(folder):
@@ -264,6 +278,7 @@ def get_lambda_results(folder, params, concurrency=None):
       s = json.load(open(file_name))["stats"]
       stats.append(s)
 
+  print("length", len(stats))
   memory = json.loads(open("json/memory.json").read())
   layers_to_duration = {}
   layers_to_cost = {}
@@ -276,15 +291,13 @@ def get_lambda_results(folder, params, concurrency=None):
   regions = {}
 
   average_duration = 0
+  start_time = get_start_time(stats)
   for pipeline in stats:
     result_regions = {}
-    start_time = None
-    timestamp = None
-    nonce = None
     duration = 0
     for i in range(len(pipeline)):
       stat = pipeline[i]
-      layer = i - 1
+      layer = i
       name = stat["name"]
       if name not in ["load", "total"]:
         if layer not in layers_to_duration:
@@ -300,15 +313,6 @@ def get_lambda_results(folder, params, concurrency=None):
 
         for message in stat["messages"]:
           jmessage = json.loads(message)
-          if layer == 0:
-            if start_time is None:
-              start_time = jmessage["start_time"]
-              timestamp = jmessage["timestamp"]
-              nonce = jmessage["nonce"]
-            else:
-              start_time = min(start_time, jmessage["start_time"])
-          assert(timestamp == jmessage["timestamp"])
-          assert(nonce == jmessage["nonce"])
           start = jmessage["start_time"] - start_time
           if util.is_set(jmessage, "found"):
             layers_to_warm_start[layer] += 1
@@ -317,7 +321,6 @@ def get_lambda_results(folder, params, concurrency=None):
           duration = max(duration, end)
           result_regions[layer][0] = min(result_regions[layer][0], start)
           result_regions[layer][1] = max(result_regions[layer][1], end)
-
           points.append([start, 1, layer])
           points.append([end, -1, layer])
           layers_to_duration[layer]["timestamp"] += jmessage["start_time"]
@@ -367,6 +370,7 @@ def get_lambda_results(folder, params, concurrency=None):
   for point in points:
     layer = point[2]
     layer_to_count[layer] += point[1]
+#    layer_to_x[0].append(point[0])
     layer_to_x[layer].append(point[0])
     count = 0
     for i in range(0, layer + 1):
@@ -374,6 +378,7 @@ def get_lambda_results(folder, params, concurrency=None):
     if concurrency is None:
       count = float(count) / len(stats)
     layer_to_y[layer].append(count)
+    #layer_to_y[0].append(count)
 
   average_duration /= len(stats)
   return [average_duration, layers_to_cost, regions, layer_to_x, layer_to_y]
@@ -417,13 +422,13 @@ def get_ec2_results(folder):
 
 
 def accumulation():
-  params = json.loads(open("json/dna-compression.json").read())
-  lambda_folder = "results/compression100"
-  ec2_folder = "results/methyl-ec2"
-  render("Methyl DNA Compression", "methyl_dna_compression", lambda_folder, ec2_folder, params, compare=False, concurrency=100)
+  params = json.loads(open("json/tide.json").read())
+  lambda_folder = "results/tide1000"
+  render("Tide", "tide", lambda_folder, "", params, concurrency=1000, absolute=False)
+#  render("Tide Uniform", "tide", "results/tide-uniform", "", params, compare=False, concurrency=100, absolute=True)
+#  render("Tide Uniform", "tide", "results/copy-tide-zipfian", "", params, compare=False, concurrency=100, absolute=True)
 
   return
-  params = json.loads(open("json/tide.json").read())
   lambda_folder = "results/test-tide100"
   ec2_folder = "results/tide-ec2"
   render("Tide", "tide", lambda_folder, ec2_folder, params, concurrency=100)
@@ -460,7 +465,7 @@ def accumulation():
   render("Smith Waterman", "ssw", lambda_folder, ec2_folder, params, compare=False, concurrency=None)
 
 
-def render(title, name, lambda_folder, ec2_folder, params, compare=True, concurrency=None):
+def render(title, name, lambda_folder, ec2_folder, params, compare=True, concurrency=None, absolute=False):
   [lambda_duration, ssw_lambda_cost, ssw_regions, ssw_x, ssw_y] = get_lambda_results(lambda_folder, params, concurrency)
   lambda_cost = sum(ssw_lambda_cost.values())
 
@@ -475,7 +480,8 @@ def render(title, name, lambda_folder, ec2_folder, params, compare=True, concurr
       params["pipeline"],
       "{0:s} Average Lambda Processes".format(title),
       plot_name,
-      lambda_folder
+      lambda_folder,
+      absolute
   )
   if not compare:
     return
@@ -553,7 +559,39 @@ def main():
     iterate(args.iterate, params)
 
 
+def move():
+  folder = "results/copy-tide-zipfian"
+  for subdir, dirs, files in os.walk(folder):
+    print(subdir, dirs, files)
+    if len(dirs) > 0 and "." in subdir:
+      for d in dirs:
+        if os.path.isdir(folder + "/" + d):
+          print("Sad", d)
+        else:
+          shutil.move(subdir + "/" + d, folder + "/" + d)
+    print("subdir", subdir)
+#    shutil.rmtree(subdir)
+
+def concurrency():
+  s3 = boto3.resource("s3")
+  bucket = s3.Bucket("shjoyner-log")
+  params = json.load(open("json/tide.json"))
+  for obj in bucket.objects.filter(Prefix="1/"):
+    stats = []
+    token = obj.key.split("/")[1]
+    parts = token.split("-")
+    params["now"] = float(parts[0])
+    params["nonce"] = int(parts[1])
+    benchmark.parse(stats, params)
+    dir_path = "results/{0:s}/{1:f}-{2:d}".format(params["folder"], params["now"], params["nonce"])
+    if not os.path.isdir(dir_path):
+      os.makedirs(dir_path)
+    with open("{0:s}/stats".format(dir_path), "w+") as f:
+      f.write(json.dumps({"stats": stats}, indent=4, sort_keys=True))
+
+
 if __name__ == "__main__":
-  #main()
-  comparison("Tide", "results/tide-files-lambda", "results/tide-files-ec2", json.load(open("json/ec2-tide.json")))
+#  concurrency()
+  main()
+  #comparison("Tide", "results/tide-files-lambda", "results/tide-files-ec2", json.load(open("json/ec2-tide.json")))
   #comparison("Smith Waterman", "results/ssw-files-lambda", "results/ssw-files-ec2", json.load(open("json/ec2-smith-waterman.json")))
