@@ -191,10 +191,10 @@ def run_tide(file_name, bucket):
   #species = identify_species(file_name)
   species = "normalHuman"
   fasta_dir = "{0:s}-index".format(species)
-  start_time = time.time()
+  st = time.time()
   tide_dir = tide(species, fasta_dir, file_name)
-  end_time = time.time()
-  print("TIDE DURATION: {0:f}".format(end_time - start_time))
+  et = time.time()
+  print("TIDE DURATION: {0:f}".format(et - st))
   upload_output("{0:s}/tide-search.txt".format(tide_dir), bucket)
   #per_dir = percolator(species, tide_dir)
 #  upload_output("{0:s}/percolator.target.psms.txt".format(per_dir))
