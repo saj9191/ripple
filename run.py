@@ -6,6 +6,7 @@ import math
 import os
 import plot
 import re
+import setup
 import sys
 import time
 import util
@@ -87,6 +88,11 @@ def trigger_plot(folder):
 
 
 def iterate(bucket_name, params):
+  [access_key, secret_key] = util.get_credentials(params["credential_profile"])
+  params["access_key"] = access_key
+  params["secret_key"] = secret_key
+  if params["model"] == "lambda":
+    setup.setup(params)
   s3 = boto3.resource("s3")
   bucket = s3.Bucket(bucket_name)
   folder = "results/{0:s}".format(params["folder"])
@@ -113,60 +119,62 @@ def iterate(bucket_name, params):
     benchmark.clear_buckets(params)
 
 
-def cost(folder, params):
-  layers_to_cost = {}
-  layers_to_count = {}
-  for i in range(len(params["pipeline"])):
-    layers_to_cost[str(i)] = 0
-    layers_to_count[str(i)] = 0
-
-  for subdir, dirs, files in os.walk(folder):
-    if len(files) > 0:
-      file_name = "{0:s}/deps".format(subdir)
-      if not os.path.isfile(file_name):
-        continue
-
-      deps = json.load(open(file_name))
-      for layer in deps["layers_to_cost"]:
-        layers_to_cost[layer] += deps["layers_to_cost"][layer]
-
-      for layer in deps["layers_to_count"]:
-        layers_to_count[layer] += deps["layers_to_count"][layer]
-
-  total = 0
-  for i in range(len(params["pipeline"])):
-    s = str(i)
-    layers_to_cost[s] = float(layers_to_cost[s]) / layers_to_count[s]
-    total += layers_to_cost[s]
-
-
-def comparison():
-  lambda_folder = "results/tide-files-lambda"
+def comparison(name, lambda_folder, ec2_folder, params):
   stats = []
-
-  duration_stats = {}
+  lambda_duration_stats = {}
+  lambda_cost_stats = {}
+  ec2_duration_stats = {}
+  ec2_cost_stats = {}
   for parent, folders, files in os.walk(lambda_folder):
     for folder in folders:
       f = "{0:s}/{1:s}".format(lambda_folder, folder)
+      stats = []
       for subparent, subdirs, files in os.walk(f):
         if len(subdirs) > 0:
-          stats = []
-          for subdir in subdirs:
-            file_name = "{0:s}/{1:s}/stats".format(f, subdir)
-            s = json.load(open(file_name))["stats"]
+          for d in subdirs:
+            s = json.load(open("{0:s}/{1:s}/stats".format(f, d)))["stats"]
             stats.append(s)
-          durations = get_duration_stats(stats)
-          duration_stats[folder] = durations
+          if len(stats) > 0:
+            lambda_duration_stats[folder] = get_duration_stats(stats)
+            lambda_cost_stats[folder] = get_cost_stats(stats, folder, params)
 
-  plot.duration_statistics(lambda_folder, duration_stats)
+  memory = json.loads(open("json/memory.json").read())
+  for parent, folders, files in os.walk(ec2_folder):
+    for folder in folders:
+      f = "{0:s}/{1:s}".format(ec2_folder, folder)
+      for subparent, subdirs, files in os.walk(f):
+        if len(subdirs) > 0:
+          durations = []
+          costs = []
+          for subdir in subdirs:
+            duration = json.load(open("{0:s}/{1:s}/stats".format(f, subdir)))["stats"][-2]["max_duration"] / 1000.0
+            costs.append((duration * memory["ec2"][params["ec2"]["type"]]) / 3600)
+            durations.append(duration)
+          ec2_duration_stats[folder] = durations
+          ec2_cost_stats[folder] = costs
+
+  lambda_duration = sum(list(map(lambda s: sum(s), lambda_duration_stats.values())))
+  lambda_count = sum(list(map(lambda s: len(s), lambda_duration_stats.values())))
+  lambda_cost = sum(list(map(lambda s: sum(s), lambda_cost_stats.values())))
+  ec2_duration = sum(list(map(lambda s: sum(s), ec2_duration_stats.values())))
+  ec2_count = sum(list(map(lambda s: len(s), ec2_duration_stats.values())))
+  ec2_cost = sum(list(map(lambda s: sum(s), ec2_cost_stats.values())))
+
+  print("Average Lambda Duration", lambda_duration / lambda_count)
+  print("Average Lambda Cost", lambda_cost / lambda_count)
+  print("Average EC2 Duration", ec2_duration / ec2_count)
+  print("Average EC2 Cost", ec2_cost / ec2_count)
+  plot.statistics(name, lambda_folder, lambda_duration_stats, ec2_duration_stats, "duration")
+  plot.statistics(name, lambda_folder, lambda_cost_stats, ec2_cost_stats, "cost")
 
 
 def get_duration_stats(stats):
   layers_to_duration = {}
   layers_to_count = {}
   regions = []
-  points = []
+  c = -1
   for pipeline in stats:
+    c += 1
     result_regions = {}
     start_time = None
     duration = 0
@@ -194,8 +202,6 @@ def get_duration_stats(stats):
           result_regions[layer][0] = min(result_regions[layer][0], start)
           result_regions[layer][1] = max(result_regions[layer][1], end)
 
-          points.append([start, 1, layer])
-          points.append([end, -1, layer])
           layers_to_duration[layer]["timestamp"] += jmessage["start_time"]
           layers_to_duration[layer]["duration"] += jmessage["duration"]
           layers_to_count[layer] += 1
@@ -209,6 +215,45 @@ def get_duration_stats(stats):
     durations.append(duration)
 
   return durations
+
+
+def get_cost_stats(stats, folder, params):
+  memory = json.loads(open("json/memory.json").read())
+  costs = list(map(lambda s: 0, stats))
+
+  for sindex in range(len(stats)):
+    pipeline = stats[sindex]
+    start_time = None
+    duration = 0
+    for i in range(len(pipeline)):
+      stat = pipeline[i]
+      layer = i - 1
+      name = stat["name"]
+      if name not in ["load", "total"]:
+        for message in stat["messages"]:
+          jmessage = json.loads(message)
+          if layer == 0:
+            if start_time is None:
+              start_time = jmessage["start_time"]
+            else:
+              start_time = min(start_time, jmessage["start_time"])
+          start = jmessage["start_time"] - start_time
+          end = start + math.ceil(jmessage["duration"] / 1000)
+          duration = max(duration, end)
+          function_name = params["pipeline"][layer]["name"]
+          memory_size = str(params["functions"][function_name]["memory_size"])
+          duration_cost = int(jmessage["duration"] / 100) * memory["lambda"][memory_size]
+          costs[sindex] += duration_cost
+          costs[sindex] += (jmessage["read_count"] / 1000) * 0.0004
+          costs[sindex] += (jmessage["write_count"] / 1000) * 0.005
+          costs[sindex] += (jmessage["list_count"] / 1000) * 0.005
+          costs[sindex] += (jmessage["byte_count"] / 1024 / 1024 / 1024) * 0.023
+        #    print(folder, "read count", jmessage["read_count"])
+        #    print(folder, "write count", jmessage["write_count"])
+        #    print(folder, "list count", jmessage["list_count"])
+        #    print(folder, "byte count", jmessage["byte_count"])
+
+  return costs
 
 
 def get_lambda_results(folder, params, concurrency=None):
@@ -303,16 +348,12 @@ def get_lambda_results(folder, params, concurrency=None):
     regions[layer][1] /= len(stats)
 
   average_cost = 0
-  print("durations", layers_to_duration)
-  print("count", layers_to_count)
   for layer in layers_to_duration:
     layers_to_duration[layer]["duration"] /= (layers_to_count[layer] * 1000)
     layers_to_duration[layer]["timestamp"] /= layers_to_count[layer]
     layers_to_warm_start[layer] /= layers_to_count[layer]
     layers_to_cost[layer] /= len(stats)
     average_cost += layers_to_cost[layer]
-
-  print("WARM START", layers_to_warm_start)
 
   points.sort()
   layer_to_count = {}
@@ -335,7 +376,6 @@ def get_lambda_results(folder, params, concurrency=None):
     layer_to_y[layer].append(count)
 
   average_duration /= len(stats)
-  print(average_duration)
   return [average_duration, layers_to_cost, regions, layer_to_x, layer_to_y]
 
 
@@ -423,11 +463,10 @@ def accumulation():
 def render(title, name, lambda_folder, ec2_folder, params, compare=True, concurrency=None):
   [lambda_duration, ssw_lambda_cost, ssw_regions, ssw_x, ssw_y] = get_lambda_results(lambda_folder, params, concurrency)
   lambda_cost = sum(ssw_lambda_cost.values())
-  print("Lambda duration", lambda_duration)
 
-  plot_name = "{name}_accumulation".format(name = name)
+  plot_name = "{name}_accumulation".format(name=name)
   if concurrency is not None:
-    plot_name = "{name}_{concurrency}".format(name = plot_name, concurrency = concurrency)
+    plot_name = "{name}_{concurrency}".format(name=plot_name, concurrency=concurrency)
 
   plot.accumulation_plot(
       ssw_x,
@@ -478,7 +517,6 @@ def regularize():
         elif type(ss) == list:
           assert(len(ss) == 1)
           stats.append(ss[0])
-      print("length", len(stats))
       assert(len(stats) == 10)
       if not os.path.isdir("results/test-tide100/{0:s}".format(d)):
         os.mkdir("results/test-tide100/{0:s}".format(d))
@@ -516,4 +554,6 @@ def main():
 
 
 if __name__ == "__main__":
-  main()
+  #main()
+  comparison("Tide", "results/tide-files-lambda", "results/tide-files-ec2", json.load(open("json/ec2-tide.json")))
+  #comparison("Smith Waterman", "results/ssw-files-lambda", "results/ssw-files-ec2", json.load(open("json/ec2-smith-waterman.json")))
