@@ -3,7 +3,7 @@
 	"model": "lambda",
 	"iterations": 10,
 	"region": "us-west-2",
-	"folder": "tide-files-lambda",
+	"folder": "tide-uniform",
 	"tag": "tide",
 	"timeout": 300,
 	"num_bins": 15,
@@ -32,7 +32,9 @@
 		"split-mzML": {
 			"file": "split_file",
 			"format": "mzML",
-			"memory_size": 128
+			"memory_size": 128,
+	    "split_size": 5000000,
+			"adjust": false
 		},
 		"find-mzML-pivots": {
 			"file": "pivot_file",

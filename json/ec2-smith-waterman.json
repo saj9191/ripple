@@ -1,20 +1,23 @@
 {
-	"input_name": "small.fasta",
+	"input_name": "input-1.fasta",
 	"model": "ec2",
 	"iterations": 10,
-	"folder": "ssw-ec2",
+	"folder": "ssw-files-ec2",
 	"region": "us-west-2",
 	"tag": "smith-waterman",
 	"storage_class": "STANDARD",
 	"timeout": 300,
-	"num_bins": 300,
-	"num_output": 300,
-	"log": "maccoss-ec2",
+	"num_bins": 10,
+	"num_output": 93,
+	"log": "maccoss-log",
 	"bucket": "maccoss-ec2",
 	"account": 999145429263,
 	"role": "service-role/lambdaFullAccessRole",
 	"stats": true,
 	"setup": true,
+	"sample_input": true,
+	"sample_bucket": "ssw-input",
+	"credential_profile": "maccoss",
 	"ec2": {
 		"application": "ssw",
 		"ami": "ami-09908e282013b16a4",
@@ -27,21 +30,10 @@
 		"wait_for_tests": false,
 		"use_ami": true
 	},
-	"dependencies": {
-		"common": [
-			"formats/iterator.py",
-			"formats/pivot.py",
-			"util.py"
-		],
-		"formats": {
-			"blast": [
-				"formats/blast.py"
-			]
-		}
-	},
 	"functions": {
 		"map-fasta": {
 			"file": "map",
+		  "map_bucket": "ssw-database",
 			"memory_size": 1024
 		},
 		"smith-waterman": {
@@ -49,35 +41,10 @@
 			"application": "ssw",
 			"memory_size": 1024,
 			"program_bucket": "ssw-program"
-		},
-		"find-blast-pivots": {
-			"file": "pivot_file",
-			"format": "blast",
-			"memory_size": 1024
-		},
-		"combine-blast-pivot-files": {
-			"file": "combine_files",
-			"format": "pivot",
-			"memory_size": 1024
-		}, 
-		"map-blast": {
-			"file": "map",
-			"memory_size": 1024
-		},
-		"sort-blast-chunk": {
-			"file": "sort",
-			"format": "blast",
-			"memory_size": 1024
-		}, 
-		"combine-blast-files": {
-			"file": "combine_files",
-			"format": "blast",
-			"memory_size": 1024
 		}
 	},
 	"pipeline": [{
 		"name": "map-fasta",
-		"map_bucket": "ssw-database",
 		"input_key_value": "key",
 		"bucket_key_value": "target", 
 		"output_function": "smith-waterman",
@@ -86,38 +53,5 @@
 	},
 	{
 		"name": "smith-waterman"
-	},
-	{
-		"name": "find-blast-pivots",
-		"batch_size": 4000,
-		"chunk_size": 1000000,
-		"identifier": "score",
-		"sort": true
-	},
-	{
-		"name": "combine-blast-pivot-files",
-		"sort": false
-	},
-	{
-		"name": "map-blast",
-		"map_bucket": "maccoss-ssw",
-		"map_hucket_key_prefix": "2",
-		"input_key_value": "pivots",
-		"bucket_key_value": "key", 
-		"output_function": "sort-blast-chunk",
-		"ranges": true
-	},
-	{
-		"name": "sort-blast-chunk",
-		"batch_size": 4000,
-		"chunk_size": 100000,
-		"identifier": "score"
-	},
-	{
-		"name": "combine-blast-files",
-		"batch_size": 100,
-		"chunk_size": 5000,
-		"identifier": "score",
-		"sort": true
 	}]
 }

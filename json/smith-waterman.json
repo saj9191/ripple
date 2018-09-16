@@ -1,26 +1,28 @@
 {
-	"input_name": "small.fasta",
+	"input_name": "input-1.fasta",
 	"model": "lambda",
-	"iterations": 1,
-	"folder": "small-ssw-concurrency200",
+	"iterations": 10,
+	"folder": "ssw-files-lambda",
 	"region": "us-west-2",
 	"tag": "smith-waterman",
 	"storage_class": "STANDARD",
 	"timeout": 300,
 	"num_bins": 10,
-	"num_output": 93,
+	"num_output": 596,
 	"log": "maccoss-log",
 	"bucket": "maccoss-ssw",
 	"account": 999145429263,
 	"role": "service-role/lambdaFullAccessRole",
 	"stats": true,
 	"setup": true,
+	"sample_input": true,
+	"sample_bucket": "ssw-input",
 	"credential_profile": "maccoss",
 	"functions": {
 		"map-fasta": {
 			"file": "map",
 		  "map_bucket": "ssw-database",
-			"memory_size": 1024
+			"memory_size": 128
 		},
 		"smith-waterman": {
 			"file": "application",
