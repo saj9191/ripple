@@ -122,17 +122,17 @@ def read(obj, start_byte, end_byte):
 
 
 def write(m, bucket, key, body, params):
-  global WRITE_COUNT
   print_write(m, key, params)
   s3 = boto3.resource("s3")
   done = False
   while not done:
     try:
-      WRITE_COUNT += 1
+      params["write_count"] += 1
       s3.Object(bucket, key).put(Body=body, StorageClass=params["storage_class"])
       done = True
     except botocore.exceptions.ClientError as e:
-      time.sleep(random.randint(0, 10))
+      print("ERROR: RATE LIMIT")
+      time.sleep(random.randint(1, 10))
 
 
 def object_exists(bucket_name, key):
@@ -220,8 +220,11 @@ def current_last_file(bucket_name, current_key):
 
 
 def lambda_setup(event, context):
-  global START_TIME
-  global FOUND
+  global START_TIME, FOUND, READ_COUNT, BYTE_COUNT, FOUND, LIST_COUNT
+  READ_COUNT = 0
+  LIST_COUNT = 0
+  BYTE_COUNT = 0
+  FOUND = False
   START_TIME = time.time()
   if os.path.isfile("/tmp/warm"):
     FOUND = True
@@ -237,6 +240,7 @@ def lambda_setup(event, context):
     prefix = key_fields["prefix"]
 
   params = json.loads(open("{0:d}.json".format(prefix)).read())
+  params["write_count"] = 0
   params["prefix"] = prefix
   params["token"] = random.randint(1, 100*1000*1000)
   params["request_id"] = context.aws_request_id
@@ -257,9 +261,8 @@ def lambda_setup(event, context):
 
 def show_duration(context, m, p):
   global READ_COUNT
-  global WRITE_COUNT
   READ_COUNT += 1
-  WRITE_COUNT += 1
+  p["write_count"] += 1
 
   msg = "STEP {0:d} TOKEN {1:d} READ COUNT {2:d} WRITE COUNT {3:d} LIST COUNT {4:d} BYTE COUNT {5:d}\n"
   msg = msg.format(m["prefix"], p["token"], READ_COUNT, WRITE_COUNT, LIST_COUNT, BYTE_COUNT)
@@ -272,7 +275,7 @@ def show_duration(context, m, p):
   log_results = {
     "start_time": START_TIME,
     "read_count": READ_COUNT,
-    "write_count": WRITE_COUNT,
+    "write_count": p["write_count"],
     "list_count": LIST_COUNT,
     "byte_count": BYTE_COUNT,
     "duration": duration,
