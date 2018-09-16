@@ -1,3 +1,4 @@
+import boto3
 import json
 import matplotlib
 import numpy as np
@@ -203,7 +204,7 @@ def accumulation_plot(x, y, regions, pipeline, title, plot_name, folder):
   plt.ylabel("Number of Lambda Processes", size=font_size)
 
   ax2 = plt.subplot2grid((rows, 1), (rows - 1, 0))
-  line_width = 4.0
+  line_width = 5.0
   for layer in regions.keys():
     y = 0.4 * (layer % 3)
     color = colors[layer % len(colors)]
@@ -252,15 +253,47 @@ def comparison(name, title, lambda_result, ec2_result, ylabel, params={}):
   plt.close()
 
 
-def duration_statistics(folder, lambda_stats):
-  fig = plt.figure()
-  ax = fig.add_subplot(1, 1, 1)
-  y = lambda_stats.values()
-  ax.boxplot(y, whis="range")
+def statistics(name, folder, lambda_stats, ec2_stats, ty):
+  fig, ax = plt.subplots()
+  s3 = boto3.resource("s3")
+  bucket = "ssw-input" if name == "Smith Waterman" else "shjoyner-als"
+  keys = sorted(lambda_stats.keys(), key=lambda k: s3.Object(bucket, k).content_length)
+  ec2_y = []
+  ec2_color = "blue"
+  lambda_y = []
+  lambda_color = "red"
 
-  plot_name = "{0:s}/box_plot.png".format(folder)
-  plt.ylabel("Runtime (seconds)")
-  print(plot_name)
+  count = 0
+
+  def error(x, durations, color):
+    length = 0.1
+    min_y = min(durations)
+    max_y = max(durations)
+    ax.plot([x - length, x + length], [min_y, min_y], color=color)
+    ax.plot([x - length, x + length], [max_y, max_y], color=color)
+    ax.plot([x, x], [min_y, max_y], color=color)
+
+  width = 0.35
+  for key in keys:
+    if key in ec2_stats:
+      ec2_y.append(sum(ec2_stats[key]) / len(ec2_stats[key]))
+      error(count + width, ec2_stats[key], "black")
+      lambda_y.append(sum(lambda_stats[key]) / len(lambda_stats[key]))
+      error(count, lambda_stats[key], "black")
+      count += 1
+
+  ind = np.arange(len(lambda_y))
+  lambda_bars = ax.bar(ind, lambda_y, width, color=lambda_color)
+  ec2_bars = ax.bar(ind + width, ec2_y, width, color=ec2_color)
+  ax.legend((lambda_bars[0], ec2_bars[0]), ("Lambda", "EC2"))
+  ax.set_xticks([])
+
+  plot_name = "{0:s}/{1:s}_box_plot.png".format(folder, ty)
+  if ty == "duration":
+    plt.ylabel("Runtime (Seconds)")
+  else:
+    plt.ylabel("Cost ($)")
+  plt.title(name)
   fig.savefig(plot_name)
   print("Box plot", plot_name)
   plt.close()
