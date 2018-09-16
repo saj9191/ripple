@@ -25,6 +25,7 @@ class Iterator:
     self.current_offset = 0
     self.content_length = obj.content_length
     self.indicator_at_beginning = False
+    self.offsets = []
 
   def __setup__(self, offsets):
     if len(offsets) != 0 and len(offsets["offsets"]) != 0:

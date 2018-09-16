@@ -1,4 +1,5 @@
 import boto3
+import importlib
 import json
 import pivot
 import util
@@ -55,13 +56,22 @@ def split_file(bucket_name, key, input_format, output_format, offsets, params):
 
   more = True
   file_id = params["file_id"] - 1 if "file_id" in params else 0
+  if not util.is_set(params, "adjust"):
+    format_lib = importlib.import_module(params["format"])
+    iterator_class = getattr(format_lib, "Iterator")
+    iterator = iterator_class(obj, params["batch_size"], params["chunk_size"], offsets)
+
   while more:
     file_id += 1
-    offsets = {
-      "offsets": [(file_id - 1) * split_size, min(obj.content_length, (file_id) * split_size) - 1],
-      "adjust": True,
-    }
-    more = (offsets["offsets"][-1] != (obj.content_length - 1))
+    if util.is_set(params, "adjust"):
+      offsets = {
+        "offsets": [(file_id - 1) * split_size, min(obj.content_length, (file_id) * split_size) - 1],
+        "adjust": True,
+      }
+      more = (offsets["offsets"][-1] != (obj.content_length - 1))
+    else:
+      offsets, more = iterator.nextOffsets()
+
     payload = create_payload(input_bucket, input_key, offsets, params["token"], output_format["prefix"], file_id, more)
 
     s3_params = payload["Records"][0]["s3"]

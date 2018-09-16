@@ -14,7 +14,7 @@ import split_file
 sys.path.insert(0, parentdir + "/formats")
 
 content = "A B C\nD E F\nG H I\nJ K L\nM N O\nP Q R\n"
-object1 = Object("0/123.400000-13/1/1-0-suffix.methyl", content)
+object1 = Object("0/123.400000-13/1/1-0-suffix.new_line", content)
 bucket1 = Bucket("bucket1", [object1])
 log = Bucket("log", [])
 input_format = util.parse_file_name(object1.name)
@@ -28,12 +28,13 @@ params = {
   "batch_size": 3,
   "chunk_size": 20,
   "token": 45,
-  "format": "methyl",
+  "format": "new_line",
   "output_function": "an-output-function",
   "bucket_format": dict(input_format),
   "file": "split_file",
   "log": "log",
   "split_size": 20,
+  "adjust": True,
 }
 
 
