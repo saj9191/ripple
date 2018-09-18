@@ -41,13 +41,15 @@ FILE_FORMAT = [{
 
 LOG_NAME = "/tmp/log.txt"
 
-
+READ_BYTE_COUNT = 0
 READ_COUNT = 0
 LIST_COUNT = 0
 WRITE_COUNT = 0
-BYTE_COUNT = 0
 START_TIME = None
 FOUND = False
+DOWNLOAD_TIME = 0
+LIST_TIME = 0
+UPLOAD_TIME = 0
 
 
 def check_output(command):
@@ -77,20 +79,25 @@ def s3(params):
 
 
 def download(bucket, file):
-  global BYTE_COUNT
+  global READ_BYTE_COUNT
+  global DOWNLOAD_TIME
   s3 = boto3.resource("s3")
   bucket = s3.Bucket(bucket)
 
   name = file.split("/")[-1]
   path = "/tmp/{0:s}".format(name)
   with open(path, "wb") as f:
+    st = time.time()
     bucket.download_fileobj(file, f)
-    BYTE_COUNT += f.tell()
+    et = time.time()
+    DOWNLOAD_TIME += (et - st)
+    READ_BYTE_COUNT += f.tell()
   return path
 
 
 def get_objects(bucket_name, prefix=None, params={}):
   global LIST_COUNT
+  global LIST_TIME
   LIST_COUNT += 1
   if "s3" in params and params["s3"]:
     s3 = params["s3"]
@@ -100,15 +107,19 @@ def get_objects(bucket_name, prefix=None, params={}):
   found = False
   while not found:
     try:
+      st = time.time()
       if prefix is None:
         objects = bucket.objects.all()
       else:
         objects = bucket.objects.filter(Prefix=prefix)
+      et = time.time()
+      LIST_TIME += (et - st)
       objects = list(objects)
       found = True
     except Exception as e:
       print("ERROR, util.get_objects", e)
       found = False
+      time.sleep(1)
 
   return objects
 
@@ -116,19 +127,28 @@ def get_objects(bucket_name, prefix=None, params={}):
 def read(obj, start_byte, end_byte):
   global READ_COUNT
   READ_COUNT += 1
-  global BYTE_COUNT
-  BYTE_COUNT += (end_byte - start_byte)
-  return obj.get(Range="bytes={0:d}-{1:d}".format(start_byte, end_byte))["Body"].read().decode("utf-8")
+  global READ_BYTE_COUNT
+  global DOWNLOAD_TIME
+  READ_BYTE_COUNT += (end_byte - start_byte)
+  st = time.time()
+  content = obj.get(Range="bytes={0:d}-{1:d}".format(start_byte, end_byte))["Body"].read()
+  et = time.time()
+  DOWNLOAD_TIME += (et - st)
+  return content.decode("utf-8")
 
 
 def write(m, bucket, key, body, params):
+  global UPLOAD_TIME
   print_write(m, key, params)
   s3 = boto3.resource("s3")
   done = False
   while not done:
     try:
       params["write_count"] += 1
+      st = time.time()
       s3.Object(bucket, key).put(Body=body, StorageClass=params["storage_class"])
+      et = time.time()
+      UPLOAD_TIME += (et - st)
       done = True
     except botocore.exceptions.ClientError as e:
       print("ERROR: RATE LIMIT")
@@ -220,10 +240,10 @@ def current_last_file(bucket_name, current_key):
 
 
 def lambda_setup(event, context):
-  global START_TIME, FOUND, READ_COUNT, BYTE_COUNT, FOUND, LIST_COUNT
+  global START_TIME, FOUND, READ_COUNT, READ_BYTE_COUNT, FOUND, LIST_COUNT
   READ_COUNT = 0
   LIST_COUNT = 0
-  BYTE_COUNT = 0
+  READ_BYTE_COUNT = 0
   FOUND = False
   START_TIME = time.time()
   if os.path.isfile("/tmp/warm"):
@@ -264,8 +284,8 @@ def show_duration(context, m, p):
   READ_COUNT += 1
   p["write_count"] += 1
 
-  msg = "STEP {0:d} TOKEN {1:d} READ COUNT {2:d} WRITE COUNT {3:d} LIST COUNT {4:d} BYTE COUNT {5:d}\n"
-  msg = msg.format(m["prefix"], p["token"], READ_COUNT, WRITE_COUNT, LIST_COUNT, BYTE_COUNT)
+  msg = "STEP {0:d} TOKEN {1:d} READ COUNT {2:d} WRITE COUNT {3:d} LIST COUNT {4:d} READ BYTE COUNT {5:d}\n"
+  msg = msg.format(m["prefix"], p["token"], READ_COUNT, WRITE_COUNT, LIST_COUNT, READ_BYTE_COUNT)
   print(msg)
   duration = p["timeout"] * 1000 - context.get_remaining_time_in_millis()
   msg = "{8:f} - TIMESTAMP {0:f} NONCE {1:d} STEP {2:d} BIN {3:d} FILE {4:d} REQUEST ID {5:s} TOKEN {6:d} DURATION {7:d}"
@@ -277,8 +297,11 @@ def show_duration(context, m, p):
     "read_count": READ_COUNT,
     "write_count": p["write_count"],
     "list_count": LIST_COUNT,
-    "byte_count": BYTE_COUNT,
+    "read_byte_count": READ_BYTE_COUNT,
     "duration": duration,
+    "download_time": DOWNLOAD_TIME,
+    "list_time": LIST_TIME,
+    "upload_time": UPLOAD_TIME,
     "found": FOUND,
   }
   log_results = {**p, **m, **log_results}
