@@ -1,17 +1,17 @@
 {
-	"input_name": "ENCFF369TZO.bed",
+	"input_name": "methyl-2.bed",
 	"sample_bucket": "maccoss-methyl-data",
 	"sample_input": true,
 	"model": "lambda",
 	"iterations": 10,
 	"region": "us-west-2",
-	"folder": "methyl-lambda",
+	"folder": "methyl-file-lambda",
 	"num_output": 144,
 	"timeout": 300,
 	"tag": "dna-compression",
 	"bucket": "maccoss-methyl",
 	"storage_class": "STANDARD",
-	"log": "maccoss-log",
+	"log": "maccoss-methyl-log",
 	"num_bins": 1,
 	"account": 999145429263,
 	"role": "service-role/lambdaFullAccessRole",
@@ -22,7 +22,10 @@
 		"split-methyl": {
 			"file": "split_file",
 			"format": "new_line",
-			"memory_size": 1024
+			"batch_size": 1000,
+			"chunk_size": 1000000,
+			"memory_size": 1024,
+			"adjust": true
 		},
 		"compress-methyl": {
 			"file": "application",

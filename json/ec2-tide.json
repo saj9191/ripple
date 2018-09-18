@@ -3,7 +3,7 @@
 	"model": "ec2",
 	"iterations": 10,
 	"region": "us-west-2",
-	"folder": "tide-files-ec2",
+	"folder": "tide-uniform-ec2",
 	"tag": "tide",
 	"timeout": 300,
 	"num_bins": 15,

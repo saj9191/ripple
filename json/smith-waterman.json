@@ -2,7 +2,7 @@
 	"input_name": "input-1.fasta",
 	"model": "lambda",
 	"iterations": 1,
-	"folder": "ssw1000",
+	"folder": "ssw100",
 	"region": "us-west-2",
 	"tag": "smith-waterman",
 	"storage_class": "STANDARD",
