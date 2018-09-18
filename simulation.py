@@ -5,7 +5,6 @@ from dateutil import parser
 import json
 import numpy as np
 import os
-import plot
 import random
 from scipy import special
 import setup
@@ -18,8 +17,10 @@ DATE_INDEX = 6
 BINS = 60 * 60
 
 
+lock = threading.Lock()
+
 class Request(threading.Thread):
-  def __init__(self, thread_id, time, file_name, params):
+  def __init__(self, thread_id, time, file_name, params, client=None):
     super(Request, self).__init__()
     self.time = time
     self.file_name = file_name
@@ -29,16 +30,43 @@ class Request(threading.Thread):
     self.upload_duration = 0
     self.failed_attempts = 0
     self.alive = True
+    self.params["input_name"] = self.file_name
+    self.params["input_bucket"] = self.params["bucket"]
+    self.client = client
+    self.params["nonce"] = thread_id
 
   def run(self):
     time.sleep(self.time)
-    for i in range(2):
+    if self.params["model"] == "ec2":
+      benchmark.upload_input(self.params)[1]
+      lock.acquire()
+      stats = benchmark.run_ec2_script(self.client, self.params)
+      lock.release()
+    else:
       self.params["input_name"] = self.file_name
       self.params["input_bucket"] = self.params["bucket"]
       benchmark.process_params(self.params)
       benchmark.process_iteration_params(self.params, 1)
       print("Thread {0:d}: Processing file {1:s}".format(self.thread_id, self.file_name))
       benchmark.upload_input(self.params, self.thread_id)
+      [upload_duration, duration, failed_attempts] = benchmark.run(self.params, self.thread_id)
+      self.upload_duration = upload_duration
+      self.duration = duration
+      self.failed_attempts = failed_attempts
+      print("Thread {0:d}: Done in {1:f}".format(self.thread_id, duration))
+      msg = "Thread {0:d}: Upload Duration {1:f}. Duration {2:f}. Failed Attempts {3:f}"
+      msg = msg.format(self.thread_id, self.upload_duration, self.duration, self.failed_attempts)
+      print(msg)
+      stats = benchmark.parse_logs(self.params, self.params["now"] * 1000, self.upload_duration, self.duration)
+      benchmark.clear_buckets(self.params)
+
+#    for i in range(2):
+#      self.params["input_name"] = self.file_name
+#      self.params["input_bucket"] = self.params["bucket"]
+#      benchmark.process_params(self.params)
+#      benchmark.process_iteration_params(self.params, 1)
+#      print("Thread {0:d}: Processing file {1:s}".format(self.thread_id, self.file_name))
+#      benchmark.upload_input(self.params, self.thread_id)
 #    [upload_duration, duration, failed_attempts] = benchmark.run(self.params, self.thread_id)
 #    self.upload_duration = upload_duration
 #    self.duration = duration
@@ -48,11 +76,11 @@ class Request(threading.Thread):
 #    msg = msg.format(self.thread_id, self.upload_duration, self.duration, self.failed_attempts)
 #    print(msg)
 #    stats = benchmark.parse_logs(self.params, self.params["now"] * 1000, self.upload_duration, self.duration)
-#    dir_path = "results/{0:s}/{1:f}-{2:d}".format(self.params["folder"], self.params["now"], self.params["nonce"])
-#    os.makedirs(dir_path)
-#    with open("{0:s}/stats".format(dir_path), "w+") as f:
-#      f.write(json.dumps({"stats": stats}, indent=4, sort_keys=True))
-#    benchmark.clear_buckets(self.params)
+    dir_path = "results/{0:s}/{1:f}-{2:d}".format(self.params["folder"], self.params["now"], self.params["nonce"])
+    os.makedirs(dir_path)
+    with open("{0:s}/stats".format(dir_path), "w+") as f:
+      f.write(json.dumps({"stats": stats}, indent=4, sort_keys=True))
+
     self.alive = False
 
 
@@ -128,6 +156,16 @@ def run(args, params):
 
   setup.setup(params)
   requests = create_request_distribution(args.distribution, args)
+  client = None
+  if params["model"] == "ec2":
+    benchmark.process_params(params)
+    benchmark.process_iteration_params(params, 1)
+    create_stats = benchmark.create_instance(params)
+    instance = create_stats["instance"]
+    ec2 = create_stats["ec2"]
+    initiate_stats = benchmark.initiate_instance(ec2, instance, params)
+    client = initiate_stats["client"]
+    benchmark.setup_instance(client, params)
 
   i = 0
   time_delta = 100
@@ -139,7 +177,7 @@ def run(args, params):
     requests = list(filter(lambda r: r - current_time >= time_delta, requests))
     print("current", current_requests)
     for request in current_requests:
-      thread = Request(i, request - current_time, file_names[i % len(file_names)], params)
+      thread = Request(i, request - current_time, file_names[i % len(file_names)], params, client)
       threads.append(thread)
       thread.start()
       i += 1
@@ -153,6 +191,9 @@ def run(args, params):
   while len(threads) > 0:
     threads = list(filter(lambda t: t.alive, threads))
     time.sleep(10)
+
+  if params["model"] == "ec2":
+    benchmark.terminate_instance(instance, client, params)
 
 
 def main():
