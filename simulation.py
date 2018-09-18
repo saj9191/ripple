@@ -110,9 +110,12 @@ def create_request_distribution(distribution, args):
   max_concurrency = 200
   time_range = 60 * 60  # 1 hour
   requests = []
-  interval = 7 * 60  # Request every 60 seconds
-  num_intervals = 10  # int((time_range + interval) / interval)
-  print("num intervals", num_intervals)
+  if distribution in ["uniform", "zipfian"]:
+    interval = 60  # Request every 60 seconds
+    num_intervals = 10
+  else:
+    interval = 7 * 60
+    num_intervals = int((time_range + interval) / interval)
 
   if distribution == "uniform":
     num_requests = 1
@@ -123,7 +126,6 @@ def create_request_distribution(distribution, args):
     x = np.arange(1, num_intervals + 1)
     a = 2.
     y = x**(-a) / special.zetac(a) * max_concurrency
-    print(y)
     y = list(map(lambda i: int(i), list(y)))
     random.shuffle(y)
     for i in range(len(y)):
@@ -154,7 +156,8 @@ def run(args, params):
   with open("results/{0:s}/params".format(folder), "w+") as f:
     f.write(json.dumps(params, indent=4, sort_keys=True))
 
-  setup.setup(params)
+  if params["model"] == "lambda":
+    setup.setup(params)
   requests = create_request_distribution(args.distribution, args)
   client = None
   if params["model"] == "ec2":
