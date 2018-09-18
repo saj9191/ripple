@@ -766,13 +766,14 @@ def run_ec2_script(client, params):
   print(stdout)
   duration = end_time - start_time
 
-  regex = re.compile("([0-9\.]+ ([A-Z]+) DURATION: ([0-9\.]+)")
+  regex = re.compile("([0-9\.]+) ([A-Z]+) DURATION: ([0-9\.]+)")
   lines = stdout.split("\n")
   stats = []
   for line in lines:
     m = regex.search(line)
     if m:
       duration = float(m.group(3))
+      end_time = float(m.group(1))
       milliseconds = duration * 1000
       stats.append({
         "billed_duration": [milliseconds],
@@ -780,7 +781,7 @@ def run_ec2_script(client, params):
         "max_duration": milliseconds,
         "memory_used": 0,
         "name": m.group(2).lower(),
-        "end_time": float(m.group(1)),
+        "end_time": end_time,
       })
 
   return stats
