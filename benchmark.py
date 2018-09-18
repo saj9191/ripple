@@ -620,7 +620,6 @@ def create_instance(params):
     ami = params["ec2"]["ami"]
 
   start_time = time.time()
-  print("Creating")
   instances = ec2.create_instances(
     BlockDeviceMappings=[{
       "DeviceName": "/dev/sda1",
@@ -648,7 +647,6 @@ def create_instance(params):
   )
   assert(len(instances) == 1)
   instance = instances[0]
-  print("Waiting for instance to initiate.")
   instance.wait_until_running()
   end_time = time.time()
   duration = end_time - start_time
@@ -689,11 +687,9 @@ def connect(instance, params):
 
 
 def initiate_instance(ec2, instance, params):
-  print("Connecting to EC2 instance.")
   start_time = time.time()
 
   if params["ec2"]["wait_for_tests"]:
-    print("Wait for status checks.")
     instance_status = list(ec2.meta.client.describe_instance_status(InstanceIds=[instance.id])["InstanceStatuses"])[0]
     while instance_status["InstanceStatus"]["Details"][0]["Status"] == "initializing":
       instance_status = list(ec2.meta.client.describe_instance_status(InstanceIds=[instance.id])["InstanceStatuses"])[0]
@@ -712,7 +708,6 @@ def initiate_instance(ec2, instance, params):
 
 
 def setup_instance(client, p):
-  print("Setting up EC2 instance.")
   start_time = time.time()
   sftp = client.open_sftp()
   items = ["formats/iterator.py", "formats/mzML.py", "ec2_script.py", "util.py"]
@@ -723,7 +718,6 @@ def setup_instance(client, p):
   else:
     program = "crux"
 
-  print("program", program)
   if not p["ec2"]["use_ami"]:
     cexec(client, "sudo apt-get update -y")
     time.sleep(3)
