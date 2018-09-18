@@ -10,7 +10,6 @@ import threading
 import time
 import util
 
-
 class SpeciesRequest(threading.Thread):
   def __init__(self, thread_id, file_name, species, queue):
     assert(file_name is not None)
@@ -123,7 +122,7 @@ def percolator(species, tide_dir):
 
   subprocess.call("./crux percolator {0:s} {1:s} > tmp".format(file_name, " ".join(arguments)), shell=True)
   end_time = time.time()
-  print("PERCOLATOR DURATION: {0:f}".format(end_time - start_time))
+  print("{0:f} PERCOLATOR DURATION: {1:f}".format(time.time(), end_time - start_time))
   return output_dir
 
 
@@ -159,7 +158,7 @@ def identify_species(file_name):
       shutil.rmtree("{0:s}-index".format(species))
 
   end_time = time.time()
-  print("IDENTIFY DURATION: {0:f}".format(end_time - start_time))
+  print("{0:f} IDENTIFY DURATION: {1:f}".format(time.time(), end_time - start_time))
   return best_species
 
 
@@ -170,7 +169,7 @@ def download_input(file_name, bucket):
   with open(file_name, "wb") as f:
     bucket.download_fileobj(file_name, f)
   end_time = time.time()
-  print("DOWNLOAD DURATION: {0:f}".format(end_time - start_time))
+  print("{0:f} DOWNLOAD DURATION: {1:f}".format(time.time(), end_time - start_time))
 
 
 def upload_output(file_name, bucket):
@@ -179,14 +178,14 @@ def upload_output(file_name, bucket):
   tc = boto3.s3.transfer.TransferConfig()
   t = boto3.s3.transfer.S3Transfer(client=client, config=tc)
   t.upload_file(file_name, bucket, file_name)
-#  s3.Object(bucket, file_name).put(Body=open(file_name, "rb"))
   end_time = time.time()
-  print("UPLOAD DURATION: {0:f}".format(end_time - start_time))
+  print("{0:f} UPLOAD DURATION: {1:f}".format(time.time(), end_time - start_time))
 
 
 def run_tide(file_name, bucket):
   start_time = time.time()
-  os.remove("TN_CSF_062617_01.mzML")
+  if os.path.isfile("TN_CSF_062617_01.mzML"):
+    os.remove("TN_CSF_062617_01.mzML")
   download_input(file_name, bucket)
   #species = identify_species(file_name)
   species = "normalHuman"
@@ -194,12 +193,10 @@ def run_tide(file_name, bucket):
   st = time.time()
   tide_dir = tide(species, fasta_dir, file_name)
   et = time.time()
-  print("TIDE DURATION: {0:f}".format(et - st))
+  print("{0:f} TIDE DURATION: {1:f}".format(time.time(), et - st))
   upload_output("{0:s}/tide-search.txt".format(tide_dir), bucket)
-  #per_dir = percolator(species, tide_dir)
-#  upload_output("{0:s}/percolator.target.psms.txt".format(per_dir))
   end_time = time.time()
-  print("TOTAL DURATION: {0:f}".format(end_time - start_time))
+  print("{0:f} TOTAL DURATION: {1:f}".format(time.time(), end_time - start_time))
 
 
 def ssw_test(file_name):
@@ -208,7 +205,7 @@ def ssw_test(file_name):
   cmd = "./ssw_test -p uniprot-all.fasta {0:s} > {1:s}".format(file_name, output_file)
   subprocess.call(cmd, shell=True)
   end_time = time.time()
-  print("SSW DURATION: {0:f}".format(end_time - start_time))
+  print("{0:f} SSW DURATION: {1:f}".format(time.time(), end_time - start_time))
   return output_file
 
 
@@ -218,13 +215,13 @@ def run_ssw(file_name, bucket):
   output_file = ssw_test(file_name)
   upload_output(output_file, bucket)
   end_time = time.time()
-  print("TOTAL DURATION: {0:f}".format(end_time - start_time))
+  print("{0:f} TOTAL DURATION: {1:f}".format(time.time(), end_time - start_time))
 
 
 def run_methyl(file_name, bucket):
   s3 = boto3.resource("s3")
   start_time = time.time()
-  download_input(file_name, bucket)
+  download_input(file_name, "maccoss-methyl-data")
   input_name = "/tmp/input"
   output_dir = "compressed"
   os.rename(file_name, input_name)
@@ -232,7 +229,7 @@ def run_methyl(file_name, bucket):
   st = time.time()
   subprocess.call(cmd, shell=True)
   et = time.time()
-  print("COMPRESS DURATION: {0:f}".format(et - st))
+  print("{0:f} COMPRESS DURATION: {1:f}".format(time.time(), et - st))
 
   st = time.time()
   compressed_dir = "{0:s}/compressed_input".format(output_dir)
@@ -245,17 +242,17 @@ def run_methyl(file_name, bucket):
       file_name = "{0:s}/{1:s}".format(compressed_dir, f)
       s3.Object(bucket, f).put(Body=open(file_name, "rb"))
   et = time.time()
-  print("CUPLOAD DURATION: {0:f}".format(et - st))
+  print("{0:f} CUPLOAD DURATION: {1:f}".format(time.time(), et - st))
 
   output_dir = "decompressed"
   cmd = "./output decompress {0:s}/{1:s} {2:s}".format(compressed_dir, decompress_input, output_dir)
   st = time.time()
   subprocess.call(cmd, shell=True)
   et = time.time()
-  print("DECOMPRESS DURATION: {0:f}".format(et - st))
+  print("{0:f} DECOMPRESS DURATION: {1:f}".format(time.time(), et - st))
   upload_output("{0:s}/reconstructed_input-0".format(output_dir), bucket)
   end_time = time.time()
-  print("METHYL DURATION: {0:f}".format(end_time - start_time))
+  print("{0:f} METHYL DURATION: {1:f}".format(time.time(), end_time - start_time))
 
 
 def main():

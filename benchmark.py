@@ -114,27 +114,8 @@ def upload_input(p, thread_id=0):
   key = p["key"]
 
   start = time.time()
-  if util.is_set(p, "trigger"):
-    client = util.setup_client("lambda", p)
-    payload = {
-      "Records": [{
-        "s3": {
-          "bucket": {
-            "name": p["bucket"],
-          },
-          "object": {
-            "key": p["input_name"],
-          }
-        }
-      }]
-    }
-    client.invoke(
-      FunctionName=p["pipeline"][0]["name"],
-      InvocationType="Event",
-      Payload=json.JSONEncoder().encode(payload)
-    )
-
-  elif util.is_set(p, "sample_input"):
+  print("sampel input", util.is_set(p, "sample_input"))
+  if util.is_set(p, "sample_input"):
     config = boto3.s3.transfer.TransferConfig(multipart_threshold=1024*25, max_concurrency=2,
                                               multipart_chunksize=1024*25, use_threads=False)
     copy_source = {
@@ -165,6 +146,7 @@ def upload_input(p, thread_id=0):
 
 def load_stats(upload_duration):
   return {
+    "start_time": time.time(),
     "name": "load",
     "billed_duration": [upload_duration],
     "max_duration": upload_duration,
@@ -623,6 +605,7 @@ def lambda_benchmark(params, thread_id):
 def calculate_results(duration, cost):
   milliseconds = duration * 1000
   return {
+    "start_time": time.time(),
     "billed_duration": milliseconds,
     "cost": (float(duration) * cost) / 60,
     "max_duration": milliseconds,
@@ -790,20 +773,21 @@ def run_ec2_script(client, params):
   print(stdout)
   duration = end_time - start_time
 
-  regex = re.compile("([A-Z]+) DURATION: ([0-9\.]+)")
+  regex = re.compile("([0-9\.]+ ([A-Z]+) DURATION: ([0-9\.]+)")
   lines = stdout.split("\n")
   stats = []
   for line in lines:
     m = regex.search(line)
     if m:
-      duration = float(m.group(2))
+      duration = float(m.group(3))
       milliseconds = duration * 1000
       stats.append({
         "billed_duration": [milliseconds],
         "cost": duration * MEMORY_PARAMETERS["ec2"][params["ec2"]["type"]],
         "max_duration": milliseconds,
         "memory_used": 0,
-        "name": m.group(1).lower()
+        "name": m.group(2).lower(),
+        "end_time": float(m.group(1)),
       })
 
   return stats
@@ -842,10 +826,7 @@ def terminate_instance(instance, client, params):
 def ec2_benchmark(params):
   print("EC2 benchmark")
   start_time = time.time()
-  if not util.is_set(params, "trigger"):
-    upload_duration = upload_input(params)[1]
-  else:
-    upload_duration = 0
+  upload_duration = upload_input(params)[1]
 
   stats = []
   stats.append(load_stats(upload_duration))
