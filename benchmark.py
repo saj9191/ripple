@@ -114,7 +114,6 @@ def upload_input(p, thread_id=0):
   key = p["key"]
 
   start = time.time()
-  print("sampel input", util.is_set(p, "sample_input"))
   if util.is_set(p, "sample_input"):
     config = boto3.s3.transfer.TransferConfig(multipart_threshold=1024*25, max_concurrency=2,
                                               multipart_chunksize=1024*25, use_threads=False)

@@ -172,14 +172,14 @@ def download_input(file_name, bucket):
   print("{0:f} DOWNLOAD DURATION: {1:f}".format(time.time(), end_time - start_time))
 
 
-def upload_output(file_name, bucket):
+def upload_output(file_name, bucket, prefix=""):
   start_time = time.time()
   client = boto3.client("s3")
   tc = boto3.s3.transfer.TransferConfig()
   t = boto3.s3.transfer.S3Transfer(client=client, config=tc)
   t.upload_file(file_name, bucket, file_name)
   end_time = time.time()
-  print("{0:f} UPLOAD DURATION: {1:f}".format(time.time(), end_time - start_time))
+  print("{0:f} {1:s}UPLOAD DURATION: {2:f}".format(time.time(), prefix, end_time - start_time))
 
 
 def run_tide(file_name, bucket):
@@ -231,8 +231,10 @@ def run_methyl(file_name, bucket):
   et = time.time()
   print("{0:f} COMPRESS DURATION: {1:f}".format(time.time(), et - st))
 
-  st = time.time()
   compressed_dir = "{0:s}/compressed_input".format(output_dir)
+  upload_output(compressed_dir, bucket, "C")
+
+  st = time.time()
 
   decompress_input = None
   for subdir, dirs, files in os.walk(compressed_dir):
@@ -250,7 +252,7 @@ def run_methyl(file_name, bucket):
   subprocess.call(cmd, shell=True)
   et = time.time()
   print("{0:f} DECOMPRESS DURATION: {1:f}".format(time.time(), et - st))
-  upload_output("{0:s}/reconstructed_input-0".format(output_dir), bucket)
+  upload_output("{0:s}/reconstructed_input-0".format(output_dir), bucket, "D")
   end_time = time.time()
   print("{0:f} METHYL DURATION: {1:f}".format(time.time(), end_time - start_time))
 

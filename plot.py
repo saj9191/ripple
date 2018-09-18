@@ -149,8 +149,11 @@ def error_plot(num_results, num_layers, results, pipeline, params):
   plt.close()
 
 
-def accumulation_plot(x, y, regions, pipeline, title, plot_name, folder):
-  if plot_name.startswith("ssw"):
+def accumulation_plot(x, y, regions, pipeline, title, plot_name, folder, absolute=False):
+  if False:
+    offset = 0
+    colors = ["black"]
+  elif plot_name.startswith("ssw"):
     offset = 0
     colors = ["purple", "cyan", "blue", "red", "orange", "green", "black"]
   elif plot_name.startswith("methyl"):
@@ -160,70 +163,99 @@ def accumulation_plot(x, y, regions, pipeline, title, plot_name, folder):
     colors = ["purple", "cyan", "blue", "red", "orange", "green", "brown", "black"]
     offset = 1
 
-  fig = plt.figure()
   rows = 12
-  ax1 = plt.subplot2grid((rows, 1), (0, 0), rowspan=rows - 1)
+  font_size = 16
+
+  fig1 = plt.figure()
+  offset = 1
+  if absolute:
+    ax1 = plt.subplot(2, 1, 1)
+    plt.ylabel("Number of Lambda Processes", size=font_size)
+    ax1.yaxis.set_label_coords(-0.08, -0.05)
+    ax2 = plt.subplot(2, 1, 2)
+  else:
+    ax1 = plt.subplot2grid((rows, 1), (0, 0), rowspan=rows - offset)
+    ax2 = plt.subplot2grid((rows, 1), (rows - offset, 0))
 
   legends = []
   alpha = 1
-  for layer in regions.keys():
-    color = colors[layer % len(colors)]
-    patch = mpatches.Patch(facecolor=color, edgecolor="black", label=pipeline[layer]["name"], linewidth=1, linestyle="solid")
-    legends.append(patch)
-  fontP = FontProperties(family="Arial", size="small")
-  fig.legend(handles=legends, loc="upper right", prop=fontP, bbox_to_anchor=(1.02, 1.02), framealpha=0, borderpad=1)
+
+  if not absolute:
+    for layer in regions.keys():
+      color = colors[layer % len(colors)]
+      patch = mpatches.Patch(facecolor=color, edgecolor="black", label=pipeline[layer]["name"], linewidth=1, linestyle="solid")
+      legends.append(patch)
+    fontP = FontProperties(family="Arial", size="small")
+    fig1.legend(handles=legends, loc="upper right", prop=fontP, bbox_to_anchor=(1.02, 1.02), framealpha=0, borderpad=1)
 
   max_x = regions[len(regions) - 1][1]
   plt.xlim([0, max_x])
-  plt.xticks([])
+  if not absolute:
+    plt.xticks([])
 
+  max_y = 0
   for layer in x:
     px = []
     py = []
     color = colors[layer % len(colors)]
     x0 = regions[layer][0]
     x1 = regions[layer][1]
-    max_y = 0
+    #temp_max_y = 0
     for i in range(len(x[layer])):
-      if (x0 <= x[layer][i] and x[layer][i] <= x1):
+      if absolute or (x0 <= x[layer][i] and x[layer][i] <= x1):
         px.append(min(x[layer][i], max_x - offset))
         py.append(y[layer][i])
-      elif x[layer][i] > x1:
-        max_y = max(y[layer][i], max_y)
-    px.append(min(x1, max_x - offset))
-    py.append(max_y)
+    #  elif x[layer][i] > x1:
+    #    temp_max_y = max(y[layer][i], max_y)
+#    px.append(min(x1, max_x - offset))
+#    py.append(temp_max_y)
+    max_y = max(max(py), max_y)
     ax1.plot(px, py, color=color)
+    if absolute:
+      ax2.plot(px, py, color=color)
 
   for side in ["right", "top"]:
     ax1.spines[side].set_visible(False)
+    if absolute:
+      ax2.spines[side].set_visible(False)
 
   for side in ["left", "bottom"]:
     ax1.spines[side].set_linewidth(3)
+    if absolute:
+      ax2.spines[side].set_linewidth(3)
 
-  font_size = 16
-  plt.ylabel("Number of Lambda Processes", size=font_size)
+  if not absolute:
+    line_width = 5.0
+    for layer in regions.keys():
+      y = 1 * (layer % 3)
+      color = colors[layer % len(colors)]
+      x0 = max(regions[layer][0], offset)
+      x1 = min(regions[layer][1], max_x - offset)
+      print(x0, x1, y)
+      ax2.plot([x0, x1], [y, y], color="black", linewidth=line_width + 2)
+      ax2.plot([x0, x1], [y, y], color="white", linewidth=line_width)
+      ax2.plot([x0, x1], [y, y], color=color, linewidth=line_width, alpha=alpha)
 
-  ax2 = plt.subplot2grid((rows, 1), (rows - 1, 0))
-  line_width = 5.0
-  for layer in regions.keys():
-    y = 0.4 * (layer % 3)
-    color = colors[layer % len(colors)]
-    x0 = max(regions[layer][0], offset)
-    x1 = min(regions[layer][1], max_x - offset)
-    ax2.plot([x0, x1], [y, y], color="black", linewidth=line_width + 2)
-    ax2.plot([x0, x1], [y, y], color="white", linewidth=line_width)
-    ax2.plot([x0, x1], [y, y], color=color, linewidth=line_width, alpha=alpha)
+    for side in ["bottom", "left", "right", "top"]:
+      ax2.spines[side].set_visible(False)
 
-  for side in ["bottom", "left", "right", "top"]:
-    ax2.spines[side].set_visible(False)
+  if absolute:
+    ax1.set_xlim([0, max_x])
+    ax1.set_ylim([0, max_y])
+  else:
+    pass
+    #ax1.set_xlim([0, max_x])
+    #ax1.set_ylim([0, max_y])
+    #ax2.set_ylim([-1.0, 3.0])
+    #ax1.set_xticks([])
+   # ax2.set_xticks([])
 
-  plt.xlim([0, max_x])
-  plt.ylim([-0.5, 1.0])
-  plt.yticks([])
+ # if not absolute:
+ #   plt.yticks([])
   plot_name = "{0:s}/{1:s}.png".format(folder, plot_name)
   plt.xlabel("Runtime (seconds)", size=font_size)
   print(plot_name)
-  fig.savefig(plot_name)
+  fig1.savefig(plot_name)
   print("Accumulation plot", plot_name)
   plt.close()
   return

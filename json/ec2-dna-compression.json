@@ -5,7 +5,6 @@
 	"region": "us-west-2",
 	"folder": "methyl-files-ec2",
 	"num_output": 144,
-	"trigger": true,
 	"timeout": 300,
 	"tag": "methyl",
 	"bucket": "maccoss-ec2",
@@ -19,6 +18,7 @@
 	"sample_bucket": "maccoss-methyl-data",
 	"stats": true,
 	"setup": true,
+	"credential_profile": "maccoss",
 	"ec2": {
 		"application": "methyl",
 		"ami": "ami-09908e282013b16a4",

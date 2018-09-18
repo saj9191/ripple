@@ -5,7 +5,7 @@
 	"model": "lambda",
 	"iterations": 10,
 	"region": "us-west-2",
-	"folder": "methyl-file-lambda",
+	"folder": "methyl-files-lambda",
 	"num_output": 144,
 	"timeout": 300,
 	"tag": "dna-compression",
@@ -52,7 +52,8 @@
 	"pipeline": [{
 		"name": "split-methyl",
 		"split_size": 100000000,
-		"output_function": "compress-methyl"
+		"output_function": "compress-methyl",
+		"adjust": true
 	}, {
 		"name": "compress-methyl"
 	}, {
