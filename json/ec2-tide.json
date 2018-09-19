@@ -1,9 +1,9 @@
 {
-	"input_name": "TN_CSF_062617_01.mzML",
+	"input_name": "ASH_20170314_HELA_90MIN.mzML",
 	"model": "ec2",
 	"iterations": 10,
 	"region": "us-west-2",
-	"folder": "tide-uniform-ec2",
+	"folder": "tide-files-ec2",
 	"tag": "tide",
 	"timeout": 300,
 	"num_bins": 15,
@@ -17,7 +17,7 @@
 	"num_output": 1,
 	"stats": true,
 	"setup": true,
-	"sample_bucket": "shjoyner-als",
+	"sample_bucket": "shjoyner-ash",
 	"ec2": {
 		"application": "tide",
 		"ami": "ami-0f19431450f72a526",
