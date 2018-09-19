@@ -35,9 +35,13 @@ class Request(threading.Thread):
     self.client = client
     self.params["nonce"] = thread_id
 
+
   def run(self):
+  #  print("Thread", self.thread_id, "Sleeping for", self.time)
     time.sleep(self.time)
     if self.params["model"] == "ec2":
+      benchmark.process_params(self.params)
+      benchmark.process_iteration_params(self.params, 1)
       benchmark.upload_input(self.params)[1]
       lock.acquire()
       stats = benchmark.run_ec2_script(self.client, self.params)
@@ -123,17 +127,19 @@ def create_request_distribution(distribution, args):
       requests += [i] * num_requests
   elif distribution == "zipfian":
     # https://stackoverflowcom/questions/43601074/zipf-distribution-how-do-i-measure-zipf-distribution-using-python-numpy.
-    x = np.arange(1, num_intervals + 1)
+    x = np.arange(1, 61)
     a = 2.
     y = x**(-a) / special.zetac(a) * max_concurrency
     y = list(map(lambda i: int(i), list(y)))
     random.shuffle(y)
+    print(y)
     for i in range(len(y)):
       requests += [i * interval] * y[i]
-  elif distribution == "exponential":
-    for i in range(num_intervals):
-      num_requests = 2 ** i
-      requests += [i * 5 * 60] * num_requests
+  elif distribution == "bursty":
+    interval = 1200 # Every 20 minutes
+    for i in range(interval, time_range + interval, interval):
+      requests += [i] * 10
+      #requests += [i] * 100#max_concurrency
   elif distribution == "concurrent":
     requests = [0] * args.concurrency
 
@@ -195,6 +201,7 @@ def run(args, params):
     threads = list(filter(lambda t: t.alive, threads))
     time.sleep(10)
 
+  print("Processed {0:d} requests".format(len(requests)))
   if params["model"] == "ec2":
     benchmark.terminate_instance(instance, client, params)
 
