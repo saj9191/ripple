@@ -539,10 +539,13 @@ def main():
   parser.add_argument('--iterate', type=str, help="Bucket to iterate through")
   parser.add_argument('--accumulation', action="store_true", help="Plot accumulation graph")
   parser.add_argument('--comparison', action="store_true", help="Plot comparison graph")
+  parser.add_argument('--folder', type=str, help="Folder to store results in")
   args = parser.parse_args()
 
-#  params = json.load(open(args.parameters))
-#  cost("results/shjoyner-als-lambda", params)
+  if args.parameters:
+    params = json.load(open(args.parameters))
+    if len(args.folder) > 0:
+      params["folder"] = args.folder
   if args.accumulation:
     accumulation()
   if args.comparison:

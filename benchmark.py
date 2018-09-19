@@ -536,7 +536,6 @@ def file_count(bucket_name, params):
   return count
 
 
-
 def parse(stats, params):
   count = 0
   messages = []
@@ -858,8 +857,11 @@ def ec2_benchmark(params):
 def main():
   parser = argparse.ArgumentParser()
   parser.add_argument('--parameters', type=str, required=True, help="File containing parameters")
+  parser.add_argument('--folder', type=str, help="Folder to store results in")
   args = parser.parse_args()
   params = json.loads(open(args.parameters).read())
+  if len(args.folder) > 0:
+    params["folder"] = args.folder
   [access_key, secret_key] = util.get_credentials(params["credential_profile"])
   params["access_key"] = access_key
   params["secret_key"] = secret_key
