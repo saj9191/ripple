@@ -89,10 +89,17 @@ def upload_functions(client, params):
   if os.path.isdir(zip_directory):
     shutil.rmtree(zip_directory)
 
+
   for name in params["functions"]:
     fparams = params["functions"][name]
-    os.makedirs(zip_directory)
     files = []
+    os.makedirs(zip_directory)
+    if params["folder"] == "knn":
+      for folder, subdir, ff in os.walk("libraries"):
+        if folder.count("/") == 0:
+          for d in subdir:
+            shutil.copytree("libraries/" + d, zip_directory + "/" + d)
+            files.append(d)
     file = "{0:s}.py".format(fparams["file"])
     shutil.copyfile("lambda/{0:s}".format(file), "{0:s}/{1:s}".format(zip_directory, file))
     files.append(file)
@@ -111,7 +118,7 @@ def upload_functions(client, params):
 
     files += create_parameter_files(zip_directory, name, params)
     os.chdir(zip_directory)
-    subprocess.call("zip ../{0:s} {1:s}".format(zip_file, " ".join(files)), shell=True)
+    subprocess.call("zip -r ../{0:s} {1:s}".format(zip_file, " ".join(files)), shell=True)
     os.chdir("..")
 
     upload_function_code(client, zip_file, name, params, name not in functions)
