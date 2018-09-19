@@ -246,6 +246,10 @@ def lambda_setup(event, context):
   READ_BYTE_COUNT = 0
   FOUND = False
   START_TIME = time.time()
+  global DOWNLOAD_TIME, LIST_TIME, UPLOAD_TIME
+  DOWNLOAD_TIME = 0
+  LIST_TIME = 0
+  UPLOAD_TIME = 0
   if os.path.isfile("/tmp/warm"):
     FOUND = True
 
