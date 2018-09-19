@@ -75,7 +75,9 @@ The parameters in the section are for only instances that occur in this stage of
 For example, you may want to call the same combine function twice in the pipeline, but only have one of them sort the output.
 If the `output_function` is not specified, then the lambda function will write a file in the bucket specified by the `bucket` parameter.
 
-The files written to S3 will have the format `<prefix>/<timestamp>-<nonce>/<bin_id>/<file_id>-<last>.<ext>`
+The files written to S3 will have the format `<prefix>/<timestamp>-<nonce>/<bin_id>/<file_id>-<last>.<ext>.
+If you want to use a file that is already on S3, add the key "sample_bucket" where the value is the name of the bucket. Then set "sample_input" to true.
+Ripple will move the file from the sample bucket to the application bucket.
 
 The prefix indicates the stage of the of the pipeline that wrote the file.
 In the above example, output from the `tide` function would be prefixed with "2", while output from the `combine-tsv-file` would be prefixed with "3".
