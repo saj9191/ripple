@@ -102,7 +102,7 @@ def process_iteration_params(params, iteration):
   if params["model"] == "ec2":
     params["key"] = params["input_name"]
   else:
-    if util.is_set(params, "trigger"):
+    if params["model"] == "ec2":
       params["key"] = params["input_name"]
     else:
       params["key"] = util.file_name(m)
@@ -513,7 +513,7 @@ def wait_for_completion(start_time, params, thread_id):
 
   # Give ourselves time as we need to wait for each part of the pipeline
   prefix = "{0:d}/".format(len(params["pipeline"]))
-  timeout = 300 * len(params["pipeline"])
+  timeout = 600 * len(params["pipeline"])
   failed = check_objects(client, params["bucket"], prefix, params["num_output"], timeout, params, thread_id)
   time.sleep(10)  # Wait a little to make sure percolator logs are on the server
   return failed
