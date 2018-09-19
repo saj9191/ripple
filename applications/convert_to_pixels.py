@@ -30,7 +30,7 @@ def run(file, params, input_format, output_format, offsets):
       pixel = px[x, y]
       f.write("{x} {y} {r} {g} {b}\n".format(x=x, y=y, r=pixel[0], g=pixel[1], b=pixel[2]))
       count += 1
-      if count == 25 * 1000:
+      if count == params["batch_size"]:
         f.close()
         bin_id += 1
         f = setup_file(bin_id, output_format, output_files)

@@ -1,15 +1,15 @@
 {
 	"input_name": "3band_AOI_1_RIO_img5792.tif",
 	"account": 999145429263,
-	"bucket": "maccoss-knn",
+	"bucket": "maccoss-knn-east-1",
 	"credential_profile": "maccoss",
 	"folder": "knn",
-	"log": "maccoss-spacenet-log",
+	"log": "maccoss-log-east-1",
 	"model": "lambda",
-	"num_bins": 8,
+	"num_bins": 36,
 	"num_output": 1,
 	"iterations": 1,
-	"region": "us-west-2",
+	"region": "us-east-1",
 	"role": "service-role/lambdaFullAccessRole",
 	"storage_class": "STANDARD",
 	"tag": "tide",
@@ -30,6 +30,7 @@
 		"convert-to-pixels": {
 			"file": "application",
 			"application": "convert_to_pixels",
+			"batch_size": 5000,
 			"memory_size": 128
 		},
 		"map-spacenet": {
@@ -46,15 +47,15 @@
 		  "file": "application",
 			"format": "classification",
 			"application": "run_knn",
-			"memory_size": 1024,
+			"memory_size": 3008,
 			"train_bucket": "maccoss-spacenet",
-			"n": 10
+			"n": 100
 		},
 		"combine-knn-files": {
 			"file": "combine_files",
 			"format": "knn",
-			"memory_size": 512,
-			"n": 10
+			"memory_size": 3008,
+			"n": 100
 		}
 	},
 	"pipeline": [{
