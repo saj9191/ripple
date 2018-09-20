@@ -1,6 +1,7 @@
 import argparse
 import benchmark
 import boto3
+import file_average
 import json
 import math
 import os
@@ -11,6 +12,9 @@ import shutil
 import sys
 import time
 import util
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
 
 
 class Results:
@@ -320,16 +324,14 @@ def get_lambda_results(folder, params, concurrency=None):
           layers_to_s3_cost[layer] += (jmessage["read_count"] / 1000) * 0.0004
           layers_to_s3_cost[layer] += (jmessage["write_count"] / 1000) * 0.005
           layers_to_s3_cost[layer] += (jmessage["list_count"] / 1000) * 0.005
-          layers_to_s3_cost[layer] += (jmessage["read_byte_count"] / 1024 / 1024 / 1024) * 0.023
+          #layers_to_s3_cost[layer] += (jmessage["read_byte_count"] / 1024 / 1024 / 1024) * 0.023
           layers_to_count[layer] += 1
 
     for layer in result_regions.keys():
       if layer not in regions:
         regions[layer] = [0.0, 0.0]
-
       for i in range(2):
         regions[layer][i] += result_regions[layer][i]
-
     average_duration += duration
 
   for layer in regions:
@@ -398,7 +400,6 @@ def get_ec2_results(folder):
   for timestamp in timestamps:
     st = timestamp[0] - start_time
     et = timestamp[1] - start_time
-    print(st, et)
     points.append([st, 1])
     points.append([et, -1])
   points.sort()
@@ -437,8 +438,11 @@ def get_ec2_results(folder):
 
 def accumulation():
   params = json.loads(open("json/tide.json").read())
-  render("Tide Uniform", "tide", "results/tide-files-lambda", "results/tide-files-ec2", params, compare=True)
-#  render("Tide Uniform", "tide", "results/copy-tide-zipfian", "", params, compare=False, concurrency=100, absolute=True)
+  #render("Tide Zipfian", "tide", "results/tide-zipfian-lambda", "", params, compare=False, concurrency=100, absolute=True, zoom=[1000, 1200])
+  #render("Tide Uniform", "tide", "results/tide-uniform-lambda", "", params, compare=False, concurrency=100, absolute=True, zoom=[190, 300])
+  #render("Tide Bursty", "tide", "results/tide-bursty-lambda", "", params, compare=False, concurrency=100, absolute=True, zoom=[1200, 1350])
+#  file_average.render("Tide", "tide", "tide", params)
+  file_average.render("Smith Waterman", "smith-waterman", "ssw", params)
 
   return
   lambda_folder = "results/test-tide100"
@@ -477,7 +481,7 @@ def accumulation():
   render("Smith Waterman", "ssw", lambda_folder, ec2_folder, params, compare=False, concurrency=None)
 
 
-def render(title, name, lambda_folder, ec2_folder, params, compare=True, concurrency=None, absolute=False):
+def render(title, name, lambda_folder, ec2_folder, params, compare=True, concurrency=None, absolute=False, zoom=None):
   [lambda_duration, lambda_cost, lambda_s3_cost, regions, x, y] = get_lambda_results(lambda_folder, params, concurrency)
   lambda_cost = sum(lambda_cost.values())
   lambda_s3_cost = sum(lambda_s3_cost.values())
@@ -496,7 +500,8 @@ def render(title, name, lambda_folder, ec2_folder, params, compare=True, concurr
       "{0:s} Average Lambda Processes".format(title),
       plot_name,
       lambda_folder,
-      absolute
+      absolute,
+      zoom
   )
   return
   plot.comparison(
@@ -574,25 +579,22 @@ def main():
   if args.plot:
     trigger_plot(args.plot)
   if args.counts:
-    params = json.load(open(args.parameters))
     get_counts(params)
   if args.iterate:
-    params = json.load(open(args.parameters))
     iterate(args.iterate, params)
 
 
 def move():
-  folder = "results/copy-tide-zipfian"
+  folder = "results/tide-bursty-lambda"
   for subdir, dirs, files in os.walk(folder):
-    print(subdir, dirs, files)
     if len(dirs) > 0 and "." in subdir:
       for d in dirs:
         if os.path.isdir(folder + "/" + d):
           print("Sad", d)
         else:
           shutil.move(subdir + "/" + d, folder + "/" + d)
-    print("subdir", subdir)
-#    shutil.rmtree(subdir)
+      shutil.rmtree(subdir)
+
 
 def concurrency():
   s3 = boto3.resource("s3")
@@ -614,6 +616,7 @@ def concurrency():
 
 if __name__ == "__main__":
 #  concurrency()
+  #move()
   main()
   #comparison("Tide", "results/tide-files-lambda", "results/tide-files-ec2", json.load(open("json/ec2-tide.json")))
   #comparison("Smith Waterman", "results/ssw-files-lambda", "results/ssw-files-ec2", json.load(open("json/ec2-smith-waterman.json")))
