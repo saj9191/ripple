@@ -167,15 +167,35 @@ def object_exists(bucket_name, key):
     return False
 
 
+def get_batch(bucket_name, key, prefix, params):
+  objects = get_objects(bucket_name, prefix, params)
+  batch_size = None if "batch_size" not in params else params["batch_size"]
+  batch = []
+  expected_batch_id = None
+  if batch_size:
+    expected_batch_id = int((parse_file_name(key)["file_id"] - 1) / batch_size)
+
+  last = False
+  for obj in objects:
+    m = parse_file_name(obj.key)
+    batch_id = int((m["file_id"] - 1) / batch_size)
+    if batch_size is None or batch_id == expected_batch_id:
+      batch.append([obj, m])
+      if m["last"]:
+        last = True
+
+  return [batch, last]
+
+
 def combine_instance(bucket_name, key, params={}):
   done = False
   num_attempts = 20
-  batches = None
-  prefix = key_prefix(key)
+  prefix = key_prefix(key) + "/"
   count = 0
+  [batch, last] = get_batch(bucket_name, key, prefix, params)
 
-  while not done and (batches is None or current_last_file(bucket_name, key, params)):
-    [done, batches, num_keys, num_files] = have_all_files(bucket_name, prefix, params)
+  while not done and current_last_file(batch, key, params):
+    [done, num_keys, num_files] = have_all_files(batch, prefix, params)
     count += 1
     if count == num_attempts and not done:
       return [False, None]
@@ -184,8 +204,10 @@ def combine_instance(bucket_name, key, params={}):
     else:
       sleep = int((1 * num_files) / num_keys)
     time.sleep(sleep)
+    [batch, last] = get_batch(bucket_name, key, prefix, params)
 
-  return [done and current_last_file(bucket_name, key, params), batches]
+  keys = list(map(lambda b: b[0].key, batch))
+  return [done and current_last_file(batch, key, params), keys, last]
 
 
 def run(bucket_name, key, params, func):
@@ -234,12 +256,26 @@ def run(bucket_name, key, params, func):
   return output_format
 
 
-def current_last_file(bucket_name, current_key, params):
-  prefix = key_prefix(current_key) + "/"
-  objects = get_objects(bucket_name, prefix, params)
-  keys = set(list(map(lambda o: o.key, objects)))
+def current_last_file(batch, current_key, params):
+  objects = list(map(lambda o: o[0], batch))
   objects = sorted(objects, key=lambda o: [o.last_modified, o.key])
+  keys = set(list(map(lambda o: o.key, objects)))
+
   return ((current_key not in keys) or (objects[-1].key == current_key))
+
+
+def have_all_files(batch, prefix, params):
+  num_files = params["batch_size"] if "batch_size" in params else None
+  for [obj, m] in batch:
+    if m["last"]:
+      if num_files is None:
+        num_files = m["file_id"]
+      else:
+        num_files = ((m["file_id"] - 1) % num_files) + 1
+
+  matching_keys = list(map(lambda b: b[0].key, batch))
+  num_keys = len(matching_keys)
+  return (num_keys == num_files, num_keys, num_files)
 
 
 def lambda_setup(event, context):
@@ -470,35 +506,3 @@ def clear_tmp(params={}):
     subprocess.call("rm -rf /tmp/*", shell=True)
 
 
-def have_all_files(bucket_name, prefix, params):
-  num_files = None
-  ids_to_keys = {}
-  prefix += "/"
-  batch_size = 1 if "batch_size" not in params else params["batch_size"]
-
-  for key in get_objects(bucket_name, prefix, params):
-    m = parse_file_name(key.key)
-    if m["file_id"] in ids_to_keys:
-      if key.key < ids_to_keys[m["file_id"]]:
-        ids_to_keys[m["file_id"]] = key.key
-    else:
-      ids_to_keys[m["file_id"]] = key.key
-    if m["last"]:
-      num_files = m["file_id"]
-
-  batches = {}
-  num_keys = len(ids_to_keys)
-  matching_keys = list(ids_to_keys.values())
-
-  if num_files is None:
-    return (False, batches, num_keys, num_files)
-
-  num_batches = int((num_files + batch_size - 1) / batch_size if batch_size is not None else num_keys)
-  for i in range(num_batches):
-    batches[i] = []
-
-  for file_id in range(1, num_files + 1):
-    batch = 0 if batch_size is None else int((file_id - 1)/ batch_size)
-    batches[batch].append(ids_to_keys[file_id])
-
-  return (len(matching_keys) == num_files, batches, num_keys, num_files)

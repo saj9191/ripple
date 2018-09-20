@@ -65,16 +65,20 @@ class CombineFunction(unittest.TestCase):
     p["bucket"] = bucket2.name
     p["client"] = Client()
     p["context"] = Context(50*1000)
-    combine_files.combine(bucket2.name, object5.key, input_format, output_format, {}, p)
-    self.assertEqual(len(bucket2.objects.objects), 5)
-
-    combined_obj = bucket2.objects.objects[-2]
-    self.assertEqual(combined_obj.key, "1/123.400000-13/1/1-0-suffix.new")
-    self.assertEqual(combined_obj.content, "A B C\nD E F\nG H I\nJ K L\n")
-
+    input_format["file_id"] = 3
+    combine_files.combine(bucket2.name, object6.key, input_format, output_format, {}, p)
+    self.assertEqual(len(bucket2.objects.objects), 4)
     combined_obj = bucket2.objects.objects[-1]
     self.assertEqual(combined_obj.key, "1/123.400000-13/1/2-1-suffix.new")
     self.assertEqual(combined_obj.content, "M N O\bP Q R\n")
+
+    input_format["file_id"] = 2
+    combine_files.combine(bucket2.name, object5.key, input_format, output_format, {}, p)
+    self.assertEqual(len(bucket2.objects.objects), 5)
+    combined_obj = bucket2.objects.objects[-1]
+    self.assertEqual(combined_obj.key, "1/123.400000-13/1/1-0-suffix.new")
+    self.assertEqual(combined_obj.content, "A B C\nD E F\nG H I\nJ K L\n")
+
 
 if __name__ == "__main__":
   unittest.main()
