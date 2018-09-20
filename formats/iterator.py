@@ -71,22 +71,15 @@ class Iterator:
       f.write(content.strip())
 
   @classmethod
-  def combine(cls, bucket_name, keys, temp_name, params):
-    if "s3" in params:
-      s3 = params["s3"]
-    else:
-      s3 = boto3.resource("s3")
+  def sorted_combine(cls, s3, bucket_name, keys, temp_name, params):
     iterators = []
     values = []
-    if util.is_set(params, "sort"):
-      for key in keys:
-        obj = s3.Object(bucket_name, key)
-        iterator = cls(obj, {}, params["batch_size"], params["chunk_size"])
-        [s, more] = iterator.next(params["identifier"])
-        if len(s) > 0:
-          heapq.heappush(iterators, Element(s, more, iterator))
-    else:
-      raise Exception("Not implementeD")
+    for key in keys:
+      obj = s3.Object(bucket_name, key)
+      iterator = cls(obj, {}, params["batch_size"], params["chunk_size"])
+      [s, more] = iterator.next(params["identifier"])
+      if len(s) > 0:
+        heapq.heappush(iterators, Element(s, more, iterator))
 
     last = None
     with open(temp_name, "w+") as f:
@@ -112,6 +105,25 @@ class Iterator:
 
       if len(values) > 0:
         cls.write(f, values, first)
+
+  @classmethod
+  def nonsorted_combine(cls, s3, bucket_name, keys, temp_name, params):
+    bucket = s3.Bucket(bucket_name)
+    with open(temp_name, "ab+") as f:
+      for i in range(len(keys)):
+        key = keys[i]
+        bucket.download_fileobj(key, f)
+
+  @classmethod
+  def combine(cls, bucket_name, keys, temp_name, params):
+    if "s3" in params:
+      s3 = params["s3"]
+    else:
+      s3 = boto3.resource("s3")
+    if util.is_set(params, "sort"):
+      cls.sorted_combine(s3, bucket_name, keys, temp_name, params)
+    else:
+      cls.nonsorted_combine(s3, bucket_name, keys, temp_name, params)
 
   def next(self, identifier=""):
     [o, more] = self.nextOffsets()
