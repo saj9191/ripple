@@ -42,6 +42,7 @@ FILE_FORMAT = [{
 LOG_NAME = "/tmp/log.txt"
 
 READ_BYTE_COUNT = 0
+WRITE_BYTE_COUNT = 0
 READ_COUNT = 0
 LIST_COUNT = 0
 WRITE_COUNT = 0
@@ -139,6 +140,7 @@ def read(obj, start_byte, end_byte):
 
 def write(m, bucket, key, body, params):
   global UPLOAD_TIME
+  global WRITE_BYTE_COUNT
   print_write(m, key, params)
   s3 = boto3.resource("s3")
   done = False
@@ -149,6 +151,7 @@ def write(m, bucket, key, body, params):
       s3.Object(bucket, key).put(Body=body, StorageClass=params["storage_class"])
       et = time.time()
       UPLOAD_TIME += (et - st)
+      WRITE_BYTE_COUNT += s3.Object(bucket, key).content_length
       done = True
     except botocore.exceptions.ClientError as e:
       print("ERROR: RATE LIMIT")
@@ -200,15 +203,15 @@ def run(bucket_name, key, params, func):
 
   offsets = {}
   if "more" in params["object"]:
-    if "offsets" in params:
-      offsets = params["offsets"]
-    else:
-      print_read(input_format, key, params)
     output_format["file_id"] = params["object"]["file_id"]
     output_format["last"] = not params["object"]["more"]
   else:
     print_read(input_format, key, params)
 
+  if "offsets" in params:
+    offsets = params["offsets"]
+  else:
+    print_read(input_format, key, params)
   if params["file"] in ["combine_files", "split_file"]:
     bucket_format = dict(input_format)
   else:
@@ -222,7 +225,6 @@ def run(bucket_name, key, params, func):
   params["input_format"] = input_format
   make_folder(input_format)
   make_folder(output_format)
-
   prefix = "-".join(file_name(bucket_format).split("-")[:-1])
   objects = get_objects(params["log"], prefix, params)
   if len(objects) == 0:
@@ -246,7 +248,8 @@ def lambda_setup(event, context):
   READ_BYTE_COUNT = 0
   FOUND = False
   START_TIME = time.time()
-  global DOWNLOAD_TIME, LIST_TIME, UPLOAD_TIME
+  global DOWNLOAD_TIME, LIST_TIME, UPLOAD_TIME, WRITE_BYTE_COUNT
+  WRITE_BYTE_COUNT = 0
   DOWNLOAD_TIME = 0
   LIST_TIME = 0
   UPLOAD_TIME = 0
@@ -301,6 +304,7 @@ def show_duration(context, m, p):
     "read_count": READ_COUNT,
     "write_count": p["write_count"],
     "list_count": LIST_COUNT,
+    "write_byte_count": WRITE_BYTE_COUNT,
     "read_byte_count": READ_BYTE_COUNT,
     "duration": duration,
     "download_time": DOWNLOAD_TIME,
