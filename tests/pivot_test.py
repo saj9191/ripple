@@ -2,8 +2,6 @@ import inspect
 import os
 import sys
 import unittest
-import tutils
-from unittest.mock import MagicMock
 from tutils import S3, Bucket, Object
 
 currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
@@ -22,7 +20,7 @@ class PivotMethods(unittest.TestCase):
       "s3": s3,
     }
 
-    [file_bucket, file_key, ranges] = pivot.get_pivot_ranges(bucket1.name, object1.name, params)
+    [file_bucket, file_key, ranges] = pivot.get_pivot_ranges(bucket1.name, object1.key, params)
     self.assertEqual(file_bucket, "bucket_name")
     self.assertEqual(file_key, "file_name")
     expected_ranges = [{
@@ -56,7 +54,7 @@ class PivotMethods(unittest.TestCase):
       "tests": True,
       "sort": False,
     }
-    keys = list(map(lambda o: o.name, objects))
+    keys = list(map(lambda o: o.key, objects))
     temp_name = "/tmp/ripple_test"
     # 1 10 12 20 25 40 40 41 42 50 60 61 63 80 81
     # *             *              *           *

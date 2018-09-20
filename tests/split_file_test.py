@@ -17,7 +17,7 @@ content = "A B C\nD E F\nG H I\nJ K L\nM N O\nP Q R\n"
 object1 = Object("0/123.400000-13/1/1-0-suffix.new_line", content)
 bucket1 = Bucket("bucket1", [object1])
 log = Bucket("log", [])
-input_format = util.parse_file_name(object1.name)
+input_format = util.parse_file_name(object1.key)
 output_format = dict(input_format)
 output_format["prefix"] = 1
 
@@ -91,11 +91,11 @@ class SplitFunction(unittest.TestCase):
     p["context"] = Context(50*1000)
     client = p["client"]
 
-    split_file.split_file(bucket1.name, object1.name, input_format, output_format, {}, p)
+    split_file.split_file(bucket1.name, object1.key, input_format, output_format, {}, p)
     self.assertEqual(len(client.invokes), 2)
 
-    invoke1 = get_invoke("an-output-function", bucket1.name, object1.name, token=45, prefix=1, offsets=[0, 19], file_id=1, more=True)
-    invoke2 = get_invoke("an-output-function", bucket1.name, object1.name, token=45, prefix=1, offsets=[20, 35], file_id=2, more=False)
+    invoke1 = get_invoke("an-output-function", bucket1.name, object1.key, token=45, prefix=1, offsets=[0, 19], file_id=1, more=True)
+    invoke2 = get_invoke("an-output-function", bucket1.name, object1.key, token=45, prefix=1, offsets=[20, 35], file_id=2, more=False)
 
     expected_invokes = [invoke1, invoke2]
     self.check_payload_equality(expected_invokes, client.invokes)
@@ -107,13 +107,13 @@ class SplitFunction(unittest.TestCase):
     p["name"] = "split-file"
     client = p["client"]
 
-    input_format = util.parse_file_name(object1.name)
+    input_format = util.parse_file_name(object1.key)
     output_format = dict(input_format)
     output_format["prefix"] = 1
-    split_file.split_file(bucket1.name, object1.name, input_format, output_format, {}, p)
+    split_file.split_file(bucket1.name, object1.key, input_format, output_format, {}, p)
     self.assertEqual(len(client.invokes), 1)
 
-    payload = get_payload(bucket1.name, object1.name, token=45, prefix=0, offsets=[0,19])
+    payload = get_payload(bucket1.name, object1.key, token=45, prefix=0, offsets=[0,19])
     payload["Records"][0]["s3"]["object"]["file_id"] = 1
     payload["Records"][0]["s3"]["object"]["more"] = True
     payload["Records"][0]["s3"]["extra_params"]["file_id"] = 1
@@ -137,8 +137,8 @@ class SplitFunction(unittest.TestCase):
     p["id"] = 2
     p["object"] = {"more": True, "file_id": 2}
 
-    util.run(bucket1.name, object1.name, p, split_file.split_file)
-    payload = get_payload(bucket1.name, object1.name, token=45, prefix=1, offsets=[20, 35])
+    util.run(bucket1.name, object1.key,  p, split_file.split_file)
+    payload = get_payload(bucket1.name, object1.key, token=45, prefix=1, offsets=[20, 35])
     payload["Records"][0]["s3"]["object"]["file_id"] = 2
     payload["Records"][0]["s3"]["object"]["more"] = False
     invoke = {

@@ -14,7 +14,12 @@ class S3:
     return self.buckets[bucket_name]
 
   def Object(self, bucket_name, key):
-    return list(self.buckets[bucket_name].objects.filter(Prefix=key))[0]
+    objs = list(self.buckets[bucket_name].objects.filter(Prefix=key))
+    if len(objs) == 0:
+      obj = Object(key)
+      self.buckets[bucket_name].objects.objects.append(obj)
+      return obj
+    return objs[0]
 
 
 class Bucket:
@@ -29,6 +34,7 @@ class Bucket:
     obj = list(self.objects.filter(Prefix=key))[0]
     f.write(str.encode(obj.content))
 
+
 class Objects:
   def __init__(self, objects):
     self.objects = objects
@@ -37,20 +43,27 @@ class Objects:
     return self.objects
 
   def filter(self, Prefix):
-    return filter(lambda o: o.name.startswith(Prefix), self.objects)
+    return filter(lambda o: o.key.startswith(Prefix), self.objects)
 
 
 class Object:
-  def __init__(self, name, content=""):
-    self.name = name
+  def __init__(self, key, content="", last_modified=0):
+    self.key = key
     self.content = content
+    self.last_modified = last_modified
     self.content_length = len(content)
 
   def get(self, Range):
     parts = Range.split("=")[1].split("-")
     start = int(parts[0])
     end = min(int(parts[1]), self.content_length - 1)
-    return {"Body": Content(self.content[start : end + 1])}
+    return {"Body": Content(self.content[start:end + 1])}
+
+  def put(self, Body="", StorageClass=""):
+    if type(Body) == str:
+      self.content = Body
+    else:
+      self.content = Body.read().decode("utf-8")
 
 
 class Content:

@@ -142,7 +142,7 @@ def write(m, bucket, key, body, params):
   global UPLOAD_TIME
   global WRITE_BYTE_COUNT
   print_write(m, key, params)
-  s3 = boto3.resource("s3")
+  s3 = params["s3"] if "s3" in params else boto3.resource("s3")
   done = False
   while not done:
     try:
@@ -167,24 +167,25 @@ def object_exists(bucket_name, key):
     return False
 
 
-def combine_instance(bucket_name, key):
+def combine_instance(bucket_name, key, params={}):
   done = False
   num_attempts = 20
-  keys = []
+  batches = None
   prefix = key_prefix(key)
   count = 0
-  while not done and (len(keys) == 0 or current_last_file(bucket_name, key)):
-    [done, keys, num_files] = have_all_files(bucket_name, prefix)
+
+  while not done and (batches is None or current_last_file(bucket_name, key, params)):
+    [done, batches, num_keys, num_files] = have_all_files(bucket_name, prefix, params)
     count += 1
     if count == num_attempts and not done:
-      return [False, keys]
+      return [False, None]
     if num_files is None:
       sleep = 5
     else:
-      sleep = int((1 * num_files) / len(keys))
+      sleep = int((1 * num_files) / num_keys)
     time.sleep(sleep)
 
-  return [done and current_last_file(bucket_name, key), keys]
+  return [done and current_last_file(bucket_name, key, params), batches]
 
 
 def run(bucket_name, key, params, func):
@@ -233,9 +234,9 @@ def run(bucket_name, key, params, func):
   return output_format
 
 
-def current_last_file(bucket_name, current_key):
+def current_last_file(bucket_name, current_key, params):
   prefix = key_prefix(current_key) + "/"
-  objects = get_objects(bucket_name, prefix=prefix)
+  objects = get_objects(bucket_name, prefix, params)
   keys = set(list(map(lambda o: o.key, objects)))
   objects = sorted(objects, key=lambda o: [o.last_modified, o.key])
   return ((current_key not in keys) or (objects[-1].key == current_key))
@@ -469,11 +470,13 @@ def clear_tmp(params={}):
     subprocess.call("rm -rf /tmp/*", shell=True)
 
 
-def have_all_files(bucket_name, prefix):
+def have_all_files(bucket_name, prefix, params):
   num_files = None
   ids_to_keys = {}
   prefix += "/"
-  for key in get_objects(bucket_name, prefix=prefix):
+  batch_size = 1 if "batch_size" not in params else params["batch_size"]
+
+  for key in get_objects(bucket_name, prefix, params):
     m = parse_file_name(key.key)
     if m["file_id"] in ids_to_keys:
       if key.key < ids_to_keys[m["file_id"]]:
@@ -483,5 +486,19 @@ def have_all_files(bucket_name, prefix):
     if m["last"]:
       num_files = m["file_id"]
 
+  batches = {}
+  num_keys = len(ids_to_keys)
   matching_keys = list(ids_to_keys.values())
-  return (len(matching_keys) == num_files, matching_keys, num_files)
+
+  if num_files is None:
+    return (False, batches, num_keys, num_files)
+
+  num_batches = int((num_files + batch_size - 1) / batch_size if batch_size is not None else num_keys)
+  for i in range(num_batches):
+    batches[i] = []
+
+  for file_id in range(1, num_files + 1):
+    batch = 0 if batch_size is None else int((file_id - 1)/ batch_size)
+    batches[batch].append(ids_to_keys[file_id])
+
+  return (len(matching_keys) == num_files, batches, num_keys, num_files)

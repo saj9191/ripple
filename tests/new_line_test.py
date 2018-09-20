@@ -117,7 +117,7 @@ class IteratorMethods(unittest.TestCase):
       "sort": False,
     }
 
-    keys = list(map(lambda o: o.name, objects))
+    keys = list(map(lambda o: o.key, objects))
     temp_name = "/tmp/ripple_test"
     new_line.Iterator.combine("bucket1", keys, temp_name, params)
     with open(temp_name) as f:
