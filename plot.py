@@ -149,7 +149,7 @@ def error_plot(num_results, num_layers, results, pipeline, params):
   plt.close()
 
 
-def accumulation_plot(x, y, regions, pipeline, title, plot_name, folder, absolute=False):
+def accumulation_plot(x, y, regions, pipeline, title, plot_name, folder, absolute=False, zoom=None):
   if False:
     offset = 0
     colors = ["black"]
@@ -200,19 +200,14 @@ def accumulation_plot(x, y, regions, pipeline, title, plot_name, folder, absolut
     color = colors[layer % len(colors)]
     x0 = regions[layer][0]
     x1 = regions[layer][1]
-    #temp_max_y = 0
     for i in range(len(x[layer])):
       if absolute or (x0 <= x[layer][i] and x[layer][i] <= x1):
-        px.append(min(x[layer][i], max_x - offset))
+        px.append(x[layer][i])
         py.append(y[layer][i])
-    #  elif x[layer][i] > x1:
-    #    temp_max_y = max(y[layer][i], max_y)
-#    px.append(min(x1, max_x - offset))
-#    py.append(temp_max_y)
-    max_y = max(max(py), max_y)
-    ax1.plot(px, py, color=color)
+    max_y = max(max_y, max(py))
+    ax1.scatter(px, py, color=color, s=1)
     if absolute:
-      ax2.plot(px, py, color=color)
+      ax2.scatter(px, py, color=color, s=1)
 
   for side in ["right", "top"]:
     ax1.spines[side].set_visible(False)
@@ -231,7 +226,6 @@ def accumulation_plot(x, y, regions, pipeline, title, plot_name, folder, absolut
       color = colors[layer % len(colors)]
       x0 = max(regions[layer][0], offset)
       x1 = min(regions[layer][1], max_x - offset)
-      print(x0, x1, y)
       ax2.plot([x0, x1], [y, y], color="black", linewidth=line_width + 2)
       ax2.plot([x0, x1], [y, y], color="white", linewidth=line_width)
       ax2.plot([x0, x1], [y, y], color=color, linewidth=line_width, alpha=alpha)
@@ -240,18 +234,11 @@ def accumulation_plot(x, y, regions, pipeline, title, plot_name, folder, absolut
       ax2.spines[side].set_visible(False)
 
   if absolute:
-    ax1.set_xlim([0, max_x])
+    ax1.set_xlim(zoom)
+    ax2.set_xlim([0, max_x])
     ax1.set_ylim([0, max_y])
   else:
     pass
-    #ax1.set_xlim([0, max_x])
-    #ax1.set_ylim([0, max_y])
-    #ax2.set_ylim([-1.0, 3.0])
-    #ax1.set_xticks([])
-   # ax2.set_xticks([])
-
- # if not absolute:
- #   plt.yticks([])
   plot_name = "{0:s}/{1:s}.png".format(folder, plot_name)
   plt.xlabel("Runtime (seconds)", size=font_size)
   print(plot_name)
@@ -267,16 +254,16 @@ def plot(results, pipeline, params):
   accumulation_plot(num_results, num_layers, results, pipeline, params)
 
 
-def comparison(name, title, lambda_result, ec2_result, ylabel, params={}):
+def comparison(name, title, lambda_costs, ec2_cost, ec2_s3_cost, ylabel, params={}):
   fig = plt.figure()
   ax = fig.add_subplot(1, 1, 1)
   ind = range(2)
 
-  ax.bar([0], [lambda_result], color="red", bottom=0)
-  ax.bar([1], [ec2_result], color="blue", bottom=0)
+  ax.bar([2], [ec2_cost], color="orange", bottom=0)
+  ax.bar([3], [ec2_s3_cost], color="purple", bottom=0)
 
-  print("Comparison", lambda_result, ec2_result)
-  plt.xticks(ind, ("Lambda", "EC2"))
+  #print("Comparison", lambda_result, ec2_result)
+  plt.xticks(ind, ("Lambda Cost", "Lambda S3 Cost", "EC2", "EC2 S3 Cost"))
   plt.title(title)
   plt.ylabel(ylabel)
   file_name = "{0:s}.png".format(name)
@@ -285,42 +272,52 @@ def comparison(name, title, lambda_result, ec2_result, ylabel, params={}):
   plt.close()
 
 
-def statistics(name, folder, lambda_stats, ec2_stats, ty):
+def statistics(name, folder, stats, labels, ty):
   fig, ax = plt.subplots()
   s3 = boto3.resource("s3")
   bucket = "ssw-input" if name == "Smith Waterman" else "shjoyner-als"
-  keys = sorted(lambda_stats.keys(), key=lambda k: s3.Object(bucket, k).content_length)
-  ec2_y = []
-  ec2_color = "blue"
-  lambda_y = []
-  lambda_color = "red"
+  keys = set(stats[0].keys())
+  for s in stats[1:]:
+    keys = keys.intersection(set(s.keys()))
 
-  count = 0
-
-  def error(x, durations, color):
-    length = 0.1
-    min_y = min(durations)
-    max_y = max(durations)
-    ax.plot([x - length, x + length], [min_y, min_y], color=color)
-    ax.plot([x - length, x + length], [max_y, max_y], color=color)
-    ax.plot([x, x], [min_y, max_y], color=color)
-
-  width = 0.35
+  p = []
   for key in keys:
-    if key in ec2_stats:
-      ec2_y.append(sum(ec2_stats[key]) / len(ec2_stats[key]))
-      error(count + width, ec2_stats[key], "black")
-      lambda_y.append(sum(lambda_stats[key]) / len(lambda_stats[key]))
-      error(count, lambda_stats[key], "black")
-      count += 1
+    if name != "Smith Waterman":
+      if not key.startswith("TN_"):
+        bucket = "shjoyner-ash"
+      else:
+        bucket = "ssw-input"
+    p.append([s3.Object(bucket, key).content_length, key])
 
-  ind = np.arange(len(lambda_y))
-  lambda_bars = ax.bar(ind, lambda_y, width, color=lambda_color)
-  ec2_bars = ax.bar(ind + width, ec2_y, width, color=ec2_color)
-  ax.legend((lambda_bars[0], ec2_bars[0]), ("Lambda", "EC2"))
+  p.sort()
+  keys = list(map(lambda k: k[1], p))
+
+  colors = ["red", "blue", "green", "purple"][:len(stats)]
+  for i in range(len(keys)):
+    key = keys[i]
+    runtimes = []
+    for j in range(len(stats)):
+      runtimes.append(stats[j][key])
+    start = i * (len(stats) + 1)
+    positions = range(start + 1, start + len(stats) + 1)
+    bp = ax.boxplot(runtimes, positions = positions, widths = 0.7, whis="range")
+    for j in range(len(bp["boxes"])):
+      c = colors[j]
+      plt.setp(bp["boxes"][j], color=c)
+      plt.setp(bp["medians"][j], color=c)
+      plt.setp(bp["fliers"][j], color=c)
+      for k in range(2):
+        plt.setp(bp["caps"][2 * j + k], color=c)
+        plt.setp(bp["whiskers"][2 * j + k], color=c)
+
+  legend = []
+  for i in range(len(labels)):
+    legend.append(plt.Line2D([0], [0], color=colors[i], lw=1, label=labels[i]))
+  ax.legend(handles=legend, loc="upper right", bbox_to_anchor=(1.1, 1.05))
   ax.set_xticks([])
-
+  plt.xlim([0, len(keys) * (len(stats) + 1) + 1])
   plot_name = "{0:s}/{1:s}_box_plot.png".format(folder, ty)
+
   if ty == "duration":
     plt.ylabel("Runtime (Seconds)")
   else:
