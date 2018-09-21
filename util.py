@@ -178,7 +178,7 @@ def get_batch(bucket_name, key, prefix, params):
   last = False
   for obj in objects:
     m = parse_file_name(obj.key)
-    batch_id = int((m["file_id"] - 1) / batch_size)
+    batch_id = int((m["file_id"] - 1) / batch_size) if batch_size else None
     if batch_size is None or batch_id == expected_batch_id:
       batch.append([obj, m])
       if m["last"]:
@@ -198,7 +198,7 @@ def combine_instance(bucket_name, key, params={}):
     [done, num_keys, num_files] = have_all_files(batch, prefix, params)
     count += 1
     if count == num_attempts and not done:
-      return [False, None]
+      return [False, None, False]
     if num_files is None:
       sleep = 5
     else:
