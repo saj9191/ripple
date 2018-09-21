@@ -1,14 +1,18 @@
 import argparse
+from PIL import Image
 import boto3
 import heapq
+import math
 import mzML
 import os
+import classification
 import queue
 import shutil
 import subprocess
 import threading
 import time
 import util
+
 
 class SpeciesRequest(threading.Thread):
   def __init__(self, thread_id, file_name, species, queue):
@@ -162,14 +166,14 @@ def identify_species(file_name):
   return best_species
 
 
-def download_input(file_name, bucket):
+def download_input(file_name, bucket, prefix=""):
   start_time = time.time()
   s3 = boto3.resource("s3")
   bucket = s3.Bucket(bucket)
   with open(file_name, "wb") as f:
     bucket.download_fileobj(file_name, f)
   end_time = time.time()
-  print("{0:f} DOWNLOAD DURATION: {1:f}".format(time.time(), end_time - start_time))
+  print("{0:f} {2:s}DOWNLOAD DURATION: {1:f}".format(time.time(), end_time - start_time), prefix)
 
 
 def upload_output(file_name, bucket, prefix=""):
@@ -218,8 +222,7 @@ def run_ssw(file_name, bucket):
   print("{0:f} TOTAL DURATION: {1:f}".format(time.time(), end_time - start_time))
 
 
-def run_methyl(file_name, bucket):
-  s3 = boto3.resource("s3")
+def run_compress(file_name, bucket, total=False):
   start_time = time.time()
   download_input(file_name, "maccoss-methyl-data")
   input_name = "/tmp/input"
@@ -232,10 +235,7 @@ def run_methyl(file_name, bucket):
   print("{0:f} COMPRESS DURATION: {1:f}".format(time.time(), et - st))
 
   compressed_dir = "{0:s}/compressed_input".format(output_dir)
-  upload_output(compressed_dir, bucket, "C")
-
-  st = time.time()
-
+#  upload_output(compressed_dir, bucket, "C")
   decompress_input = None
   for subdir, dirs, files in os.walk(compressed_dir):
     for f in files:
@@ -245,16 +245,91 @@ def run_methyl(file_name, bucket):
       s3.Object(bucket, f).put(Body=open(file_name, "rb"))
   et = time.time()
   print("{0:f} CUPLOAD DURATION: {1:f}".format(time.time(), et - st))
-
-  output_dir = "decompressed"
-  cmd = "./output decompress {0:s}/{1:s} {2:s}".format(compressed_dir, decompress_input, output_dir)
-  st = time.time()
-  subprocess.call(cmd, shell=True)
-  et = time.time()
-  print("{0:f} DECOMPRESS DURATION: {1:f}".format(time.time(), et - st))
-  upload_output("{0:s}/reconstructed_input-0".format(output_dir), bucket, "D")
   end_time = time.time()
-  print("{0:f} METHYL DURATION: {1:f}".format(time.time(), end_time - start_time))
+  if total:
+    print("{0:f} METHYL DURATION: {1:f}".format(time.time(), end_time - start_time))
+
+
+def run_decompress(file_name, bucket, total=False):
+  output_dir = "decompressed"
+  # cmd = "./output decompress {0:s}/{1:s} {2:s}".format(compressed_dir, decompress_input, output_dir)
+  # st = time.time()
+  # subprocess.call(cmd, shell=True)
+  # et = time.time()
+  # print("{0:f} DECOMPRESS DURATION: {1:f}".format(time.time(), et - st))
+  # upload_output("{0:s}/reconstructed_input-0".format(output_dir), bucket, "D")
+
+
+def run_methyl(file_name, bucket):
+  # s3 = boto3.resource("s3")
+  # start_time = time.time()
+  # run_compress(file_name, bucket, total=False)
+  # run_decompress(file_name, bucket, total=False)
+  # st = time.time()
+  pass
+  # decompress_input = None
+  # for subdir, dirs, files in os.walk(compressed_dir):
+  #   for f in files:
+  #     if "ArInt" in f:
+  #      decompress_input = f
+  #    file_name = "{0:s}/{1:s}".format(compressed_dir, f)
+  #    s3.Object(bucket, f).put(Body=open(file_name, "rb"))
+  # et = time.time()
+  # print("{0:f} CUPLOAD DURATION: {1:f}".format(time.time(), et - st))
+
+  # output_dir = "decompressed"
+  # cmd = "./output decompress {0:s}/{1:s} {2:s}".format(compressed_dir, decompress_input, output_dir)
+  # st = time.time()
+  # subprocess.call(cmd, shell=True)
+  # et = time.time()
+  # print("{0:f} DECOMPRESS DURATION: {1:f}".format(time.time(), et - st))
+  # upload_output("{0:s}/reconstructed_input-0".format(output_dir), bucket, "D")
+  # end_time = time.time()
+  # print("{0:f} METHYL DURATION: {1:f}".format(time.time(), end_time - start_time))
+
+
+def run_knn(file_name, bucket):
+  start_time = time.time()
+  download_input(file_name, bucket)
+  s3 = boto3.resource("s3")
+  im = Image.open(file_name)
+  px = im.load()
+  width, height = im.size
+  top_scores = {}
+
+  st = time.time()
+  n = 100
+  for obj in s3.Bucket("maccoss-spacenet"):
+    it = classification.Iterator(obj, 1000, 100000)
+    more = True
+    while more:
+      [clz, more] = it.next()
+      for y in range(height):
+        for x in range(width):
+          pixel = px[x, y]
+          [px, py, pr, pg, pb] = pixel
+          s = "{x} {y} {r} {g} {b}".format(x=px, y=py, r=pr, g=pg, b=pb)
+          top_scores[s] = []
+          for c in clz:
+            [cx, cy, cr, cg, cb, cc] = c
+            score = math.sqrt((cr - pr) ** 2 + (cg - pg) ** 2 + (cb - pb) ** 2)
+            if len(top_scores[s]) < n or -1*score > top_scores[s][0][0]:
+              heapq.heappush(top_scores[s], [-1*score, c])
+            if len(top_scores[s]) > n:
+              heapq.heappop(top_scores[s])
+
+  output_file = "/tmp/classification"
+  with open(output_file, "w+") as f:
+    for s in top_scores:
+      line = s
+      for [score, c] in top_scores[s]:
+        [cx, cy, cr, cg, cb, cc] = c
+        line += ",{d} {c}".format(d=-1*score, c=cc)
+      f.write("{0:s}\n".format(line))
+  et = time.time()
+  end_time = time.time()
+  print("{0:f} KNN DURATION: {1:f}".format(time.time(), et - st))
+  print("{0:f} SPACENET DURATION: {1:f}".format(time.time(), end_time - start_time))
 
 
 def main():
@@ -270,6 +345,8 @@ def main():
     run_ssw(args.file, args.bucket)
   elif args.application == "methyl":
     run_methyl(args.file, args.bucket)
+  elif args.application == "knn":
+    run_knn(args.file, args.bucket)
 
 
 if __name__ == "__main__":
