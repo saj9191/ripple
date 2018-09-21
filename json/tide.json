@@ -1,7 +1,7 @@
 {
-	"input_name": "TN_CSF_062617_87.mzML",
+	"input_name": "22Feb2011-PES-unfract-HIM8-01.mzML",
 	"model": "lambda",
-	"iterations": 1,
+	"iterations": 10,
 	"region": "us-west-2",
 	"folder": "tide-files-lambda",
 	"tag": "tide",
@@ -17,17 +17,7 @@
 	"num_output": 1,
 	"stats": true,
 	"setup": true,
-	"sample_bucket": "shjoyner-als",
-	"dependencies": {
-		"formats": {
-			"percolator": [
-				"formats/tsv.py"
-			],
-			"confidence": [
-				"formats/tsv.py"
-			]
-		}
-	},
+	"sample_bucket": "shjoyner-sample-input",
 	"functions": {
 		"split-mzML": {
 			"file": "split_file",
