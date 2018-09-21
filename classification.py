@@ -88,47 +88,44 @@ def in_polygon(polygon, x, y):
 
 
 def write_classification(f, pixels):
-  for [r, g, b, clz] in pixels:
-    f.write("{r} {g} {b} {c}\n".format(r=r, g=g, b=b, c=clz))
+  for p in pixels:
+    f.write(p)
 
 
 def create_classifications(s3, folder, image_name, polygons, border, inside, outside):
   im = plt.imread(folder + "/" + image_name)
   [height, width, dim] = im.shape
-  border = []
-  inside = []
-  outside = []
 
   for y in range(height):
     for x in range(width):
       [r, g, b] = im[y, x]
       if len(polygons) == 0:
-        outside.append([x, y])
+        outside.append("{r} {g} {b} {c}\n".format(r=r, g=g, b=b, c=OUTSIDE))
       else:
         found = False
         for polygon in polygons:
           if on_border(polygon, x, y):
-            border.append([r, g, b, BORDER])
+            border.append("{r} {g} {b} {c}\n".format(r=r, g=g, b=b, c=BORDER))
             found = True
             break
           elif in_polygon(polygon, x, y):
-            inside.append([r, g, b, INSIDE])
+            inside.append("{r} {g} {b} {c}\n".format(r=r, g=g, b=b, c=INSIDE))
             found = True
         if not found:
-          outside.append([r, g, b, OUTSIDE])
+          outside.append("{r} {g} {b} {c}\n".format(r=r, g=g, b=b, c=OUTSIDE))
 
 
 def process_images(folder, solutions, params):
   s3 = util.s3(params)
   image_names = [f for f in os.listdir(folder) if os.path.isfile(os.path.join(folder, f))]
   random.shuffle(image_names)
-  image_names = image_names[:200]
-  border = set()
-  inside = set()
-  outside = set()
+  image_names = image_names[:100]
+  border = list()
+  inside = list()
+  outside = list()
   total_files = 100
   num_items_per_file = 100 * 1000
-  third = num_items_per_file / 3
+  third = int(num_items_per_file / 3)
   file_id = 1
 
   i = 0
@@ -137,27 +134,28 @@ def process_images(folder, solutions, params):
     name = image_name.replace("3band_", "").replace(".tif", "")
     solution = solutions[name]
     create_classifications(s3, folder, image_name, solution, border, inside, outside)
+    print("Before", "Border", len(border), "Inside", len(inside), "Outside", len(outside))
     if len(border) > third and len(inside) > third and len(outside) > third:
-      break
+      random.shuffle(border)
+      random.shuffle(inside)
+      random.shuffle(outside)
+      print("Creating file", file_id)
+      key = "classification-{0:d}.classification".format(file_id)
+      temp_name = "/tmp/{0:s}".format(key)
+      with open(temp_name, "w+") as f:
+        items = []
+        t = [border[:third], inside[:third], outside[:third]]
+        for j in range(third):
+          for k in range(3):
+            items.append(t[k][j])
+        border = border[third:]
+        inside = inside[third:]
+        outside = []
+        write_classification(f, items)
+        file_id += 1
+      s3.Object("maccoss-spacenet", key).put(Body=open(temp_name, "rb"))
+    print("After", "Border", len(border), "Inside", len(inside), "Outside", len(outside))
     i += 1
-
-
-  classifications = border.union(inside).union(outside)
-  random.seed(0)
-  random.shuffle(classifications)
-
-  index = 0
-  while file_id <= total_files and index < len(classifications):
-    print("Creating file", file_id)
-    key = "classification-{0:d}.classification"
-    temp_name = "/tmp/{0:s}".format(key)
-    with open(temp_name, "w+") as f:
-      items = classifications[index:index + num_items_per_file]
-      write_classification(f, items)
-      index += len(items)
-    s3.Object("maccoss-spacenet", key).put(Body=open(temp_name, "rb"))
-    file_id += 1
-
 
 
 solutions = parse_solutions("competition1/spacenet_TrainData/vectordata/summarydata/AOI_1_RIO_polygons_solution_3band.csv")
