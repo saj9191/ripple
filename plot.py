@@ -2,6 +2,7 @@ import boto3
 import json
 import matplotlib
 import numpy as np
+import sys
 from matplotlib.font_manager import FontProperties
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
@@ -149,21 +150,33 @@ def error_plot(num_results, num_layers, results, pipeline, params):
   plt.close()
 
 
-def accumulation_plot(x, y, regions, pipeline, title, plot_name, folder, absolute=False, zoom=None):
-  if False:
+def accumulation_plot(x, y, pipeline, title, plot_name, folder, absolute=False, zoom=None):
+  print(plot_name)
+  if plot_name.startswith("ssw"):
     offset = 0
-    colors = ["black"]
-  elif plot_name.startswith("ssw"):
-    offset = 0
-    colors = ["purple", "cyan", "blue", "red", "orange", "green", "black"]
+    colors = ["purple", "cyan", "orange", "blue", "magenta", "black"]
+    ys = [0.15, 0.40, 0.65, 0.90, 1.15]
+    num_rows = 4
+    increment = 1
   elif plot_name.startswith("methyl"):
     colors = ["purple", "cyan", "black"]
     offset = 3
+    ys = [0.15, 0.30, 0.45, 0.60, 0.75, 1]
+    num_rows = 6
+    increment = 5
+  elif plot_name.startswith("knn"):
+    colors = ["red", "purple", "orange", "blue", "green", "black"]
+    ys = [0.15, 0.40, 0.65, 0.90, 1.15]
+    num_rows = 4
+    increment = 5
   else:
-    colors = ["purple", "cyan", "blue", "red", "orange", "green", "brown", "black"]
+    colors = ["purple", "cyan", "blue", "red", "orange", "green", "brown", "magenta", "black"]
     offset = 1
+    ys = [0.15, 0.30, 0.45, 0.60, 0.75, 1]
+    num_rows = 5
+    increment = 5
 
-  rows = 12
+  rows = 6
   font_size = 16
 
   fig1 = plt.figure()
@@ -175,39 +188,50 @@ def accumulation_plot(x, y, regions, pipeline, title, plot_name, folder, absolut
     ax2 = plt.subplot(2, 1, 2)
   else:
     ax1 = plt.subplot2grid((rows, 1), (0, 0), rowspan=rows - offset)
-    ax2 = plt.subplot2grid((rows, 1), (rows - offset, 0))
+    ax2 = plt.subplot2grid((rows, 1), (rows - offset, 0), rowspan=offset)
 
   legends = []
-  alpha = 1
 
   if not absolute:
-    for layer in regions.keys():
+    for layer in range(len(pipeline) + 1):
       color = colors[layer % len(colors)]
-      patch = mpatches.Patch(facecolor=color, edgecolor="black", label=pipeline[layer]["name"], linewidth=1, linestyle="solid")
+      label = pipeline[layer]["name"] if layer < len(pipeline) else "Total"
+      patch = mpatches.Patch(facecolor=color, edgecolor="black", label=label, linewidth=1, linestyle="solid")
       legends.append(patch)
     fontP = FontProperties(family="Arial", size="small")
     fig1.legend(handles=legends, loc="upper right", prop=fontP, bbox_to_anchor=(1.02, 1.02), framealpha=0, borderpad=1)
 
-  max_x = regions[len(regions) - 1][1]
-  plt.xlim([0, max_x])
-  if not absolute:
-    plt.xticks([])
-
-  max_y = 0
+  regions = {}
   for layer in x:
+    min_x = min_y = sys.maxsize
+    max_x = max_y = 0
     px = []
     py = []
     color = colors[layer % len(colors)]
-    x0 = regions[layer][0]
-    x1 = regions[layer][1]
     for i in range(len(x[layer])):
-      if absolute or (x0 <= x[layer][i] and x[layer][i] <= x1):
-        px.append(x[layer][i])
-        py.append(y[layer][i])
-    max_y = max(max_y, max(py))
-    ax1.scatter(px, py, color=color, s=1)
+      lx = x[layer][i]
+      ly = y[layer][i]
+      if len(py) > 0 and lx - px[-1] > increment:
+        r = range(int(px[-1]) + increment, int(lx), increment)
+        for dx in r:
+          px.append(dx)
+          py.append(py[-1])
+      if ly > 0:
+        px.append(lx)
+        py.append(ly)
+
+    if len(py) > 0:
+      min_y = min(min_y, min(py))
+      max_y = max(max_y, max(py))
+      min_x = min(min_x, min(px))
+      max_x = max(max_x, max(px))
+
+    regions[layer] = [min_x, max_x]
+    s = 1 if color != "black" else 0.05
+    alpha = 1 if color != "black" else 1
+    ax1.scatter(px, py, color=color, s=s, alpha=alpha)
     if absolute:
-      ax2.scatter(px, py, color=color, s=1)
+      ax2.scatter(px, py, color=color, s=s, alpha=alpha)
 
   for side in ["right", "top"]:
     ax1.spines[side].set_visible(False)
@@ -220,15 +244,15 @@ def accumulation_plot(x, y, regions, pipeline, title, plot_name, folder, absolut
       ax2.spines[side].set_linewidth(3)
 
   if not absolute:
-    line_width = 5.0
-    for layer in regions.keys():
-      y = 1 * (layer % 3)
+    line_width = 6.0
+    for layer in range(len(regions) - 1):
+      y = ys[layer % num_rows]
       color = colors[layer % len(colors)]
       x0 = max(regions[layer][0], offset)
       x1 = min(regions[layer][1], max_x - offset)
       ax2.plot([x0, x1], [y, y], color="black", linewidth=line_width + 2)
       ax2.plot([x0, x1], [y, y], color="white", linewidth=line_width)
-      ax2.plot([x0, x1], [y, y], color=color, linewidth=line_width, alpha=alpha)
+      ax2.plot([x0, x1], [y, y], color=color, linewidth=line_width)
 
     for side in ["bottom", "left", "right", "top"]:
       ax2.spines[side].set_visible(False)
@@ -238,7 +262,13 @@ def accumulation_plot(x, y, regions, pipeline, title, plot_name, folder, absolut
     ax2.set_xlim([0, max_x])
     ax1.set_ylim([0, max_y])
   else:
-    pass
+    ax1.set_xticks([])
+    ax1.set_xlim([0, max_x])
+    ax2.set_xlim([0, max_x])
+    ax2.set_ylim([0, 1.2])
+    ax2.set_yticks([])
+    ax1.set_ylabel("Number of Running Processes")
+
   plot_name = "{0:s}/{1:s}.png".format(folder, plot_name)
   plt.xlabel("Runtime (seconds)", size=font_size)
   print(plot_name)
@@ -275,7 +305,6 @@ def comparison(name, title, lambda_costs, ec2_cost, ec2_s3_cost, ylabel, params=
 def statistics(name, folder, stats, labels, ty):
   fig, ax = plt.subplots()
   s3 = boto3.resource("s3")
-  bucket = "ssw-input" if name == "Smith Waterman" else "shjoyner-als"
   keys = set(stats[0].keys())
   for s in stats[1:]:
     keys = keys.intersection(set(s.keys()))
@@ -283,10 +312,15 @@ def statistics(name, folder, stats, labels, ty):
   p = []
   for key in keys:
     if name != "Smith Waterman":
-      if not key.startswith("TN_"):
-        bucket = "shjoyner-ash"
+      if key.startswith("TN_"):
+        bucket = "shjoyner-als"
+      elif key.startswith("22Feb"):
+        bucket = "shjoyner-sample-input"
       else:
-        bucket = "ssw-input"
+        bucket = "shjoyner-ash"
+    else:
+      bucket = "ssw-input"
+    print(bucket, key)
     p.append([s3.Object(bucket, key).content_length, key])
 
   p.sort()
@@ -300,7 +334,7 @@ def statistics(name, folder, stats, labels, ty):
       runtimes.append(stats[j][key])
     start = i * (len(stats) + 1)
     positions = range(start + 1, start + len(stats) + 1)
-    bp = ax.boxplot(runtimes, positions = positions, widths = 0.7, whis="range")
+    bp = ax.boxplot(runtimes, positions=positions, widths=0.7, whis="range")
     for j in range(len(bp["boxes"])):
       c = colors[j]
       plt.setp(bp["boxes"][j], color=c)
@@ -314,9 +348,25 @@ def statistics(name, folder, stats, labels, ty):
   for i in range(len(labels)):
     legend.append(plt.Line2D([0], [0], color=colors[i], lw=1, label=labels[i]))
   ax.legend(handles=legend, loc="upper right", bbox_to_anchor=(1.1, 1.05))
-  ax.set_xticks([])
   plt.xlim([0, len(keys) * (len(stats) + 1) + 1])
   plot_name = "{0:s}/{1:s}_box_plot.png".format(folder, ty)
+
+  ticks = []#list(map(lambda q: "%.1fMB" % (q[0] / 1024 / 1024), p))
+  for i in range(len(p)):
+    ticks.append("")
+    ticks.append("")
+    x = p[i][0]
+    if x < 1024:
+      ticks.append("%.1fB" % x)
+    elif x < (1024 * 1024):
+      x /= 1024
+      ticks.append("%.1fKB" % x)
+    else:
+      x /= (1024 * 1024)
+      ticks.append("%.1fMB" % x)
+  print(ticks)
+  ax.set_xticks(range(len(ticks)))
+  ax.set_xticklabels(ticks)
 
   if ty == "duration":
     plt.ylabel("Runtime (Seconds)")
