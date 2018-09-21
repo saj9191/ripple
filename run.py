@@ -267,6 +267,8 @@ def get_start_time(stats):
   for pipeline in stats:
     for i in range(len(pipeline)):
       stat = pipeline[i]
+      if type(stat) == list:
+        stat = stat[0]
       name = stat["name"]
       if name not in ["load", "total"]:
         for message in stat["messages"]:
@@ -275,7 +277,7 @@ def get_start_time(stats):
   return min(start_times)
 
 
-def get_lambda_results(folder, params, concurrency=None):
+def get_lambda_results(folder, params, concurrency=None, absolute=False):
   stats = []
   for subdir, dirs, files in os.walk(folder):
     for d in dirs:
@@ -283,71 +285,34 @@ def get_lambda_results(folder, params, concurrency=None):
       s = json.load(open(file_name))["stats"]
       stats.append(s)
 
-  memory = json.loads(open("json/memory.json").read())
-  layers_to_duration = {}
-  layers_to_lambda_cost = {}
-  layers_to_s3_cost = {}
-  layers_to_count = {}
   points = []
-  regions = {}
-
-  average_duration = 0
+  max_layer = 0
   start_time = get_start_time(stats)
   for pipeline in stats:
-    result_regions = {}
-    duration = 0
     for i in range(len(pipeline)):
       stat = pipeline[i]
+      if type(stat) == list:
+        stat = stat[0]
       layer = i - 1
+      max_layer = max(layer, max_layer)
       name = stat["name"]
       if name not in ["load", "total"]:
-        if layer not in layers_to_duration:
-          layers_to_duration[layer] = {"timestamp": 0, "duration": 0}
-          layers_to_lambda_cost[layer] = layers_to_s3_cost[layer] = layers_to_count[layer] = 0
-        if layer not in result_regions:
-          result_regions[layer] = [sys.maxsize, 0]
-
         for message in stat["messages"]:
           jmessage = json.loads(message)
+          if layer == 0 and not absolute:
+            start_time = jmessage["start_time"]
           start = jmessage["start_time"] - start_time
           end = start + math.ceil(jmessage["duration"] / 1000)
-          duration = max(duration, end)
-          result_regions[layer][0] = min(result_regions[layer][0], start)
-          result_regions[layer][1] = max(result_regions[layer][1], end)
           points.append([start, 1, layer])
           points.append([end, -1, layer])
-          layers_to_duration[layer]["timestamp"] += jmessage["start_time"]
-          layers_to_duration[layer]["duration"] += jmessage["duration"]
-          function_name = params["pipeline"][layer]["name"]
-          memory_size = str(params["functions"][function_name]["memory_size"])
-          layers_to_lambda_cost[layer] += int(jmessage["duration"] / 100) * memory["lambda"][memory_size]
-          layers_to_s3_cost[layer] += (jmessage["read_count"] / 1000) * 0.0004
-          layers_to_s3_cost[layer] += (jmessage["write_count"] / 1000) * 0.005
-          layers_to_s3_cost[layer] += (jmessage["list_count"] / 1000) * 0.005
-          #layers_to_s3_cost[layer] += (jmessage["read_byte_count"] / 1024 / 1024 / 1024) * 0.023
-          layers_to_count[layer] += 1
-
-    for layer in result_regions.keys():
-      if layer not in regions:
-        regions[layer] = [0.0, 0.0]
-      for i in range(2):
-        regions[layer][i] += result_regions[layer][i]
-    average_duration += duration
-
-  for layer in regions:
-    regions[layer][0] /= len(stats)
-    regions[layer][1] /= len(stats)
-
-  for layer in layers_to_duration:
-    layers_to_duration[layer]["duration"] /= (layers_to_count[layer] * 1000)
-    layers_to_duration[layer]["timestamp"] /= layers_to_count[layer]
-    layers_to_lambda_cost[layer] /= len(stats)
-    layers_to_s3_cost[layer] /= len(stats)
 
   points.sort()
   layer_to_count = {}
-  layer_to_x = {}
-  layer_to_y = {}
+  num_layers = max_layer
+  print("num_layers", num_layers)
+  layer_to_x = {num_layers: []}
+  layer_to_y = {num_layers: []}
+  layer_to_count[num_layers] = 0
 
   for [x, c, layer] in points:
     if layer not in layer_to_x:
@@ -355,13 +320,16 @@ def get_lambda_results(folder, params, concurrency=None):
       layer_to_x[layer] = []
       layer_to_y[layer] = []
     layer_to_count[layer] += c
+    layer_to_count[num_layers] += c
     layer_to_x[layer].append(x)
-    count = sum(map(lambda i: layer_to_count[i], range(0, layer + 1)))
-    count = float(count) / len(stats) if concurrency is None else count
+    layer_to_x[num_layers].append(x)
+    # count = sum(map(lambda i: layer_to_count[i], range(0, layer + 1)))
+    count = float(layer_to_count[layer]) / len(stats) if concurrency is None else layer_to_count[layer]
     layer_to_y[layer].append(count)
+    count = float(layer_to_count[num_layers]) / len(stats) if concurrency is None else layer_to_count[num_layers]
+    layer_to_y[num_layers].append(count)
 
-  average_duration /= len(stats)
-  return [average_duration, layers_to_lambda_cost, layers_to_s3_cost, regions, layer_to_x, layer_to_y]
+  return [layer_to_x, layer_to_y]
 
 
 def get_ec2_results(folder):
@@ -437,98 +405,37 @@ def get_ec2_results(folder):
 
 
 def accumulation():
-  params = json.loads(open("json/tide.json").read())
-  #render("Tide Zipfian", "tide", "results/tide-zipfian-lambda", "", params, compare=False, concurrency=100, absolute=True, zoom=[1000, 1200])
-  #render("Tide Uniform", "tide", "results/tide-uniform-lambda", "", params, compare=False, concurrency=100, absolute=True, zoom=[190, 300])
-  #render("Tide Bursty", "tide", "results/tide-bursty-lambda", "", params, compare=False, concurrency=100, absolute=True, zoom=[1200, 1350])
-#  file_average.render("Tide", "tide", "tide", params)
-  file_average.render("Smith Waterman", "smith-waterman", "ssw", params)
-
-  return
-  lambda_folder = "results/test-tide100"
-  ec2_folder = "results/tide-ec2"
-  render("Tide", "tide", lambda_folder, ec2_folder, params, concurrency=100)
-
-  params = json.loads(open("json/tide.json").read())
-  lambda_folder = "results/tide"
-  ec2_folder = "results/tide-ec2"
-  render("Tide", "tide", lambda_folder, ec2_folder, params, compare=True)
-
-  lambda_folder = "results/tide100"
-  render("Tide", "tide", lambda_folder, ec2_folder, params, concurrency=100)
-
-  params = json.loads(open("json/dna-compression.json").read())
-  lambda_folder = "results/methyl-lambda"
-  ec2_folder = "results/methyl-ec2"
-  render("Methyl DNA Compression", "methyl", lambda_folder, ec2_folder, params)
-  return
-  params = json.loads(open("json/smith-waterman.json").read())
-  lambda_folder = "results/test-ssw-lambda"
-  ec2_folder = "results/ssw-ec2"
-  render("Smith Waterman", "ssw", lambda_folder, ec2_folder, params, compare=False, concurrency=None)
+  params = json.loads(open("json/spacenet-classification.json").read())
+  render("Spacenet", "knn", "results/knn/3band_AOI_1_RIO_img5792.tif", "", params, concurrency=None, absolute=False)
 
   params = json.loads(open("json/smith-waterman.json").read())
-  lambda_folder = "results/small-ssw-concurrency100"
-  ec2_folder = "results/ssw-ec2"
-  render("Smith Waterman", "ssw", lambda_folder, ec2_folder, params, compare=False, concurrency=100)
+  render("Smith Waterman", "ssw", "results/ssw/input-20.fasta", "", params, concurrency=None, absolute=False)
 
-  lambda_folder = "results/small-ssw-concurrency200"
-  ec2_folder = "results/ssw-ec2"
-  render("Smith Waterman", "ssw", lambda_folder, ec2_folder, params, compare=False, concurrency=200)
-
-  lambda_folder = "results/small-ssw-lambda"
-  ec2_folder = "results/ssw-ec2"
-  render("Smith Waterman", "ssw", lambda_folder, ec2_folder, params, compare=False, concurrency=None)
+#  params = json.loads(open("json/tide.json").read())
+#  render("Tide Zipfian", "tide", "results/tide-zipfian-lambda", "", params, compare=False, concurrency=100, absolute=True, zoom=[1000, 1200])
+#  render("Tide Uniform", "tide", "results/tide-uniform-lambda", "", params, compare=False, concurrency=100, absolute=True, zoom=[190, 300])
+#  render("Tide Bursty", "tide", "results/tide-bursty-lambda", "", params, compare=False, concurrency=100, absolute=True, zoom=[1200, 1350])
+#  render("Tide", "tide", "results/tide100", "", params, concurrency=100, absolute=False)
+#  render("Tide", "tide", "results/tide/TN_CSF_062617_01.mzML", "", params, concurrency=None, absolute=False)
+  file_average.render("Tide", "tide", "tide", params)
+#  file_average.render("Smith Waterman", "smith-waterman", "ssw", params)
+#  render("Smith Waterman", "ssw", "results/ssw200", "", params, concurrency=100, absolute=False)
 
 
 def render(title, name, lambda_folder, ec2_folder, params, compare=True, concurrency=None, absolute=False, zoom=None):
-  [lambda_duration, lambda_cost, lambda_s3_cost, regions, x, y] = get_lambda_results(lambda_folder, params, concurrency)
-  lambda_cost = sum(lambda_cost.values())
-  lambda_s3_cost = sum(lambda_s3_cost.values())
-
-  #[ssw_ec2_duration, ssw_ec2_cost, x, y] = get_ec2_results(ec2_folder)
-  #ec2_duration = sum(ssw_ec2_duration.values())
-  #ec2_cost = sum(ssw_ec2_cost.values())
+  [x, y] = get_lambda_results(lambda_folder, params, concurrency, absolute)
 
   plot_name = "{name}_accumulation".format(name=name)
 
   plot.accumulation_plot(
       x,
       y,
-      regions,
       params["pipeline"],
       "{0:s} Average Lambda Processes".format(title),
       plot_name,
       lambda_folder,
       absolute,
       zoom
-  )
-  return
-  plot.comparison(
-      "{0:s}_cost_comparison".format(name),
-      "{0:s} Cost Comparison".format(title),
-      lambda_cost,
-      lambda_s3_cost,
-      ec2_cost,
-      0,
-      "Cost ($)",
-      params
-  )
-  return
-  if concurrency is not None:
-    plot_name = "{name}_{concurrency}".format(name=plot_name, concurrency=concurrency)
-
-  if not compare:
-    return
-
-
-  plot.comparison(
-      "{0:s}_runtime_comparison".format(name),
-      "{0:s} Runtime Comparison".format(title),
-      lambda_duration,
-      ec2_duration,
-      "Runtime (Seconds)",
-      params
   )
   return
 
@@ -585,7 +492,7 @@ def main():
 
 
 def move():
-  folder = "results/tide-bursty-lambda"
+  folder = "results/ssw200"
   for subdir, dirs, files in os.walk(folder):
     if len(dirs) > 0 and "." in subdir:
       for d in dirs:
