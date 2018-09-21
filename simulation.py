@@ -211,6 +211,7 @@ def main():
   parser.add_argument("--parameters", type=str, required=True, help="File containing parameters")
   parser.add_argument("--distribution", type=str, required=True, help="Distribution to use")
   parser.add_argument("--concurrency", type=int, help="Number of concurrent instances to run")
+  parser.add_argument('--folder', type=str, help="Folder to store results in")
   args = parser.parse_args()
   params = json.loads(open(args.parameters).read())
   [access_key, secret_key] = util.get_credentials(params["credential_profile"])
@@ -218,6 +219,8 @@ def main():
   params["secret_key"] = secret_key
   params["setup"] = False
   params["iterations"] = 1
+  if len(args.folder) > 0:
+    params["folder"] = args.folder
   run(args, params)
 
 
