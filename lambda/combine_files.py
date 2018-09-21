@@ -9,13 +9,20 @@ def combine(bucket_name, key, input_format, output_format, offsets, params):
   batch_size = params["batch_size"] if "batch_size" in params else 1
   file_id = int((input_format["file_id"] + batch_size - 1) / batch_size)
 
-  output_format["file_id"] = file_id
+  # TODO: Fix.
+  if "batch_size" in params:
+    output_format["file_id"] = file_id
+  else:
+    output_format["file_id"] = input_format["bin"]
   output_format["bin"] = 1
   util.make_folder(output_format)
 
   [combine, keys, last] = util.combine_instance(bucket_name, key, params)
   if combine:
-    output_format["last"] = last
+    if "batch_size" in params:
+      output_format["last"] = last
+    else:
+      output_format["last"] = (output_format["file_id"] == params["num_bins"])
     msg = "Combining TIMESTAMP {0:f} NONCE {1:d} BIN {2:d} FILE {3:d}"
     msg = msg.format(input_format["timestamp"], input_format["nonce"], input_format["bin"], input_format["file_id"])
     print(msg)
