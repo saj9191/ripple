@@ -86,10 +86,10 @@ def split_file(bucket_name, key, input_format, output_format, offsets, params):
       s3_params["extra_params"]["id"] = file_id
       params["bucket_format"]["last"] = False
 
-      invoke(client, params["name"], payload)
+      util.invoke(client, params["name"], params, payload)
       return
     else:
-      invoke(client, params["output_function"], payload)
+      util.invoke(client, params["output_function"], params, payload)
 
 
 def handler(event, context):

@@ -53,6 +53,18 @@ LIST_TIME = 0
 UPLOAD_TIME = 0
 
 
+def invoke(client, name, params, payload):
+  if is_set(params, "scheduler"):
+    params["payloads"].append(payload)
+  else:
+    response = client.invoke(
+      FunctionName=name,
+      InvocationType="Event",
+      Payload=json.JSONEncoder().encode(payload)
+    )
+    assert(response["ResponseMetadata"]["HTTPStatusCode"] == 202)
+
+
 def check_output(command):
   try:
     stdout = subprocess.check_output(command, stderr=subprocess.STDOUT, shell=True)
@@ -156,6 +168,19 @@ def write(m, bucket, key, body, params):
     except botocore.exceptions.ClientError as e:
       print("ERROR: RATE LIMIT")
       time.sleep(random.randint(1, 10))
+
+  params["payloads"].append({
+    "Records": [{
+      "s3": {
+        "bucket": {
+          "name": bucket
+        },
+        "object": {
+          "key": key
+        }
+      }
+    }]
+  })
 
 
 def object_exists(bucket_name, key):
@@ -304,6 +329,7 @@ def lambda_setup(event, context):
     prefix = key_fields["prefix"]
 
   params = json.loads(open("{0:d}.json".format(prefix)).read())
+  params["payloads"] = []
   params["write_count"] = 0
   params["prefix"] = prefix
   params["token"] = random.randint(1, 100*1000*1000)

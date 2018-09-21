@@ -65,12 +65,7 @@ def map_file(bucket_name, key, input_format, output_format, offsets, params):
       payload["Records"][0]["s3"]["extra_params"]["pivots"] = ranges
       payload["Records"][0]["s3"]["pivots"] = ranges
 
-    response = client.invoke(
-      FunctionName=params["output_function"],
-      InvocationType="Event",
-      Payload=json.JSONEncoder().encode(payload)
-    )
-    assert(response["ResponseMetadata"]["HTTPStatusCode"] == 202)
+    util.invoke(client, params["output_function"], params, payload)
 
 
 def handler(event, context):
