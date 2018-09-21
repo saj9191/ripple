@@ -34,8 +34,6 @@ def find_top(bucket_name, key, input_format, output_format, offsets, params):
         heapq.heappop(top)
 
   values = list(map(lambda t: t.value, top))
-  if "header" not in offsets:
-    offsets["header"] = {"start": 0, "end": it.header_length}
   content = iterator.fromArray(obj, values, offsets)
 
   file_name = util.file_name(output_format)
