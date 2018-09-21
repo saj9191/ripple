@@ -27,7 +27,12 @@ def get_ec2_cost_stats(application, key, stats, params):
   if params["tag"] == "smith-waterman":
     bucket = "ssw-input"
   else:
-    bucket = "shjoyner-als" if key.startswith("TN_") else "shjoyner-ash"
+    if key.startswith("TN_"):
+      bucket = "shjoyner-als"
+    elif key.startswith("22Feb"):
+      bucket = "shjoyner-sample-input"
+    else:
+      bucket = "shjoyner-ash"
 
   obj = s3.Object(bucket, key)
   content_length = obj.content_length
@@ -46,6 +51,7 @@ def get_ec2_cost_stats(application, key, stats, params):
 
 def get_lambda_runtime_stats(key, stats, params):
   durations = list(map(lambda s: 0, stats))
+  s3_durations = list(map(lambda s: 0, stats))
 
   for sindex in range(len(stats)):
     pipeline = stats[sindex]
@@ -65,9 +71,12 @@ def get_lambda_runtime_stats(key, stats, params):
           else:
             start_time = min(start, start_time)
             end_time = max(end, end_time)
+        s3_durations[sindex] += jmessage["download_time"]
+        s3_durations[sindex] += jmessage["upload_time"]
+        s3_durations[sindex] += jmessage["list_time"]
     durations[sindex] = end_time - start_time
 
-  return durations
+  return durations, s3_durations
 
 
 def get_lambda_cost_stats(key, stats, params):
@@ -77,7 +86,12 @@ def get_lambda_cost_stats(key, stats, params):
   if params["tag"] == "smith-waterman":
     bucket = "ssw-input"
   else:
-    bucket = "shjoyner-als" if key.startswith("TN_") else "shjoyner-ash"
+    if key.startswith("TN_"):
+      bucket = "shjoyner-als"
+    elif key.startswith("22Feb"):
+      bucket = "shjoyner-sample-input"
+    else:
+      bucket = "shjoyner-ash"
   s3 = util.s3(params)
   obj = s3.Object(bucket, key)
   content_length = obj.content_length
@@ -146,10 +160,12 @@ def process_lambda(application, ack):
   lambda_folder = "{0:s}-files-lambda".format(ack)
   total_costs = []
   total_s3_costs = []
+  total_s3_runtimes = []
   total_runtimes = []
   costs = {}
   s3_costs = {}
   runtimes = {}
+  s3_runtimes = {}
   stats = {}
   params = json.load(open("json/{0:s}.json".format(application)))
   for subdir, dirs, files in os.walk("results/" + lambda_folder):
@@ -161,8 +177,11 @@ def process_lambda(application, ack):
       stats[folder].append(s)
 
   for key in stats:
-    runtimes[key] = get_lambda_runtime_stats(key, stats[key], params)
+    d, s3d = get_lambda_runtime_stats(key, stats[key], params)
+    runtimes[key] = d
+    s3_runtimes[key] = s3d
     total_runtimes += runtimes[key]
+    total_s3_runtimes += s3_runtimes[key]
     c, s3 = get_lambda_cost_stats(key, stats[key], params)
     total_costs += c
     total_s3_costs += s3
@@ -170,18 +189,21 @@ def process_lambda(application, ack):
     s3_costs[key] = s3
 
   print("Lambda Average Runtime", numpy.average(total_runtimes))
+  print("Lambda Average S3 Runtime", numpy.average(total_s3_runtimes))
   print("Lambda Average Cost", numpy.average(total_costs))
   print("Lambda Average S3 Cost", numpy.average(total_s3_costs))
 
-  return costs, s3_costs, runtimes
+  return costs, s3_costs, runtimes, s3_runtimes
 
 
 def render(title, application, ack, params):
-  lambda_costs, lambda_s3_costs, lambda_runtimes = process_lambda(application, ack)
+  lambda_costs, lambda_s3_costs, lambda_runtimes, lambda_s3_runtimes = process_lambda(application, ack)
+  print("lambda", lambda_runtimes.keys())
   ec2_costs, ec2_s3_costs, ec2_runtimes = process_ec2(application, ack)
+  print("ec2", ec2_runtimes.keys())
   labels = ["Lambda Cost", "Lambda S3 Cost", "EC2 Cost", "EC2 S3 Cost"]
   costs = [lambda_costs, lambda_s3_costs, ec2_costs, ec2_s3_costs]
   plot.statistics(title, "results/{0:s}-files-lambda".format(ack), costs, labels, "cost")
-  labels = ["Lambda Runtime", "EC2 Runtime"]
-  runtimes = [lambda_runtimes, ec2_runtimes]
+  labels = ["Lambda Runtime", "EC2 Runtime"]#"Lambda S3 Runtimes", "EC2 Runtime"]
+  runtimes = [lambda_runtimes, ec2_runtimes]#lambda_s3_runtimes, ec2_runtimes]
   plot.statistics(title, "results/{0:s}-files-lambda".format(ack), runtimes, labels, "duration")
