@@ -6,6 +6,7 @@ import os
 import paramiko
 import random
 import re
+import scheduler
 import setup
 import subprocess
 import time
@@ -584,7 +585,11 @@ def parse_logs(params, upload_timestamp, upload_duration, total_duration):
 def lambda_benchmark(params, thread_id):
   [upload_timestamp, upload_duration] = upload_input(params, thread_id)
   start_time = time.time()
-  failed = wait_for_completion(upload_timestamp, params, thread_id)
+  if util.is_set(params, "scheduler"):
+    scheduler.schedule(params["key"], params)
+    failed = False
+  else:
+    failed = wait_for_completion(upload_timestamp, params, thread_id)
   end_time = time.time()
   total_duration = end_time - start_time
   results = [upload_duration, total_duration]
