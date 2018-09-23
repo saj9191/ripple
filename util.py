@@ -169,18 +169,19 @@ def write(m, bucket, key, body, params):
       print("ERROR: RATE LIMIT")
       time.sleep(random.randint(1, 10))
 
-  params["payloads"].append({
-    "Records": [{
-      "s3": {
-        "bucket": {
-          "name": bucket
-        },
-        "object": {
-          "key": key
+  if is_set(params, "scheduler"):
+    params["payloads"].append({
+      "Records": [{
+        "s3": {
+          "bucket": {
+            "name": bucket
+          },
+          "object": {
+            "key": key
+          }
         }
-      }
-    }]
-  })
+      }]
+    })
 
 
 def object_exists(bucket_name, key):
@@ -235,47 +236,51 @@ def combine_instance(bucket_name, key, params={}):
   return [done and current_last_file(batch, key, params), keys, last]
 
 
-def run(bucket_name, key, params, func):
-  clear_tmp(params)
-  with open("/tmp/warm", "w+") as f:
-    f.write("warm")
-
+def get_formats(key, file, params):
   input_format = parse_file_name(key)
   output_format = dict(input_format)
   output_format["prefix"] = params["prefix"] + 1
   if "id" in params:
-    params["file_id"] = params["id"]
     output_format["file_id"] = params["id"]
 
-  print_request(input_format, params)
-
-  offsets = {}
   if "more" in params["object"]:
     output_format["file_id"] = params["object"]["file_id"]
     output_format["last"] = not params["object"]["more"]
-  else:
-    print_read(input_format, key, params)
 
-  if "offsets" in params:
-    offsets = params["offsets"]
-  else:
-    print_read(input_format, key, params)
-  if params["file"] in ["combine_files", "split_file"]:
+  if file in ["combine_files", "split_file"]:
     bucket_format = dict(input_format)
   else:
     bucket_format = dict(output_format)
   bucket_format["ext"] = "log"
   bucket_format["prefix"] = params["prefix"] + 1
-  bucket_format["suffix"] = "{0:f}".format(time.time())
-  params["bucket_format"] = bucket_format
+  if not is_set(params, "scheduler"):
+    print("what")
+    bucket_format["suffix"] = "{0:f}".format(time.time())
+  return [input_format, output_format, bucket_format]
 
-  params["output_format"] = output_format
+
+def run(bucket_name, key, params, func):
+  clear_tmp(params)
+  with open("/tmp/warm", "w+") as f:
+    f.write("warm")
+
+  if "id" in params:
+    params["file_id"] = params["id"]
+
+  if "offsets" in params:
+    offsets = params["offsets"]
+  else:
+    offsets = {}
+
+  [input_format, output_format, bucket_format] = get_formats(key, params["file"], params)
   params["input_format"] = input_format
+  params["output_format"] = output_format
+  params["bucket_format"] = bucket_format
   make_folder(input_format)
   make_folder(output_format)
   prefix = "-".join(file_name(bucket_format).split("-")[:-1])
   objects = get_objects(params["log"], prefix, params)
-  if len(objects) == 0:
+  if is_set(params, "scheduler") or len(objects) == 0:
     func(bucket_name, key, input_format, output_format, offsets, params)
 
   return output_format
@@ -363,6 +368,7 @@ def show_duration(context, m, p):
   print(msg)
 
   log_results = {
+    "payloads": p["payloads"],
     "start_time": START_TIME,
     "read_count": READ_COUNT,
     "write_count": p["write_count"],

@@ -61,8 +61,9 @@ def create_parameter_files(zip_directory, function_name, params):
     pparams = params["pipeline"][i]
     if pparams["name"] == function_name:
       p = {**pparams, **params["functions"][function_name]}
-      for value in ["timeout", "num_bins", "bucket", "storage_class", "log"]:
-        p[value] = params[value]
+      for value in ["timeout", "num_bins", "bucket", "storage_class", "log", "scheduler"]:
+        if value in params:
+          p[value] = params[value]
       name = "{0:d}.json".format(i)
       json_path = "{0:s}/{1:s}".format(zip_directory, name)
       f = open(json_path, "w")
@@ -89,12 +90,11 @@ def upload_functions(client, params):
   if os.path.isdir(zip_directory):
     shutil.rmtree(zip_directory)
 
-
   for name in params["functions"]:
     fparams = params["functions"][name]
     files = []
     os.makedirs(zip_directory)
-    if params["folder"] == "knn":
+    if "knn" in params["folder"]:
       for folder, subdir, ff in os.walk("libraries"):
         if folder.count("/") == 0:
           for d in subdir:
@@ -226,7 +226,8 @@ def setup(params):
 
   client = util.lambda_client(params)
   upload_functions(client, params)
-  setup_triggers(params)
+  if not util.is_set(params, "scheduler"):
+    setup_triggers(params)
 
 
 def main():
