@@ -1,5 +1,5 @@
 {
-	"input_name": "input-20.fasta",
+	"input_name": "input-25.fasta",
 	"model": "lambda",
 	"iterations": 10,
 	"folder": "ssw-files-lambda",
