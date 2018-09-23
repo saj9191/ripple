@@ -151,32 +151,34 @@ def error_plot(num_results, num_layers, results, pipeline, params):
 
 
 def accumulation_plot(x, y, pipeline, title, plot_name, folder, absolute=False, zoom=None):
-  print(plot_name)
   if plot_name.startswith("ssw"):
     offset = 0
     colors = ["purple", "cyan", "orange", "blue", "magenta", "black"]
     ys = [0.15, 0.40, 0.65, 0.90, 1.15]
     num_rows = 4
+    rows = 6
     increment = 1
   elif plot_name.startswith("methyl"):
     colors = ["purple", "cyan", "black"]
     offset = 3
     ys = [0.15, 0.30, 0.45, 0.60, 0.75, 1]
     num_rows = 6
+    rows = 6
     increment = 5
   elif plot_name.startswith("knn"):
     colors = ["red", "purple", "orange", "blue", "green", "black"]
     ys = [0.15, 0.40, 0.65, 0.90, 1.15]
     num_rows = 4
+    rows = 6
     increment = 5
   else:
     colors = ["purple", "cyan", "blue", "red", "orange", "green", "brown", "magenta", "black"]
     offset = 1
-    ys = [0.15, 0.30, 0.45, 0.60, 0.75, 1]
+    ys = [0.14, 0.35, 0.55, 0.76, 0.96, 1.15]
     num_rows = 5
+    rows = 5
     increment = 5
 
-  rows = 6
   font_size = 16
 
   fig1 = plt.figure()
@@ -191,6 +193,8 @@ def accumulation_plot(x, y, pipeline, title, plot_name, folder, absolute=False, 
     ax2 = plt.subplot2grid((rows, 1), (rows - offset, 0), rowspan=offset)
 
   legends = []
+  ax1.margins(x=0, y=0)
+  ax2.margins(x=0, y=0)
 
   if not absolute:
     for layer in range(len(pipeline) + 1):
@@ -309,6 +313,7 @@ def statistics(name, folder, stats, labels, ty):
   for s in stats[1:]:
     keys = keys.intersection(set(s.keys()))
 
+  print("keys", keys)
   p = []
   for key in keys:
     if name != "Smith Waterman":
@@ -320,11 +325,11 @@ def statistics(name, folder, stats, labels, ty):
         bucket = "shjoyner-ash"
     else:
       bucket = "ssw-input"
-    print(bucket, key)
     p.append([s3.Object(bucket, key).content_length, key])
 
   p.sort()
   keys = list(map(lambda k: k[1], p))
+  print("p", p)
 
   colors = ["red", "blue", "green", "purple"][:len(stats)]
   for i in range(len(keys)):
@@ -364,7 +369,6 @@ def statistics(name, folder, stats, labels, ty):
     else:
       x /= (1024 * 1024)
       ticks.append("%.1fMB" % x)
-  print(ticks)
   ax.set_xticks(range(len(ticks)))
   ax.set_xticklabels(ticks)
 
