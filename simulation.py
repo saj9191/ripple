@@ -37,7 +37,7 @@ class Request(threading.Thread):
 
 
   def run(self):
-  #  print("Thread", self.thread_id, "Sleeping for", self.time)
+    print("Thread", self.thread_id, "Sleeping for", self.time)
     time.sleep(self.time)
     if self.params["model"] == "ec2":
       benchmark.process_params(self.params)
@@ -52,7 +52,6 @@ class Request(threading.Thread):
       benchmark.process_params(self.params)
       benchmark.process_iteration_params(self.params, 1)
       print("Thread {0:d}: Processing file {1:s}".format(self.thread_id, self.file_name))
-      benchmark.upload_input(self.params, self.thread_id)
       [upload_duration, duration, failed_attempts] = benchmark.run(self.params, self.thread_id)
       self.upload_duration = upload_duration
       self.duration = duration
@@ -64,22 +63,6 @@ class Request(threading.Thread):
       stats = benchmark.parse_logs(self.params, self.params["now"] * 1000, self.upload_duration, self.duration)
       benchmark.clear_buckets(self.params)
 
-#    for i in range(2):
-#      self.params["input_name"] = self.file_name
-#      self.params["input_bucket"] = self.params["bucket"]
-#      benchmark.process_params(self.params)
-#      benchmark.process_iteration_params(self.params, 1)
-#      print("Thread {0:d}: Processing file {1:s}".format(self.thread_id, self.file_name))
-#      benchmark.upload_input(self.params, self.thread_id)
-#    [upload_duration, duration, failed_attempts] = benchmark.run(self.params, self.thread_id)
-#    self.upload_duration = upload_duration
-#    self.duration = duration
-#    self.failed_attempts = failed_attempts
-#    print("Thread {0:d}: Done in {1:f}".format(self.thread_id, duration))
-#    msg = "Thread {0:d}: Upload Duration {1:f}. Duration {2:f}. Failed Attempts {3:f}"
-#    msg = msg.format(self.thread_id, self.upload_duration, self.duration, self.failed_attempts)
-#    print(msg)
-#    stats = benchmark.parse_logs(self.params, self.params["now"] * 1000, self.upload_duration, self.duration)
     dir_path = "results/{0:s}/{1:f}-{2:d}".format(self.params["folder"], self.params["now"], self.params["nonce"])
     os.makedirs(dir_path)
     with open("{0:s}/stats".format(dir_path), "w+") as f:
@@ -164,6 +147,7 @@ def run(args, params):
 
   if params["model"] == "lambda":
     setup.setup(params)
+
   requests = create_request_distribution(args.distribution, args)
   client = None
   if params["model"] == "ec2":
