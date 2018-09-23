@@ -10,7 +10,7 @@ def combine(bucket_name, key, input_format, output_format, offsets, params):
   file_id = int((input_format["file_id"] + batch_size - 1) / batch_size)
 
   # TODO: Fix.
-  if "batch_size" in params:
+  if "batch" in params:
     output_format["file_id"] = file_id
   else:
     output_format["file_id"] = input_format["bin"]
@@ -19,7 +19,7 @@ def combine(bucket_name, key, input_format, output_format, offsets, params):
 
   [combine, keys, last] = util.combine_instance(bucket_name, key, params)
   if combine:
-    if "batch_size" in params:
+    if "batch" in params:
       output_format["last"] = last
     else:
       output_format["last"] = (output_format["file_id"] == params["num_bins"])
