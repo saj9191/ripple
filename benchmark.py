@@ -714,6 +714,8 @@ def setup_instance(client, p):
     program = "ssw_test"
   elif p["ec2"]["application"] == "methyl":
     program = "output"
+  elif p["ec2"]["application"] == "knn":
+    program = None
   else:
     program = "crux"
 
@@ -726,7 +728,8 @@ def setup_instance(client, p):
     time.sleep(3)
     cexec(client, "sudo apt install python3-pip -y")
     cexec(client, "pip3 install boto3")
-    items.append(program)
+    if program is None:
+      items.append(program)
     cexec(client, "mkdir ~/.aws")
     cexec(client, "touch ~/.aws/credentials")
     cmd = 'echo "[default]\naws_access_key_id={0:s}\naws_secret_access_key={1:s}" >> ~/.aws/credentials'.format(p["access_key"], p["secret_key"])
