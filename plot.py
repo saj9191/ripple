@@ -171,6 +171,20 @@ def accumulation_plot(x, y, pipeline, title, plot_name, folder, absolute=False, 
     num_rows = 4
     rows = 6
     increment = 5
+  elif plot_name.startswith("compression"):
+    colors = ["purple", "cyan", "black"]
+    offset = 1
+    ys = [0.14, 0.35, 0.55, 0.76, 0.96, 1.15]
+    num_rows = 5
+    rows = 5
+    increment = 1
+  elif plot_name.startswith("decompression"):
+    colors = ["cyan", "black"]
+    offset = 1
+    ys = [0.14]
+    num_rows = 1
+    rows = 6
+    increment = 1
   else:
     colors = ["purple", "cyan", "blue", "red", "orange", "green", "brown", "magenta", "black"]
     offset = 1
@@ -183,6 +197,7 @@ def accumulation_plot(x, y, pipeline, title, plot_name, folder, absolute=False, 
 
   fig1 = plt.figure()
   offset = 1
+  absolute = False
   if absolute:
     ax1 = plt.subplot(2, 1, 1)
     plt.ylabel("Number of Lambda Processes", size=font_size)
@@ -233,9 +248,9 @@ def accumulation_plot(x, y, pipeline, title, plot_name, folder, absolute=False, 
     regions[layer] = [min_x, max_x]
     s = 1 if color != "black" else 0.05
     alpha = 1 if color != "black" else 1
-    ax1.scatter(px, py, color=color, s=s, alpha=alpha)
+    ax1.plot(px, py, color=color, alpha=alpha)#s=s, alpha=alpha)
     if absolute:
-      ax2.scatter(px, py, color=color, s=s, alpha=alpha)
+      ax2.plot(px, py, color=color, alpha=alpha)#s=s, alpha=alpha)
 
   for side in ["right", "top"]:
     ax1.spines[side].set_visible(False)
@@ -306,6 +321,129 @@ def comparison(name, title, lambda_costs, ec2_cost, ec2_s3_cost, ylabel, params=
   plt.close()
 
 
+def durations(times, folder, plot_name):
+  fig, ax = plt.subplots()
+  line_width = 1
+  font_size = 10
+  colors = [
+    "#f44336",  # red
+    "#ffebee",  # red-50
+    "#ffcdd2",  # red-100
+    "#ef9a9a",  # red-200
+    "#e57373",  # red-300
+    "#ef5350",  # red-400
+    "#f44336",  # red-500
+    "#e53935",  # red-600
+    "#d32f2f",  # red-700
+    "#c62828",  # red-800
+    "#b71c1c",  # red-900
+    "#ff8a80",  # red-a100
+    "#ff5252",  # red-a200
+    "#ff1744",  # red-a400
+    "#d50000",  # red-a700
+    "#2196f3",  # blue
+    "#e3f2fd",  # blue-50
+    "#bbdefb",  # blue-100
+    "#90caf9",  # blue-200
+    "#64b5f6",  # blue-300
+    "#42a5f5",  # blue-400
+    "#2196f3",  # blue-500
+    "#1e88e5",  # blue-600
+    "#1976d2",  # blue-700
+    "#1565c0",  # blue-800
+    "#0d47a1",  # blue-900
+    "#82b1ff",  # blue-a100
+    "#448aff",  # blue-a200
+    "#2979ff",  # blue-a400
+    "#2962ff",  # blue-a700
+    "#e91e63",  # pink
+    "#fce4ec",  # pink-50
+    "#f8bbd0",  # pink-100
+    "#f48fb1",  # pink-200
+    "#f06292",  # pink-300
+    "#ec407a",  # pink-400
+    "#e91e63",  # pink-500
+    "#d81b60",  # pink-600
+    "#c2185b",  # pink-700
+    "#ad1457",  # pink-800
+    "#880e4f",  # pink-900
+    "#ff80ab",  # pink-a100
+    "#ff4081",  # pink-a200
+    "#f50057",  # pink-a400
+    "#c51162",  # pink-a700
+    "#4caf50",  # green
+    "#e8f5e9",  # green-50
+    "#c8e6c9",  # green-100
+    "#a5d6a7",  # green-200
+    "#81c784",  # green-300
+    "#66bb6a",  # green-400
+    "#4caf50",  # green-500
+    "#43a047",  # green-600
+    "#388e3c",  # green-700
+    "#2e7d32",  # green-800
+    "#1b5e20",  # green-900
+    "#b9f6ca",  # green-a100
+    "#69f0ae",  # green-a200
+    "#00e676",  # green-a400
+    "#00c853",  # green-a700
+    "#ffc107",  # amber
+    "#fff8e1",  # amber-50
+    "#ffecb3",  # amber-100
+    "#ffe082",  # amber-200
+    "#ffd54f",  # amber-300
+    "#ffca28",  # amber-400
+    "#ffc107",  # amber-500
+    "#ffb300",  # amber-600
+    "#ffa000",  # amber-700
+    "#ff8f00",  # amber-800
+    "#ff6f00",  # amber-900
+    "#ffe57f",  # amber-a100
+    "#ffd740",  # amber-a200
+    "#ffc400",  # amber-a400
+    "#ffab00",  # amber-a700
+    "#607d8b",  # blue-grey
+    "#eceff1",  # blue-grey-50
+    "#cfd8dc",  # blue-grey-100
+    "#b0bec5",  # blue-grey-200
+    "#90a4ae",  # blue-grey-300
+    "#78909c",  # blue-grey-400
+    "#607d8b",  # blue-grey-500
+    "#546e7a",  # blue-grey-600
+    "#455a64",  # blue-grey-700
+    "#37474f",  # blue-grey-800
+    "#263238",  # blue-grey-900
+    "#673ab7",  # deep-purple
+    "#ede7f6",  # deep-purple-50
+    "#d1c4e9",  # deep-purple-100
+    "#b39ddb",  # deep-purple-200
+    "#9575cd",  # deep-purple-300
+    "#7e57c2",  # deep-purple-400
+    "#673ab7",  # deep-purple-500
+    "#5e35b1",  # deep-purple-600
+    "#512da8",  # deep-purple-700
+    "#4527a0",  # deep-purple-800
+    "#311b92",  # deep-purple-900
+    "#b388ff",  # deep-purple-a100
+    "#7c4dff",  # deep-purple-a200
+    "#651fff",  # deep-purple-a400
+    "#6200ea",  # deep-purple-a700
+  ]
+  print("num colors", len(colors))
+
+  keys = list(map(lambda t: [times[t][0], t], times.keys()))
+  keys.sort()
+  bars = []
+  for [start_time, job] in keys:
+    y = 20 * len(bars)
+    color = colors[job]
+    bars.append(ax.plot(times[job], [y, y], linewidth=line_width, color=color))
+  plot_name = "{0:s}/{1:s}.png".format(folder, plot_name)
+  plt.xlabel("Runtime (seconds)", size=font_size)
+  print("Duration", plot_name)
+  fig.savefig(plot_name)
+  plt.close()
+
+
 def statistics(name, folder, stats, labels, ty):
   fig, ax = plt.subplots()
   s3 = boto3.resource("s3")
@@ -325,6 +463,7 @@ def statistics(name, folder, stats, labels, ty):
         bucket = "shjoyner-ash"
     else:
       bucket = "ssw-input"
+    print(bucket, key)
     p.append([s3.Object(bucket, key).content_length, key])
 
   p.sort()
