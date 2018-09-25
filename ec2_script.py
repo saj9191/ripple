@@ -173,7 +173,7 @@ def download_input(file_name, bucket, prefix=""):
   with open(file_name, "wb") as f:
     bucket.download_fileobj(file_name, f)
   end_time = time.time()
-  print("{0:f} {2:s}DOWNLOAD DURATION: {1:f}".format(time.time(), end_time - start_time), prefix)
+  print("{0:f} {2:s}DOWNLOAD DURATION: {1:f}".format(time.time(), end_time - start_time, prefix))
 
 
 def upload_output(file_name, bucket, prefix=""):
@@ -288,6 +288,38 @@ def run_methyl(file_name, bucket):
   # print("{0:f} METHYL DURATION: {1:f}".format(time.time(), end_time - start_time))
 
 
+class Task(threading.Thread):
+  def __init__(self, obj, im, px, min_y, max_y, n):
+    super(Task, self).__init__()
+    self.obj = obj
+    self.im = im
+    self.px = px
+    self.top_scores = {}
+    self.min_y = min_y
+    self.max_y = max_y
+    self.n = n
+
+  def run(self):
+    it = classification.Iterator(self.obj, 1000, 100000)
+    more = True
+    width, height = self.im.size
+    while more:
+      [clz, more] = it.next()
+      for y in range(self.min_y, self.max_y):
+        for x in range(width):
+          pixel = self.px[x, y]
+          [pr, pg, pb] = pixel
+          s = "{x} {y} {r} {g} {b}".format(x=x, y=y, r=pr, g=pg, b=pb)
+          self.top_scores[s] = []
+          for c in clz:
+            [cr, cg, cb, cc] = c
+            score = math.sqrt((cr - pr) ** 2 + (cg - pg) ** 2 + (cb - pb) ** 2)
+            if len(self.top_scores[s]) < self.n or -1*score > self.top_scores[s][0][0]:
+              heapq.heappush(self.top_scores[s], [-1*score, c])
+            if len(self.top_scores[s]) > self.n:
+              heapq.heappop(self.top_scores[s])
+
+
 def run_knn(file_name, bucket):
   start_time = time.time()
   download_input(file_name, bucket)
@@ -295,28 +327,32 @@ def run_knn(file_name, bucket):
   im = Image.open(file_name)
   px = im.load()
   width, height = im.size
-  top_scores = {}
+  increment = 1000
 
   st = time.time()
-  n = 100
-  for obj in s3.Bucket("maccoss-spacenet"):
-    it = classification.Iterator(obj, 1000, 100000)
-    more = True
-    while more:
-      [clz, more] = it.next()
-      for y in range(height):
-        for x in range(width):
-          pixel = px[x, y]
-          [px, py, pr, pg, pb] = pixel
-          s = "{x} {y} {r} {g} {b}".format(x=px, y=py, r=pr, g=pg, b=pb)
+  n = 50
+  objects = list(s3.Bucket("maccoss-spacenet").objects.all())
+  threads = []
+  for obj in objects:
+    for min_y in range(0, height, increment):
+      max_y = min(min_y + increment, height)
+      threads.append(Task(s3.Object("maccoss-spacenet", obj.key), im, px, min_y, max_y, n))
+      threads[-1].start()
+
+  print("Waiting")
+  top_scores = None
+  for thread in threads:
+    thread.join()
+    print("Thread", thread.thread_id, "Done")
+    if top_scores is None:
+      top_scores = thread.top_scores
+    else:
+      for s in thread.top_scores.keys():
+        if s not in top_scores:
           top_scores[s] = []
-          for c in clz:
-            [cx, cy, cr, cg, cb, cc] = c
-            score = math.sqrt((cr - pr) ** 2 + (cg - pg) ** 2 + (cb - pb) ** 2)
-            if len(top_scores[s]) < n or -1*score > top_scores[s][0][0]:
-              heapq.heappush(top_scores[s], [-1*score, c])
-            if len(top_scores[s]) > n:
-              heapq.heappop(top_scores[s])
+        heapq.heappush(top_scores[s], heapq.heappop(thread.top_scores[s]))
+        while len(top_scores[s]) > n:
+          heapq.heappop(top_scores[s])
 
   output_file = "/tmp/classification"
   with open(output_file, "w+") as f:
