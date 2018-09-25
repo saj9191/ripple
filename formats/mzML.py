@@ -71,7 +71,7 @@ class Iterator(iterator.Iterator):
     return self.total_count
 
   def more(self):
-    return self.current_offset < self.spectra_list_offset
+    return self.current_offset < self.content_length
 
   def nextOffsets(self):
     if self.content_length == 0 or (len(self.offsets) == 0 and not self.more()):

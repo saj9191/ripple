@@ -37,9 +37,10 @@ class Iterator:
           self.current_offset -= self.offset(self.current_offset)
           if not self.indicator_at_beginning:
             self.current_offset += len(self.identifier)
-        self.content_length -= self.offset(self.content_length)
-        if self.indicator_at_beginning:
-          self.content_length += len(self.identifier)
+        if self.content_length != self.obj.content_length:
+          self.content_length -= self.offset(self.content_length)
+          if self.indicator_at_beginning:
+            self.content_length += len(self.identifier)
     self.offsets = [self.current_offset]
 
   def offset(self, index):
