@@ -34,6 +34,7 @@ def get_ec2_cost_stats(application, key, stats, params):
     else:
       bucket = "shjoyner-ash"
 
+  print(bucket, key)
   obj = s3.Object(bucket, key)
   content_length = obj.content_length
 
@@ -141,6 +142,8 @@ def process_ec2(application, ack):
       stats[folder].append(s)
 
   for key in stats:
+    if "temp" in key:
+      continue
     runtimes[key] = get_ec2_runtime_stats(application, key, stats[key], params)
     total_runtimes += runtimes[key]
     c, s3 = get_ec2_cost_stats(application, key, stats[key], params)
@@ -177,6 +180,8 @@ def process_lambda(application, ack):
       stats[folder].append(s)
 
   for key in stats:
+    if "temp" in key:
+      continue
     d, s3d = get_lambda_runtime_stats(key, stats[key], params)
     runtimes[key] = d
     s3_runtimes[key] = s3d
