@@ -5,9 +5,9 @@ import util
 class Iterator(iterator.Iterator):
   IDENTIFIER = ">"
 
-  def __init__(self, obj, batch_size, chunk_size, offsets={}):
+  def __init__(self, obj, chunk_size, offsets={}):
     self.identifier = Iterator.IDENTIFIER
-    iterator.Iterator.__init__(self, Iterator, obj, batch_size, chunk_size)
+    iterator.Iterator.__init__(self, Iterator, obj, chunk_size)
     self.indicator_at_beginning = True
     iterator.Iterator.__setup__(self, offsets)
 

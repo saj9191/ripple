@@ -33,7 +33,6 @@
 			"file": "top",
 			"format": "blast",
 			"memory_size": 1024,
-			"batch_size": 500,
 			"chunk_size": 100000,
  			"number": 100,
 			"identifier": "score"

@@ -2,8 +2,6 @@ import inspect
 import os
 import sys
 import unittest
-import tutils
-from unittest.mock import MagicMock
 from tutils import S3, Bucket, Object
 
 currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
@@ -11,19 +9,20 @@ parentdir = os.path.dirname(currentdir)
 sys.path.insert(0, parentdir + "/formats")
 import tsv
 
+
 class IteratorMethods(unittest.TestCase):
   def test_next_offsets(self):
     obj = Object("test.tsv", "A\tB\tC\na\tb\tc\n1\t2\t3\n")
 
     # Read everything in one pass
-    it = tsv.Iterator(obj, 2, 20)
+    it = tsv.Iterator(obj, 20)
     [offsets, more] = it.nextOffsets()
     self.assertFalse(more)
     self.assertEqual(offsets["offsets"][0], 6)
     self.assertEqual(offsets["offsets"][1], 17)
 
     # Requires multiple passes
-    it = tsv.Iterator(obj, 1, 10)
+    it = tsv.Iterator(obj, 10)
     [offsets, more] = it.nextOffsets()
     self.assertTrue(more)
     self.assertEqual(offsets["offsets"][0], 6)
@@ -38,7 +37,7 @@ class IteratorMethods(unittest.TestCase):
     obj = Object("test.tsv", "A\tB\tC\na\tb\tc\n1\t2\t3\n")
 
     # Requires multiple passes
-    it = tsv.Iterator(obj, 1, 10)
+    it = tsv.Iterator(obj, 10)
     [o, more] = it.next()
     self.assertTrue(more)
     self.assertEqual(o, ["a\tb\tc", ""])
@@ -48,7 +47,7 @@ class IteratorMethods(unittest.TestCase):
     self.assertEqual(o, ["1\t2\t3", ""])
 
     # Read everything in one pass
-    it = tsv.Iterator(obj, 2, 20)
+    it = tsv.Iterator(obj, 20)
     [o, more] = it.next()
     self.assertFalse(more)
     self.assertEqual(o, ["a\tb\tc", "1\t2\t3", ""])
@@ -63,7 +62,6 @@ class IteratorMethods(unittest.TestCase):
     s3 = S3([bucket1])
     params = {
       "s3": s3,
-      "batch_size": 1,
       "chunk_size": 10,
       "identifier": "",
       "sort": False,

@@ -4,9 +4,9 @@ import util
 
 
 class Iterator(new_line.Iterator):
-  def __init__(self, obj, batch_size, chunk_size, offsets={}):
+  def __init__(self, obj, chunk_size, offsets={}):
     self.identifier = new_line.Iterator.IDENTIFIER
-    iterator.Iterator.__init__(self, Iterator, obj, batch_size, chunk_size)
+    iterator.Iterator.__init__(self, Iterator, obj, chunk_size)
     iterator.Iterator.__setup__(self, offsets)
 
   def fromArray(obj, items, offsets):

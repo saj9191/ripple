@@ -20,7 +20,7 @@ def find_top(bucket_name, key, input_format, output_format, offsets, params):
     util.print_read(input_format, key, params)
   format_lib = importlib.import_module(params["format"])
   iterator = getattr(format_lib, "Iterator")
-  it = iterator(obj, offsets, params["batch_size"], params["chunk_size"])
+  it = iterator(obj, offsets, params["chunk_size"])
 
   top = []
   more = True

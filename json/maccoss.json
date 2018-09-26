@@ -45,7 +45,6 @@
 	],
 	"pipeline": [{
 		"file": "split_file",
-		"batch_size": 4000,
 		"chunk_size": 100000000,
 		"format": "mzML",
 		"memory_size": 1024,

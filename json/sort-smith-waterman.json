@@ -66,7 +66,6 @@
 	},
 	{
 		"name": "find-blast-pivots",
-		"batch_size": 4000,
 		"chunk_size": 1000000,
 		"identifier": "score",
 		"sort": true
@@ -86,13 +85,11 @@
 	},
 	{
 		"name": "sort-blast-chunk",
-		"batch_size": 4000,
 		"chunk_size": 100000,
 		"identifier": "score"
 	},
 	{
 		"name": "combine-blast-files",
-		"batch_size": 100,
 		"chunk_size": 5000,
 		"identifier": "score",
 		"sort": true

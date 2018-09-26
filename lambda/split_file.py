@@ -59,7 +59,7 @@ def split_file(bucket_name, key, input_format, output_format, offsets, params):
   if not util.is_set(params, "adjust"):
     format_lib = importlib.import_module(params["format"])
     iterator_class = getattr(format_lib, "Iterator")
-    iterator = iterator_class(obj, params["batch_size"], params["chunk_size"], offsets)
+    iterator = iterator_class(obj, params["chunk_size"], offsets)
 
   while more:
     file_id += 1

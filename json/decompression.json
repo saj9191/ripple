@@ -1,12 +1,12 @@
 {
 	"input_name": "methyl-2.bed",
 	"sample_bucket": "maccoss-methyl-data",
-	"sample_input": true,
+	"sample_input": false,
 	"model": "lambda",
 	"iterations": 10,
 	"region": "us-west-2",
 	"folder": "methyl-files-lambda",
-	"num_output": 144,
+	"num_output": 38,
 	"timeout": 300,
 	"tag": "dna-compression",
 	"bucket": "maccoss-methyl",
@@ -49,13 +49,6 @@
 		}
 	},
 	"pipeline": [{
-		"name": "split-methyl",
-		"split_size": 100000000,
-		"output_function": "compress-methyl",
-		"adjust": true
-	}, {
-		"name": "compress-methyl"
-	}, {
 		"name": "decompress-methyl"
 	}]
 }

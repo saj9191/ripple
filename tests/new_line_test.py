@@ -15,14 +15,14 @@ class IteratorMethods(unittest.TestCase):
     obj = Object("test.new_line", "A B C\na b c\n1 2 3\n")
 
     # Read everything in one pass
-    it = new_line.Iterator(obj, 2, 20)
+    it = new_line.Iterator(obj, 20)
     [offsets, more] = it.nextOffsets()
     self.assertFalse(more)
     self.assertEqual(offsets["offsets"][0], 0)
     self.assertEqual(offsets["offsets"][1], 17)
 
     # Requires multiple passes
-    it = new_line.Iterator(obj, 1, 10)
+    it = new_line.Iterator(obj, 10)
     [offsets, more] = it.nextOffsets()
     self.assertTrue(more)
     self.assertEqual(offsets["offsets"][0], 0)
@@ -34,7 +34,7 @@ class IteratorMethods(unittest.TestCase):
     self.assertEqual(offsets["offsets"][1], 17)
 
     # Specify offsets
-    it = new_line.Iterator(obj, 1, 10, {"offsets": [6, 11]})
+    it = new_line.Iterator(obj, 10, {"offsets": [6, 11]})
     [offsets, more] = it.nextOffsets()
     self.assertFalse(more)
     self.assertEqual(offsets["offsets"][0], 6)
@@ -47,7 +47,7 @@ class IteratorMethods(unittest.TestCase):
       "adjust": True
     }
 
-    it = new_line.Iterator(obj, 1, 10, offsets)
+    it = new_line.Iterator(obj, 10, offsets)
     [o, more] = it.next()
     self.assertFalse(more)
     self.assertEqual(o, ["a b c"])
@@ -57,7 +57,7 @@ class IteratorMethods(unittest.TestCase):
       "offsets": [6, 11],
       "adjust": True
     }
-    it = new_line.Iterator(obj, 1, 10, offsets)
+    it = new_line.Iterator(obj, 10, offsets)
     [o, more] = it.next()
     self.assertFalse(more)
     self.assertEqual(o, ["a b c"])
@@ -67,7 +67,7 @@ class IteratorMethods(unittest.TestCase):
       "offsets": [0, 7],
       "adjust": True
     }
-    it = new_line.Iterator(obj, 1, 10, offsets)
+    it = new_line.Iterator(obj, 10, offsets)
     [o, more] = it.next()
     self.assertFalse(more)
     self.assertEqual(o, ["A B C"])
@@ -77,7 +77,7 @@ class IteratorMethods(unittest.TestCase):
       "offsets": [26, obj.content_length - 1],
       "adjust": True
     }
-    it = new_line.Iterator(obj, 1, 10, offsets)
+    it = new_line.Iterator(obj, 10, offsets)
     [o, more] = it.next()
     self.assertFalse(more)
     self.assertEqual(o, ["d e f", ""])
@@ -86,7 +86,7 @@ class IteratorMethods(unittest.TestCase):
     obj = Object("test.new_line", "A B C\na b c\n1 2 3\n")
 
     # Requires multiple passes
-    it = new_line.Iterator(obj, 1, 10)
+    it = new_line.Iterator(obj, 10)
     [o, more] = it.next()
     self.assertTrue(more)
     self.assertEqual(o, ["A B C", ""])
@@ -96,7 +96,7 @@ class IteratorMethods(unittest.TestCase):
     self.assertEqual(o, ["a b c", "1 2 3", ""])
 
     # Read everything in one pass
-    it = new_line.Iterator(obj, 2, 20)
+    it = new_line.Iterator(obj, 20)
     [o, more] = it.next()
     self.assertFalse(more)
     self.assertEqual(o, ["A B C", "a b c", "1 2 3", ""])
@@ -111,7 +111,6 @@ class IteratorMethods(unittest.TestCase):
     s3 = S3([bucket1])
     params = {
       "s3": s3,
-      "batch_size": 1,
       "chunk_size": 10,
       "identifier": "",
       "sort": False,

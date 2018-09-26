@@ -50,7 +50,6 @@ To set up an application pipeline, the user creates a json file such as the foll
   }
   "pipeline": [{
     "name": "split-mzML",
-    "batch_size": 1000,
     "chunk_size": 100000,
     "ranges": false,
     "output_function": "tide"
@@ -59,7 +58,6 @@ To set up an application pipeline, the user creates a json file such as the foll
     "num_threads": 0,
   }, {
     "name": "combine-tsv-files",
-    "batch_size": 2000,
     "chunk_size": 1000000,
     "sort": false
   }]
@@ -95,7 +93,7 @@ The application function allows a user to execute arbitrary code on the input fi
 ### Combine
 The combine function takes all files in a bin and concats the files into one file.
 ##### Arguments
-* batch_size: Number of items to load at once.
+* batch_size: Number of files to combine.
 * chunk_size: Number of bytes to load at once.
 * format: Type of file to be split (.mzML, .txt, .csv)
 * identifier: Property to sort file values by.
@@ -122,7 +120,6 @@ The map function maps the input file to each file contained in a bucket.
 ### Match
 Give a set of keys, match returns the key with the highest score
 ##### Arguments
-* batch_size: Number of items to load at once.
 * chunk_size: Number of bytes to load at once.
 * format: Type of file to be split (.mzML, .txt, .csv)
 * find: What to look for. Currently only supports highest sum.
@@ -132,7 +129,6 @@ Give a set of keys, match returns the key with the highest score
 Given a number of bins and an input file / file chunk, this function finds `num_bins` equally spaced pivots.
 This is used for sorting input bins.
 ##### Arguments
-* batch_size: Number of items to load at once.
 * chunk_size: Number of bytes to load at once.
 * identifier: Property to sort file values by.
 
@@ -140,14 +136,12 @@ This is used for sorting input bins.
 The sort function partial sorts the input by writing values to bins based on their sort value.
 This function requires bin boundaries to be specified. This can be done using the `pivot_file` function.
 ##### Arguments
-* batch_size: Number of items to load at once.
 * chunk_size: Number of bytes to load at once.
 * identifier: Property to sort file values by.
 
 ### Split
 The split function sends offsets for a key to lambda functions so the file can be analyzed in parallel.
 ##### Arguments
-* batch_size: Number of items to load at once.
 * chunk_size: Number of bytes to load at once.
 * format: Type of file to be split (.mzML, .txt, .csv)
 * output_function: The lambda unction to call with each chunk.
@@ -156,7 +150,6 @@ The split function sends offsets for a key to lambda functions so the file can b
 ### Top
 The top function extracts the items with the highest identifier value.
 ##### Arguments
-* batch_size: Number of items to load at once.
 * chunk_size: Number of bytes to load at once.
 * format: Type of file to be split (.mzML, .txt, .csv
 * identifier: Property to sort file values by.

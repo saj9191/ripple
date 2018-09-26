@@ -1,0 +1,86 @@
+{
+	"input_name": "3band_AOI_1_RIO_img5792.tif",
+	"account": 999145429263,
+	"bucket": "maccoss-ec2",
+	"credential_profile": "maccoss",
+	"folder": "knn",
+	"log": "maccoss-log-east-1",
+	"num_bins": 18,
+	"model": "ec2",
+	"num_output": 1,
+	"iterations": 10,
+	"region": "us-west-2",
+	"role": "service-role/lambdaFullAccessRole",
+	"storage_class": "STANDARD",
+	"tag": "knn",
+	"timeout": 300,
+	"stats": true,
+	"setup": true,
+	"dependencies": {
+		"formats": {
+			"classification": [
+				"formats/new_line.py"
+			],
+			"knn": [
+				"formats/new_line.py"
+			]
+		}
+	},
+	"ec2": {
+		"application": "knn",
+		"ami": "ami-068a1f4cc619c7ad2",
+		"default_ami": "ami-51537029",
+		"key": "maccoss",
+		"security": "sg-4ea90530",
+		"subnet": "subnet-03990a59",
+		"timeout": 20,
+		"type": "t2.2xlarge",
+		"wait_for_tests": false,
+		"use_ami": true
+	},
+	"functions": {
+		"convert-to-pixels": {
+			"file": "application",
+			"application": "convert_to_pixels",
+			"batch_size": 10000,
+			"memory_size": 128
+		},
+		"map-spacenet": {
+			"file": "map",
+		  "map_bucket": "maccoss-spacenet-east-1",
+			"memory_size": 128,
+		  "input_key_value": "key",
+		  "bucket_key_value": "train", 
+		  "output_function": "knn",
+		  "directories": false,
+		  "ranges": false
+		},
+		"knn": {
+		  "file": "application",
+			"format": "classification",
+			"application": "run_knn",
+			"memory_size": 3008,
+			"train_bucket": "maccoss-spacenet-east-1",
+			"n": 100
+		},
+		"combine-knn-files": {
+			"file": "combine_files",
+			"format": "knn",
+			"memory_size": 3008,
+			"n": 100
+		}
+	},
+	"pipeline": [{
+	  "name": "convert-to-pixels"
+	}, {
+	  "name": "map-spacenet"
+	}, {
+	  "name": "knn" 
+	}, {
+	  "name": "combine-knn-files",
+		"num_bins": 43
+	}, {
+	  "name": "combine-knn-files",
+		"num_bins": 1
+	}]
+}

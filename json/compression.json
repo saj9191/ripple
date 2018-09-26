@@ -22,7 +22,6 @@
 		"split-methyl": {
 			"file": "split_file",
 			"format": "new_line",
-			"batch_size": 1000,
 			"chunk_size": 1000000,
 			"memory_size": 1024,
 			"adjust": true

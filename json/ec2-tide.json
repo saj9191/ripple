@@ -125,33 +125,27 @@
 	"pipeline": [{
 	  "name": "split-mzML",
 	  "ranges": false,
-	  "batch_size": 4000,
 	  "chunk_size": 10000000,
 	  "output_function": "find-mzML-pivots"
 	}, {
 	  "name": "find-mzML-pivots",
-	  "batch_size": 4000,
 	  "chunk_size": 10000000,
 	  "identifier": "mass"
 	}, {
 	  "name": "combine-pivot-files",
-	  "batch_size": 1000,
 	  "chunk_size": 1000000,
 	  "sort": false
 	}, {
 	  "name": "split-mzML",
 	  "ranges": true,
-	  "batch_size": 4000,
 	  "chunk_size": 10000000,
 	  "output_function": "sort-mzML-chunk"
 	}, {
 	  "name": "sort-mzML-chunk",
-	  "batch_size": 4000,
 	  "chunk_size": 10000000,
 	  "identifier": "mass"
 	}, {
 	  "name": "combine-mzML-files",
-	  "batch_size": 4000,
 	  "chunk_size": 10000000,
 	  "sort": false
 	}, {
@@ -160,7 +154,6 @@
 		"species": "normalHuman"
 	}, {
 	  "name": "combine-tsv-files",
-	  "batch_size": 4000,
 	  "chunk_size": 10000000,
 	  "sort": false
 	}]

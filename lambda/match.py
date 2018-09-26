@@ -18,7 +18,7 @@ def find_match(bucket_name, key, input_format, output_format, offsets, params):
     with open(util.LOG_NAME, "a+") as f:
       for key in keys:
         obj = s3.Object(bucket_name, key)
-        it = iterator(obj, params["batch_size"], params["chunk_size"])
+        it = iterator(obj, params["chunk_size"])
         if params["find"] == "max sum":
           score = it.sum(params["identifier"])
         else:

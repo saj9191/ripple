@@ -16,10 +16,11 @@ class Iterator(iterator.Iterator):
   ID_REGEX = re.compile(".*scan=([0-9]+).*")
   XML_NAMESPACE = "http://psi.hupo.org/ms/mzml"
 
-  def __init__(self, obj, batch_size, chunk_size, offsets={}):
-    iterator.Iterator.__init__(self, Iterator, obj, batch_size, chunk_size)
+  def __init__(self, obj, chunk_size, offsets={}):
+    iterator.Iterator.__init__(self, Iterator, obj, chunk_size)
     ET.register_namespace("", Iterator.XML_NAMESPACE)
     self.footer_offset = 235
+    self.batch_size = int(chunk_size / 2500)
     self.remainder = ""
     if "header" in offsets:
       self.header_length = offsets["header"]["end"]
@@ -199,7 +200,7 @@ class Iterator(iterator.Iterator):
 
     for key in keys:
       obj = s3.Object(bucket_name, key)
-      iterator = Iterator(obj, params["batch_size"], params["chunk_size"], {})
+      iterator = Iterator(obj, params["chunk_size"], {})
       iterators.append(iterator)
       count += iterator.getCount()
 

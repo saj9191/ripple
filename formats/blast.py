@@ -8,8 +8,8 @@ class Iterator(iterator.Iterator):
   OPTIMAL_SCORE_REGEX = re.compile("[\S\s]*^optimal_alignment_score:\s(\d+)[\S\s]*", re.MULTILINE)
   SUBOPTIMAL_SCORE_REGEX = re.compile("[\S\s]*suboptimal_alignment_score:\s(\d+)[\S\s]*", re.MULTILINE)
 
-  def __init__(self, obj, offsets, batch_size, chunk_size):
-    iterator.Iterator.__init__(self, Iterator, obj, batch_size, chunk_size)
+  def __init__(self, obj, offsets, chunk_size):
+    iterator.Iterator.__init__(self, Iterator, obj, chunk_size)
     self.identifier = Iterator.IDENTIFIER
     self.offsets = [0]
 

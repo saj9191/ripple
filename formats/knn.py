@@ -23,6 +23,7 @@ def getItems(line):
   items[0] = i[0]
   return items
 
+
 def getLines(content):
   lines = content.split(new_line.Iterator.IDENTIFIER)
   lines = list(filter(lambda line: len(line) > 0, lines))
@@ -30,9 +31,9 @@ def getLines(content):
 
 
 class Iterator(new_line.Iterator):
-  def __init__(self, obj, batch_size, chunk_size, offsets={}):
+  def __init__(self, obj, chunk_size, offsets={}):
     self.identifier = new_line.Iterator.IDENTIFIER
-    iterator.Iterator.__init__(self, Iterator, obj, batch_size, chunk_size)
+    iterator.Iterator.__init__(self, Iterator, obj, chunk_size)
     iterator.Iterator.__setup__(self, offsets)
 
   def fromArray(obj, lines, offsets):

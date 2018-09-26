@@ -6,8 +6,8 @@ class Iterator(tsv.Iterator):
   QVALUE_INDEX = 9
   THRESHOLD = 0.01
 
-  def __init__(self, obj, batch_size, chunk_size):
-    tsv.Iterator.__init__(self, obj, batch_size, chunk_size)
+  def __init__(self, obj, chunk_size):
+    tsv.Iterator.__init__(self, obj, chunk_size)
     self.cls = Iterator
 
   def getQValue(line):

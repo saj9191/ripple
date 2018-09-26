@@ -4,8 +4,8 @@ import util
 
 
 class Iterator(iterator.Iterator):
-  def __init__(self, obj, batch_size, chunk_size):
-    iterator.Iterator.__init__(self, Iterator, obj, batch_size, chunk_size)
+  def __init__(self, obj, chunk_size):
+    iterator.Iterator.__init__(self, Iterator, obj, chunk_size)
 
   def combine(bucket_name, keys, temp_name, params):
     s3 = params["s3"] if "s3" in params else boto3.resource("s3")
@@ -23,7 +23,7 @@ class Iterator(iterator.Iterator):
     pivots = sorted(pivots)
     super_pivots = []
     num_bins = params["num_bins"]
-    increment = int((len(pivots) + num_bins - 1)/ num_bins)
+    increment = int((len(pivots) + num_bins - 1) / num_bins)
     super_pivots = pivots[0::increment]
     if super_pivots[-1] != pivots[-1]:
       super_pivots.append(pivots[-1])

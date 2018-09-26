@@ -14,8 +14,7 @@ class Element():
 
 
 class Iterator:
-  def __init__(self, cls, obj, batch_size, chunk_size):
-    self.batch_size = batch_size
+  def __init__(self, cls, obj, chunk_size):
     self.chunk_size = chunk_size
     self.obj = obj
     self.cls = cls
@@ -77,7 +76,7 @@ class Iterator:
     values = []
     for key in keys:
       obj = s3.Object(bucket_name, key)
-      iterator = cls(obj, {}, params["batch_size"], params["chunk_size"])
+      iterator = cls(obj, {}, params["chunk_size"])
       [s, more] = iterator.next(params["identifier"])
       if len(s) > 0:
         heapq.heappush(iterators, Element(s, more, iterator))
@@ -99,10 +98,9 @@ class Iterator:
           element.more = more
           heapq.heappush(iterators, element)
 
-        if len(values) == params["batch_size"]:
-          cls.write(f, values, first)
-          first = False
-          values = []
+        cls.write(f, values, first)
+        first = False
+        values = []
 
       if len(values) > 0:
         cls.write(f, values, first)
