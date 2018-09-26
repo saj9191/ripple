@@ -254,7 +254,6 @@ def get_formats(key, file, params):
   bucket_format["ext"] = "log"
   bucket_format["prefix"] = params["prefix"] + 1
   if not is_set(params, "scheduler"):
-    print("what")
     bucket_format["suffix"] = "{0:f}".format(time.time())
   return [input_format, output_format, bucket_format]
 
