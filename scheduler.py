@@ -45,7 +45,7 @@ class PriorityQueue:
 
   def get(self):
     if self.scheduler == "fifo":
-      item = self.queue.get(timeout=0)
+      item = self.queue.get(timeout=5)
       return item
     elif self.scheduler == "robin":
       count = 0
@@ -96,11 +96,11 @@ class Worker(threading.Thread):
     pipeline = self.params["pipeline"]
     while self.running:
       try:
-        item = self.pending.get(timeout=5)
+        item = self.pending.get()
         prefix = item.prefix
-        name = pipeline[prefix]["name"]
         payload = item.payload
         if prefix < len(pipeline):
+          name = pipeline[prefix]["name"]
           s = payload["Records"][0]["s3"]
           input_key = s["object"]["key"]
           rparams = {**self.params, **s}
@@ -130,6 +130,7 @@ class Parser(threading.Thread):
     self.log_length = 1000
     self.scheduler = scheduler
     self.client = client
+    self.params["payloads"] = []
 
   def run(self):
     s3 = util.s3(self.params)
@@ -138,10 +139,9 @@ class Parser(threading.Thread):
       i = 0
       while i < len(self.logs):
         [job_id, log_file, item, start_time] = self.logs[i]
-        objs = list(map(lambda o: o.key, util.get_objects(self.params["bucket"], log_file[:log_file.rindex("-")], self.params))).sort()
-        if len(objs) > 0:
+        if util.object_exists(self.params["log"], log_file):
           self.logs = self.logs[:i] + self.logs[i + 1:]
-          prefix = util.parse_file_name(objs[0])["prefix"]
+          prefix = util.parse_file_name(log_file)["prefix"]
           done = False
           while not done:
             try:
@@ -153,16 +153,19 @@ class Parser(threading.Thread):
               done = True
             except botocore.errorfactory.NoSuchKey:
               time.sleep(1)
-        elif (time.time() - start_time) > 5*60:
+        elif (time.time() - start_time) > self.params["timeout"]:
+          self.logs[i][3] = time.time()
           prefix = item.prefix
           name = pipeline[prefix]["name"]
-          util.invoke(self.client, name, self.params, payload)
+          util.invoke(self.client, name, self.params, item.payload)
+          i += 1
         else:
           i += 1
 
       while len(self.logs) <= self.log_length and not self.queue.empty():
         try:
-          self.logs.append(self.queue.get(timeout=0))
+          item = self.queue.get(timeout=0)
+          self.logs.append(item)
         except queue.Empty:
           pass
 

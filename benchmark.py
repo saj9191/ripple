@@ -132,11 +132,28 @@ def upload_input(p, thread_id=0):
         print("ERROR: upload_input", e)
   else:
     print("Uploading {0:s} to s3://{1:s}".format(p["input"], bucket_name), flush=True)
+    # p["input"] = "compressed"
+    # p["now"] = 1537812841.362679
+    # p["nonce"] = 254
+    # key = p["key"]
+  #  for i in range(38):
+  #    for r in ["outfileChrom", "outfileName"]:
+  #      z = 0 if i < 37 else 1
+  #      c = "data/compressed/{0:d}-{2:d}-{1:s}.bed".format(i+1, r, z)
+  #      k = key[:key.rindex("/")] + "/{0:d}-{2:d}-{1:s}.bed".format(i+1, r, z)
+  #      s3.Object(bucket_name, k).put(Body=open(c, 'rb'), StorageClass=p["storage_class"])
+
+#    for i in range(38):
+#      z = 0 if i < 37 else 1
+#      c = "data/compressed/{0:d}-{1:d}-outfileArInt.bed".format(i+1, z)
+#      k = key[:key.rindex("/")] + "/{0:d}-{1:d}-outfileArInt.bed".format(i+1, z)
+#      s3.Object(bucket_name, k).put(Body=open(c, 'rb'), StorageClass=p["storage_class"])
     s3.Object(bucket_name, key).put(Body=open("data/{0:s}".format(p["input"]), 'rb'), StorageClass=p["storage_class"])
   end = time.time()
 
   obj = s3.Object(bucket_name, key)
   timestamp = obj.last_modified.timestamp() * 1000
+#  timestamp = time.time() * 1000 #obj.last_modified.timestamp() * 1000
   print("Thread {0:d}: Handling key {1:s}. Last modified {2:f}".format(thread_id, key, timestamp), flush=True)
   seconds = end - start
   milliseconds = seconds * 1000
@@ -381,7 +398,7 @@ def run(params, thread_id):
     total_duration += duration
     total_failed_attempts += (1 if failed else 0)
 
-    if params["stats"]:
+    if params["model"] == "ec2" and params["stats"]:
       dir_path = "results/{0:s}/{1:s}/{2:f}-{3:d}".format(params["folder"], params["input_name"], params["now"], params["nonce"])
       os.makedirs(dir_path)
       with open("{0:s}/stats".format(dir_path), "w+") as f:
@@ -469,72 +486,10 @@ def clear_buckets(params):
 #############################
 
 
-def find_current_stage(bucket_name, params):
-  current_stage = 0
-  for i in range(len(params["pipeline"])):
-    prefix = "{0:d}/{1:f}-{2:d}".format(i, params["now"], params["nonce"])
-    objects = util.get_objects(bucket_name, prefix)
-    if len(objects) > 0:
-      current_stage = i
-  return current_stage
-
-
-def check_objects(client, bucket_name, prefix, count, timeout, params, thread_id):
-  done = False
-
-  # There's apparently a stupid bug where str(timestamp) has more significant
-  # digits than "{0:f}:.format(timestmap)
-  # eg. spectra-1530978873.960075-1-0-58670073.txt 1530978873.9600754
-  token = "{0:f}-{1:d}".format(params["now"], params["nonce"])
-  prefix = "{0:s}{1:s}".format(prefix, token)
-  print(params["input_name"], "Waiting for {0:s}".format(prefix))
-  start = datetime.datetime.now()
-  while not done:
-    now = time.time()
-    found = set()
-    objects = util.get_objects(bucket_name, prefix)
-    done = (len(objects) >= count)
-    end = datetime.datetime.now()
-    if not done:
-      if (end - start).total_seconds() > timeout:
-        expected = set(range(1, count + 1))
-        current_stage = find_current_stage(bucket_name, params)
-        print("Thread {0:d}: Last stage with output files is {1:d}".format(thread_id, current_stage))
-        print("Could not find", expected.difference(found))
-        return True
-      time.sleep(30)
-    else:
-      now = end.strftime("%H:%M:%S")
-      print("{0:s}: Thread {1:d}. Found {2:s}".format(now, thread_id, prefix), flush=True)
-  return False
-
-
-def wait_for_completion(start_time, params, thread_id):
-  client = util.setup_client("s3", params)
-
-  # Give ourselves time as we need to wait for each part of the pipeline
-  prefix = "{0:d}/".format(len(params["pipeline"]))
-  timeout = 600 * len(params["pipeline"])
-  failed = check_objects(client, params["bucket"], prefix, params["num_output"], timeout, params, thread_id)
-  time.sleep(10)  # Wait a little to make sure percolator logs are on the server
-  return failed
-
-
 def calculate_cost(duration, memory_size):
   # Cost per 100ms
   millisecond_cost = MEMORY_PARAMETERS["lambda"][str(memory_size)]
   return int(duration / 100) * millisecond_cost
-
-
-def file_count(bucket_name, params):
-  s3 = setup_connection("s3", params)
-  bucket = s3.Bucket(bucket_name)
-  now = "{0:f}".format(params["now"])
-  count = 0
-  for obj in bucket.objects.all():
-    if now in obj.key:
-      count += 1
-  return count
 
 
 def parse(stats, params):
@@ -583,21 +538,21 @@ def parse_logs(params, upload_timestamp, upload_duration, total_duration):
 
 
 def lambda_benchmark(params, thread_id):
-  [upload_timestamp, upload_duration] = upload_input(params, thread_id)
   start_time = time.time()
-  if util.is_set(params, "scheduler"):
-    scheduler.schedule(params["key"], params)
-    failed = False
-  else:
-    failed = wait_for_completion(upload_timestamp, params, thread_id)
+  [upload_timestamp, upload_duration] = upload_input(params, thread_id)
+  s = scheduler.Scheduler("fifo", params)
+  queue = s.setup()
+  payload = scheduler.payload(params["bucket"], params["key"])
+  queue.put(scheduler.Item("fifo", upload_timestamp, 0, thread_id, payload))
+  s.wait(params["num_output"])
   end_time = time.time()
   total_duration = end_time - start_time
-  results = [upload_duration, total_duration]
+  results = [upload_timestamp, total_duration]
 
   if params["stats"]:
     stats = parse_logs(params, upload_timestamp, upload_duration, total_duration)
     results = [stats] + results
-  return [failed, results]
+  return [False, results]
 
 
 #############################
@@ -873,6 +828,7 @@ def main():
   [access_key, secret_key] = util.get_credentials(params["credential_profile"])
   params["access_key"] = access_key
   params["secret_key"] = secret_key
+  params["scheduler"] = True
   run(params, 0)
 
 
