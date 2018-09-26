@@ -1,5 +1,5 @@
 {
-	"input_name": "input-25.fasta",
+	"input_name": "input-10.fasta",
 	"model": "lambda",
 	"iterations": 10,
 	"folder": "ssw-files-lambda",
@@ -15,8 +15,7 @@
 	"role": "service-role/lambdaFullAccessRole",
 	"stats": true,
 	"setup": true,
-	"sample_input": true,
-	"sample_bucket": "ssw-input",
+	"sample_input": false,
 	"credential_profile": "maccoss",
 	"functions": {
 		"map-fasta": {

@@ -1,5 +1,5 @@
 {
-	"input_name": "methyl-2.bed",
+	"input_name": "methyl-10.bed",
 	"sample_bucket": "maccoss-methyl-data",
 	"sample_input": true,
 	"model": "lambda",
