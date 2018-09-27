@@ -6,6 +6,7 @@ import math
 import mzML
 import os
 import classification
+from sklearn.neighbors import KNeighborsClassifier
 import queue
 import shutil
 import subprocess
@@ -327,44 +328,61 @@ def run_knn(file_name, bucket):
   im = Image.open(file_name)
   px = im.load()
   width, height = im.size
-  increment = 1000
 
-  st = time.time()
-  n = 50
-  objects = list(s3.Bucket("maccoss-spacenet").objects.all())
-  threads = []
-  for obj in objects:
-    for min_y in range(0, height, increment):
-      max_y = min(min_y + increment, height)
-      threads.append(Task(s3.Object("maccoss-spacenet", obj.key), im, px, min_y, max_y, n))
-      threads[-1].start()
+  x = []
+  y = []
+  b = "maccoss-spacenet"
+  clz = []
+  for obj in s3.Bucket(b).objects.all():
+    o = s3.Object(b, obj.key)
+    clz += classification.Iterator.get(o, 0, o.content_length, "")
 
-  print("Waiting")
-  top_scores = None
-  for thread in threads:
-    thread.join()
-    print("Thread", thread.thread_id, "Done")
-    if top_scores is None:
-      top_scores = thread.top_scores
-    else:
-      for s in thread.top_scores.keys():
-        if s not in top_scores:
-          top_scores[s] = []
-        heapq.heappush(top_scores[s], heapq.heappop(thread.top_scores[s]))
-        while len(top_scores[s]) > n:
-          heapq.heappop(top_scores[s])
+  x = list(map(lambda c: [c[0], c[1], c[2]], clz))
+  y = list(map(lambda c: c[3], clz))
+
+  train = []
+  n = 100
+  a = 10000
+  for dy in range(height):
+    for dx in range(width):
+      train.append(px[dx, dy])
 
   output_file = "/tmp/classification"
+
+  top_scores = {}
+  st = time.time()
+  for i in range(0, len(x), a):
+    neighbors = KNeighborsClassifier(n_neighbors=n, algorithm="brute")
+    m = min(i+a, len(x))
+    mx = x[i:m]
+    my = y[i:m]
+    neighbors.fit(mx, my)
+    distances, ind = neighbors.kneighbors(train)
+    for j in range(len(train)):
+      [r, g, b] = train[j]
+      dy = math.floor(j / width)
+      dx = j % width
+      s = "{x} {y} {r} {g} {b}".format(x=dx, y=dy, r=r, g=g, b=b)
+      if s not in top_scores:
+        top_scores[s] = []
+      for k in range(n):
+        d = distances[j][k]
+        cc = my[ind[j][k]]
+        heapq.heappush(top_scores[s], [-1*d, cc])
+      while len(top_scores[s]) > n:
+        heapq.heappop(top_scores[s])
+  et = time.time()
+  print("{0:f} CLASSIFICATION DURATION: {1:f}".format(time.time(), et - st))
+
   with open(output_file, "w+") as f:
     for s in top_scores:
       line = s
-      for [score, c] in top_scores[s]:
-        [cx, cy, cr, cg, cb, cc] = c
+      for [score, cc] in top_scores[s]:
         line += ",{d} {c}".format(d=-1*score, c=cc)
       f.write("{0:s}\n".format(line))
-  et = time.time()
+
+  upload_output(output_file, bucket)
   end_time = time.time()
-  print("{0:f} KNN DURATION: {1:f}".format(time.time(), et - st))
   print("{0:f} SPACENET DURATION: {1:f}".format(time.time(), end_time - start_time))
 
 
