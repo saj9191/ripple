@@ -14,7 +14,7 @@ def distance(pixel, clz):
 def run(file, params, input_format, output_format, offsets):
   s3 = boto3.resource("s3")
   train_obj = s3.Object(params["train_bucket"], params["train"])
-  it = classification.Iterator(train_obj, 10, 100000, offsets)
+  it = classification.Iterator(train_obj, 100000, offsets)
 
   lines = open(file).readlines()
   pixels = list(map(lambda line: list(map(lambda i: float(i), line.split(" "))), lines))
