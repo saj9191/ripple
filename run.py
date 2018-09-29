@@ -1,7 +1,6 @@
 import argparse
 import benchmark
 import boto3
-import file_average
 import json
 import math
 import os
@@ -141,7 +140,7 @@ def comparison(name, lambda_folder, ec2_folder, params):
             stats.append(s)
           if len(stats) > 0:
             lambda_duration_stats[folder] = get_duration_stats(stats)
-            lambda_cost_stats[folder] = get_cost_stats(stats, folder, params)
+            #lambda_cost_stats[folder] = get_cost_stats(stats, folder, params)
 
   memory = json.loads(open("json/memory.json").read())
   for parent, folders, files in os.walk(ec2_folder):
@@ -150,27 +149,27 @@ def comparison(name, lambda_folder, ec2_folder, params):
       for subparent, subdirs, files in os.walk(f):
         if len(subdirs) > 0:
           durations = []
-          costs = []
+          #costs = []
           for subdir in subdirs:
             duration = json.load(open("{0:s}/{1:s}/stats".format(f, subdir)))["stats"][-2]["max_duration"] / 1000.0
-            costs.append((duration * memory["ec2"][params["ec2"]["type"]]) / 3600)
+            #costs.append((duration * memory["ec2"][params["ec2"]["type"]]) / 3600)
             durations.append(duration)
           ec2_duration_stats[folder] = durations
-          ec2_cost_stats[folder] = costs
+          #ec2_cost_stats[folder] = costs
 
   lambda_duration = sum(list(map(lambda s: sum(s), lambda_duration_stats.values())))
   lambda_count = sum(list(map(lambda s: len(s), lambda_duration_stats.values())))
-  lambda_cost = sum(list(map(lambda s: sum(s), lambda_cost_stats.values())))
+#  lambda_cost = sum(list(map(lambda s: sum(s), lambda_cost_stats.values())))
   ec2_duration = sum(list(map(lambda s: sum(s), ec2_duration_stats.values())))
   ec2_count = sum(list(map(lambda s: len(s), ec2_duration_stats.values())))
-  ec2_cost = sum(list(map(lambda s: sum(s), ec2_cost_stats.values())))
+#  ec2_cost = sum(list(map(lambda s: sum(s), ec2_cost_stats.values())))
 
   print("Average Lambda Duration", lambda_duration / lambda_count)
-  print("Average Lambda Cost", lambda_cost / lambda_count)
+#  print("Average Lambda Cost", lambda_cost / lambda_count)
   print("Average EC2 Duration", ec2_duration / ec2_count)
-  print("Average EC2 Cost", ec2_cost / ec2_count)
-  plot.statistics(name, lambda_folder, lambda_duration_stats, ec2_duration_stats, "duration")
-  plot.statistics(name, lambda_folder, lambda_cost_stats, ec2_cost_stats, "cost")
+#  print("Average EC2 Cost", ec2_cost / ec2_count)
+  plot.statistics(name, lambda_folder, [lambda_duration_stats, ec2_duration_stats], ["Lambda", "EC2"], "duration")
+#  plot.statistics(name, lambda_folder, lambda_cost_stats, ec2_cost_stats, "cost")
 
 
 def get_duration_stats(stats):
@@ -277,24 +276,35 @@ def get_start_time(stats):
   return min(start_times)
 
 
-def get_lambda_results(folder, params, concurrency=None, absolute=False):
+def get_lambda_results(folder, params, concurrency=None, absolute=False, li=None):
   stats = []
+  e = None
+  ds = []
   for subdir, dirs, files in os.walk(folder):
-    for d in dirs:
-      file_name = "{0:s}/{1:s}/stats".format(folder, d)
-      s = json.load(open(file_name))["stats"]
-      stats.append(s)
+    ds += dirs
 
+  ds.sort()
+  for d in ds:
+    assert(e is None or e < d)
+    e = d
+    file_name = "{0:s}/{1:s}/stats".format(folder, d)
+    s = json.load(open(file_name))["stats"]
+    stats.append(s)
   points = []
-  max_layer = 0
   start_time = get_start_time(stats)
-  for pipeline in stats:
+  times = {}
+#  print("first", json.loads(stats[0][1]["messages"][0])["start_time"])
+#  print("second", json.loads(stats[1][1]["messages"][0])["start_time"])
+  for s_index in range(len(stats)):
+    pipeline = stats[s_index]
+    t = len(times)
+    times[t] = [sys.maxsize, 0]
     for i in range(len(pipeline)):
       stat = pipeline[i]
       if type(stat) == list:
         stat = stat[0]
       layer = i - 1
-      max_layer = max(layer, max_layer)
+
       name = stat["name"]
       if name not in ["load", "total"]:
         for message in stat["messages"]:
@@ -303,33 +313,34 @@ def get_lambda_results(folder, params, concurrency=None, absolute=False):
             start_time = jmessage["start_time"]
           start = jmessage["start_time"] - start_time
           end = start + math.ceil(jmessage["duration"] / 1000)
-          points.append([start, 1, layer])
-          points.append([end, -1, layer])
+          times[t][0] = min(times[t][0], start)
+          times[t][1] = max(times[t][1], end)
+          points.append([start, 1, layer, s_index])
+          points.append([end, -1, layer, s_index])
 
   points.sort()
   layer_to_count = {}
-  num_layers = max_layer
-  print("num_layers", num_layers)
+  num_layers = len(params["pipeline"])
   layer_to_x = {num_layers: []}
   layer_to_y = {num_layers: []}
   layer_to_count[num_layers] = 0
 
-  for [x, c, layer] in points:
+  for [x, c, layer, job] in points:
     if layer not in layer_to_x:
       layer_to_count[layer] = 0
       layer_to_x[layer] = []
       layer_to_y[layer] = []
     layer_to_count[layer] += c
     layer_to_count[num_layers] += c
+    assert(layer_to_count[layer] <= layer_to_count[num_layers])
     layer_to_x[layer].append(x)
     layer_to_x[num_layers].append(x)
-    # count = sum(map(lambda i: layer_to_count[i], range(0, layer + 1)))
     count = float(layer_to_count[layer]) / len(stats) if concurrency is None else layer_to_count[layer]
     layer_to_y[layer].append(count)
     count = float(layer_to_count[num_layers]) / len(stats) if concurrency is None else layer_to_count[num_layers]
     layer_to_y[num_layers].append(count)
 
-  return [layer_to_x, layer_to_y]
+  return [layer_to_x, layer_to_y, times, points]
 
 
 def get_ec2_results(folder):
@@ -371,7 +382,6 @@ def get_ec2_results(folder):
     points.append([st, 1])
     points.append([et, -1])
   points.sort()
-  print(points)
   layer_to_x = []
   layer_to_y = []
 
@@ -404,39 +414,39 @@ def get_ec2_results(folder):
   return [layers_to_averages, layers_to_cost, layer_to_x, layer_to_y]
 
 
+def render_image(name, folder, params):
+  render(name, folder, params, compare=True, concurrency=None, absolute=True)
+
+
 def accumulation():
-  params = json.loads(open("json/spacenet-classification.json").read())
-  render("Spacenet", "knn", "results/knn/3band_AOI_1_RIO_img5792.tif", "", params, concurrency=None, absolute=False)
-
-  params = json.loads(open("json/smith-waterman.json").read())
-  render("Smith Waterman", "ssw", "results/ssw/input-20.fasta", "", params, concurrency=None, absolute=False)
-
-#  params = json.loads(open("json/tide.json").read())
-#  render("Tide Zipfian", "tide", "results/tide-zipfian-lambda", "", params, compare=False, concurrency=100, absolute=True, zoom=[1000, 1200])
-#  render("Tide Uniform", "tide", "results/tide-uniform-lambda", "", params, compare=False, concurrency=100, absolute=True, zoom=[190, 300])
-#  render("Tide Bursty", "tide", "results/tide-bursty-lambda", "", params, compare=False, concurrency=100, absolute=True, zoom=[1200, 1350])
-#  render("Tide", "tide", "results/tide100", "", params, concurrency=100, absolute=False)
-#  render("Tide", "tide", "results/tide/TN_CSF_062617_01.mzML", "", params, concurrency=None, absolute=False)
-  file_average.render("Tide", "tide", "tide", params)
-#  file_average.render("Smith Waterman", "smith-waterman", "ssw", params)
-#  render("Smith Waterman", "ssw", "results/ssw200", "", params, concurrency=100, absolute=False)
+  params = json.loads(open("json/tide.json").read())
+#  render("Spacenet", "knn-deadline", "results/knn-deadline/3band_AOI_1_RIO_img5792.tif", "", params, concurrency=2, absolute=True)
+#  render("Spacenet", "knn", "results/knn100", "", params, concurrency=100, absolute=True)
+  #  params = json.loads(open("json/decompression.json").read())
+  #  render("Methyl DNA Decompression", "decompression", "results/decompression", "", params, concurrency=None, absolute=False)
+  #  file_average.render("Tide", "tide", "tide", params)
+  #  render("Spacenet", "knn", "results/knn/3band_AOI_1_RIO_img5792.tif", "", params, concurrency=None, absolute=False)
+  #params = json.loads(open("json/smith-waterman.json").read())
+  comparison("Spacenet", "results/tide-files-lambda", "results/tide-files-ec2", params)
 
 
-def render(title, name, lambda_folder, ec2_folder, params, compare=True, concurrency=None, absolute=False, zoom=None):
-  [x, y] = get_lambda_results(lambda_folder, params, concurrency, absolute)
+def render(name, lambda_folder, params, compare=True, concurrency=None, absolute=False):
+  [x, y, times, points] = get_lambda_results(lambda_folder, params, concurrency, absolute)
 
   plot_name = "{name}_accumulation".format(name=name)
 
   plot.accumulation_plot(
       x,
       y,
+      points,
       params["pipeline"],
-      "{0:s} Average Lambda Processes".format(title),
       plot_name,
       lambda_folder,
-      absolute,
-      zoom
+      absolute
   )
+
+  plot_name = "{name}_duration".format(name=name)
+  plot.durations(times, lambda_folder, plot_name)
   return
 
 
@@ -461,38 +471,8 @@ def regularize():
           f.write(json.dumps({"stats": stats}, indent=4, sort_keys=True))
 
 
-def main():
-  parser = argparse.ArgumentParser()
-  parser.add_argument('--clear', action="store_true", help="Clear bucket files")
-  parser.add_argument('--plot', type=str, help="Plot graph")
-  parser.add_argument('--counts', action="store_true", help="Get read / write counts")
-  parser.add_argument('--parameters', type=str, help="JSON parameter file to use")
-  parser.add_argument('--iterate', type=str, help="Bucket to iterate through")
-  parser.add_argument('--accumulation', action="store_true", help="Plot accumulation graph")
-  parser.add_argument('--comparison', action="store_true", help="Plot comparison graph")
-  parser.add_argument('--folder', type=str, help="Folder to store results in")
-  args = parser.parse_args()
-
-  if args.parameters:
-    params = json.load(open(args.parameters))
-    if len(args.folder) > 0:
-      params["folder"] = args.folder
-  if args.accumulation:
-    accumulation()
-  if args.comparison:
-    comparison()
-  if args.clear:
-    clear()
-  if args.plot:
-    trigger_plot(args.plot)
-  if args.counts:
-    get_counts(params)
-  if args.iterate:
-    iterate(args.iterate, params)
-
-
 def move():
-  folder = "results/ssw200"
+  folder = "results/tide100"
   for subdir, dirs, files in os.walk(folder):
     if len(dirs) > 0 and "." in subdir:
       for d in dirs:
@@ -521,9 +501,61 @@ def concurrency():
       f.write(json.dumps({"stats": stats}, indent=4, sort_keys=True))
 
 
+def download(params, token, folder):
+  [timestamp, nonce] = token.split("-")
+  params["now"] = float(timestamp)
+  params["nonce"] = int(nonce)
+  stats = benchmark.parse_logs(params, params["now"], 0, 0)
+  dir_path = "results/{0:s}/{1:s}/{2:f}-{3:d}".format(folder, params["input_name"], params["now"], params["nonce"])
+  os.makedirs(dir_path)
+  with open("{0:s}/stats".format(dir_path), "w+") as f:
+    f.write(json.dumps({"stats": stats, "failed": False}, indent=4, sort_keys=True))
+
+
+def main():
+  parser = argparse.ArgumentParser()
+  parser.add_argument('--clear', action="store_true", help="Clear bucket files")
+  parser.add_argument('--plot', type=str, help="Plot graph")
+  parser.add_argument('--counts', action="store_true", help="Get read / write counts")
+  parser.add_argument('--parameters', type=str, help="JSON parameter file to use")
+  parser.add_argument('--iterate', type=str, help="Bucket to iterate through")
+  parser.add_argument('--accumulation', action="store_true", help="Plot accumulation graph")
+  parser.add_argument('--comparison', action="store_true", help="Plot comparison graph")
+  parser.add_argument('--folder', type=str, help="Folder to store results in")
+  parser.add_argument('--download', action="store_true", default=False)
+  parser.add_argument('--render', action="store_true", default=False)
+  parser.add_argument('--name', type=str, help="Prefix for file names")
+  parser.add_argument('--token', type=str)
+  args = parser.parse_args()
+
+  params = {}
+  if args.parameters:
+    params = json.load(open(args.parameters))
+    if len(args.folder) > 0:
+      params["folder"] = args.folder
+
+  if args.render:
+    render_image(args.name, args.folder, params)
+  if args.accumulation:
+    accumulation()
+  if args.comparison:
+    comparison()
+  if args.clear:
+    clear()
+  if args.plot:
+    trigger_plot(args.plot)
+  if args.counts:
+    get_counts(params)
+  if args.iterate:
+    iterate(args.iterate, params)
+  if args.download:
+    download(params, args.token, args.folder)
+
+
 if __name__ == "__main__":
-#  concurrency()
-  #move()
+  # concurrency()
+  # move()
   main()
-  #comparison("Tide", "results/tide-files-lambda", "results/tide-files-ec2", json.load(open("json/ec2-tide.json")))
-  #comparison("Smith Waterman", "results/ssw-files-lambda", "results/ssw-files-ec2", json.load(open("json/ec2-smith-waterman.json")))
+
+  # comparison("Tide", "results/tide-files-lambda", "results/tide-files-ec2", json.load(open("json/ec2-tide.json")))
+  # comparison("Smith Waterman", "results/ssw-files-lambda", "results/ssw-files-ec2", json.load(open("json/ec2-smith-waterman.json")))
