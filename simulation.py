@@ -4,10 +4,11 @@ import boto3
 from dateutil import parser
 import json
 import numpy as np
-import os
+import queue
 import random
 from scipy import special
 import setup
+import scheduler
 import threading
 import time
 import util
@@ -19,22 +20,23 @@ BINS = 60 * 60
 
 lock = threading.Lock()
 
+
 class Request(threading.Thread):
-  def __init__(self, thread_id, time, file_name, params, client=None):
+  def __init__(self, thread_id, time, request_queue, params, client, wait=False):
     super(Request, self).__init__()
     self.time = time
-    self.file_name = file_name
     self.params = dict(params)
     self.thread_id = thread_id
     self.duration = 0
     self.upload_duration = 0
     self.failed_attempts = 0
     self.alive = True
-    self.params["input_name"] = self.file_name
     self.params["input_bucket"] = self.params["bucket"]
     self.client = client
-    self.params["nonce"] = thread_id
-
+    self.wait = wait
+    self.request_queue = request_queue
+    #    self.queue = queue
+    #    self.scheduler = scheduler
 
   def run(self):
     print("Thread", self.thread_id, "Sleeping for", self.time)
@@ -43,32 +45,43 @@ class Request(threading.Thread):
       benchmark.process_params(self.params)
       benchmark.process_iteration_params(self.params, 1)
       benchmark.upload_input(self.params)[1]
-      lock.acquire()
-      stats = benchmark.run_ec2_script(self.client, self.params)
-      lock.release()
+      # stats = benchmark.run_ec2_script(self.client, self.params)
     else:
-      self.params["input_name"] = self.file_name
-      self.params["input_bucket"] = self.params["bucket"]
-      benchmark.process_params(self.params)
-      benchmark.process_iteration_params(self.params, 1)
-      print("Thread {0:d}: Processing file {1:s}".format(self.thread_id, self.file_name))
-      [upload_duration, duration, failed_attempts] = benchmark.run(self.params, self.thread_id)
-      self.upload_duration = upload_duration
-      self.duration = duration
-      self.failed_attempts = failed_attempts
-      print("Thread {0:d}: Done in {1:f}".format(self.thread_id, duration))
-      msg = "Thread {0:d}: Upload Duration {1:f}. Duration {2:f}. Failed Attempts {3:f}"
-      msg = msg.format(self.thread_id, self.upload_duration, self.duration, self.failed_attempts)
-      print(msg)
-      stats = benchmark.parse_logs(self.params, self.params["now"] * 1000, self.upload_duration, self.duration)
-      benchmark.clear_buckets(self.params)
+      while not self.request_queue.empty():
+        try:
+          self.params["input_name"] = self.request_queue.get(timeout=0)
+          self.params["input_bucket"] = self.params["bucket"]
+          self.params["stats"] = False
+          if self.wait:
+            benchmark.run(self.params, self.thread_id)
+          else:
+            benchmark.process_params(self.params)
+            benchmark.process_iteration_params(self.params, 1)
+            if self.nonce is not None:
+              self.params["nonce"] = self.nonce
+            print("Thread {0:d}: Processing file {1:s}".format(self.thread_id, self.params["input_name"]))
+            benchmark.upload_input(self.params)
+        except queue.Empty as e:
+          pass
+      # payload = scheduler.payload(self.params["bucket"], self.params["key"])
+      # self.queue.put(scheduler.Item(self.scheduler, util.parse_file_name(self.params["key"])["timestamp"], 0, self.thread_id, payload))
+      # [upload_duration, duration, failed_attempts] = benchmark.run(self.params, self.thread_id)
+      # self.upload_duration = upload_duration
+      # self.duration = duration
+      # self.failed_attempts = failed_attempts
+      # print("Thread {0:d}: Done in {1:f}".format(self.thread_id, duration))
+      # msg = "Thread {0:d}: Upload Duration {1:f}. Duration {2:f}. Failed Attempts {3:f}"
+      # msg = msg.format(self.thread_id, self.upload_duration, self.duration, self.failed_attempts)
+      # print(msg)
+      # stats = benchmark.parse_logs(self.params, self.params["now"] * 1000, self.upload_duration, self.duration)
 
-    dir_path = "results/{0:s}/{1:f}-{2:d}".format(self.params["folder"], self.params["now"], self.params["nonce"])
-    os.makedirs(dir_path)
-    with open("{0:s}/stats".format(dir_path), "w+") as f:
-      f.write(json.dumps({"stats": stats}, indent=4, sort_keys=True))
+      # dir_path = "results/{0:s}/{1:f}-{2:d}".format(self.params["folder"], self.params["now"], self.params["nonce"])
+      # os.makedirs(dir_path)
+      # with open("{0:s}/stats".format(dir_path), "w+") as f:
+      #   f.write(json.dumps({"stats": stats}, indent=4, sort_keys=True))
+      # benchmark.clear_buckets(self.params)
 
-    self.alive = False
+      # self.alive = False
 
 
 def parse_csv(file_name, num_requests):
@@ -99,10 +112,10 @@ def create_request_distribution(distribution, args):
   requests = []
   if distribution in ["uniform", "zipfian"]:
     interval = 60  # Request every 60 seconds
-    num_intervals = 10
+    #  num_intervals = 10
   else:
     interval = 7 * 60
-    num_intervals = int((time_range + interval) / interval)
+    #  num_intervals = int((time_range + interval) / interval)
 
   if distribution == "uniform":
     num_requests = 1
@@ -119,14 +132,73 @@ def create_request_distribution(distribution, args):
     for i in range(len(y)):
       requests += [i * interval] * y[i]
   elif distribution == "bursty":
-    interval = 1200 # Every 20 minutes
+    interval = 1200  # Every 20 minutes
     for i in range(interval, time_range + interval, interval):
       requests += [i] * 10
       #requests += [i] * 100#max_concurrency
   elif distribution == "concurrent":
-    requests = [0] * args.concurrency
+    for i in range(args.concurrency):
+      requests.append(args.delay * i)
 
   return requests
+
+
+class Second(threading.Thread):
+  def __init__(self, s, params):
+    super(Second, self).__init__()
+    self.s = s
+    self.params = params
+
+  def run(self):
+    self.s.wait(self.params["num_output"])
+
+
+def deadline(params):
+  folder = params["folder"]
+  with open("results/{0:s}/params".format(folder), "w+") as f:
+    f.write(json.dumps(params, indent=4, sort_keys=True))
+
+  setup.setup(params)
+  benchmark.process_params(params)
+  benchmark.process_iteration_params(params, 1)
+
+  threads = []
+  client = None
+
+  params["scheduler"] = True
+  deadline_params = dict(params)
+  deadline_params["stats"] = False
+  m = {
+    "prefix": "0",
+    "timestamp": deadline_params["now"],
+    "nonce": deadline_params["nonce"],
+    "bin": 1,
+    "file_id": 1,
+    "continue": False,
+    "suffix": "tide",
+    "last": True,
+    "ext": deadline_params["ext"]
+  }
+  deadline_params["key"] = util.file_name(m)
+  [upload_timestamp, upload_duration] = benchmark.upload_input(deadline_params, 0)
+  sleep = 30
+
+  q = queue.Queue()
+  q.put(params["input_name"])
+  threads.append(Request(1, sleep, q, dict(params), client, wait=True))
+  threads[0].start()
+  s = scheduler.Scheduler("fifo", deadline_params, run=False)
+  q = s.setup()
+  payload = scheduler.payload(deadline_params["bucket"], deadline_params["key"])
+  payload["continue"] = True
+  q.put(scheduler.Item("fifo", upload_duration, 0, 0, payload))
+  second = Second(s, deadline_params)
+  second.start()
+  threads[-1].join()
+  print("Restarting first job")
+  s.run = True
+  second.join()
+#  s.wait(deadline_params["num_output"])
 
 
 def run(args, params):
@@ -161,29 +233,41 @@ def run(args, params):
     benchmark.setup_instance(client, params)
 
   i = 0
-  time_delta = 100
-  current_time = 0
   threads = []
-  print("requests", requests)
-  while len(requests) > 0:
-    current_requests = list(filter(lambda r: r - current_time < time_delta, requests))
-    requests = list(filter(lambda r: r - current_time >= time_delta, requests))
-    print("current", current_requests)
-    for request in current_requests:
-      thread = Request(i, request - current_time, file_names[i % len(file_names)], params, client)
-      threads.append(thread)
-      thread.start()
-      i += 1
+  # schedule = "fifo"
+  # s = scheduler.Scheduler(schedule, params)
+  # queue = s.setup()
+  q = queue.Queue()
 
-    threads = list(filter(lambda t: t.alive, threads))
-    if len(requests) > 0:
-      temp_time = current_time
-      current_time = requests[0]
-      time.sleep(current_time - temp_time)
+  for i in range(len(requests)):
+    q.put(file_names[i % len(file_names)])
 
-  while len(threads) > 0:
-    threads = list(filter(lambda t: t.alive, threads))
-    time.sleep(10)
+  num_threads = 300
+  for i in range(num_threads):
+    threads.append(Request(i, 0, q, params, client))
+    #, queue, schedule))
+    #    current_requests = requests[:300]#list(filter(lambda r: r - current_time < time_delta, requests))
+    #    requests = requests[300:]#list(filter(lambda r: r - current_time >= time_delta, requests))
+    #    for request in current_requests:
+    # threads.append(thread)
+    threads[-1].start()
+
+#    threads = list(filter(lambda t: t.alive, threads))
+  for thread in threads:
+    thread.join()
+  #  threads = []
+#    if len(requests) > 0:
+#      temp_time = current_time
+#      current_time = requests[0]
+#      time.sleep(current_time - temp_time)
+
+#  s.wait(num_requests)
+  #  stats = benchmark.parse_logs(thread.params, 0, 0, 0)
+  #  dir_path = "results/{0:s}/{1:f}-{2:d}".format(thread.params["folder"], thread.params["now"], thread.params["nonce"])
+  #  os.makedirs(dir_path)
+  #  with open("{0:s}/stats".format(dir_path), "w+") as f:
+  #    f.write(json.dumps({"stats": stats}, indent=4, sort_keys=True))
+  #  benchmark.clear_buckets(thread.params)
 
   print("Processed {0:d} requests".format(len(requests)))
   if params["model"] == "ec2":
@@ -193,9 +277,11 @@ def run(args, params):
 def main():
   parser = argparse.ArgumentParser()
   parser.add_argument("--parameters", type=str, required=True, help="File containing parameters")
-  parser.add_argument("--distribution", type=str, required=True, help="Distribution to use")
+  parser.add_argument("--distribution", type=str, help="Distribution to use")
   parser.add_argument("--concurrency", type=int, help="Number of concurrent instances to run")
   parser.add_argument('--folder', type=str, help="Folder to store results in")
+  parser.add_argument('--delay', type=int, default=0, help="Default delay for concurrent execution")
+  parser.add_argument('--deadline', action="store_true", default=False, help="Simulate deadline")
   args = parser.parse_args()
   params = json.loads(open(args.parameters).read())
   [access_key, secret_key] = util.get_credentials(params["credential_profile"])
@@ -205,7 +291,11 @@ def main():
   params["iterations"] = 1
   if len(args.folder) > 0:
     params["folder"] = args.folder
-  run(args, params)
+
+  if args.deadline:
+    deadline(params)
+  else:
+    run(args, params)
 
 
 if __name__ == "__main__":
