@@ -28,7 +28,7 @@
 	},
 	"ec2": {
 		"application": "knn",
-		"ami": "ami-068a1f4cc619c7ad2",
+		"ami": "ami-0c4c0ed782eff3964",
 		"default_ami": "ami-51537029",
 		"key": "maccoss",
 		"security": "sg-4ea90530",

@@ -40,6 +40,7 @@
 		"combine-blast-files": {
 			"file": "combine_files",
 			"format": "blast",
+			"chunk_size": 100000,
 			"num_bins": 1,
 			"memory_size": 1024
 		}

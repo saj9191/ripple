@@ -21,7 +21,7 @@
 	"credential_profile": "maccoss",
 	"ec2": {
 		"application": "methyl",
-		"ami": "ami-09908e282013b16a4",
+		"ami": "ami-0c4c0ed782eff3964",
 		"default_ami": "ami-51537029",
 		"key": "maccoss",
 		"security": "sg-4ea90530",
@@ -29,7 +29,7 @@
 		"timeout": 20,
 		"type": "t2.medium",
 		"wait_for_tests": false,
-		"use_ami": false
+		"use_ami": true
 	},
 	"dependencies": {
 		"common": [
