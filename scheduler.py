@@ -1,4 +1,5 @@
 import argparse
+from datetime import timezone
 import botocore
 import json
 import queue
@@ -45,7 +46,7 @@ class PriorityQueue:
 
   def get(self):
     if self.scheduler == "fifo":
-      item = self.queue.get(timeout=5)
+      item = self.queue.get(timeout=1)
       return item
     elif self.scheduler == "robin":
       count = 0
@@ -108,7 +109,7 @@ class Worker(threading.Thread):
           rparams["scheduler"] = True
           [input_format, output_format, bucket_format] = util.get_formats(input_key, functions[name]["file"], rparams)
           log_file = util.file_name(bucket_format)
-          self.queue.put([item.job_id, log_file, item, time.time()])
+          self.queue.put([item.job_id, log_file, item, item.priority])#time.time()])
         else:
           self.results.put(item)
           self.condition.acquire()
@@ -116,12 +117,13 @@ class Worker(threading.Thread):
           self.condition.release()
       except queue.Empty:
         pass
+    print("Thread", self.worker_id, "Shutting down")
 
 
 class Parser(threading.Thread):
-  def __init__(self, parser_id, scheduler, q, pending, params, client):
+  def __init__(self, s, parser_id, scheduler, q, pending, params, client):
     super(Parser, self).__init__()
-    self.handler_id = parser_id
+    self.parser_id = parser_id
     self.queue = q
     self.logs = []
     self.params = params
@@ -131,6 +133,7 @@ class Parser(threading.Thread):
     self.scheduler = scheduler
     self.client = client
     self.params["payloads"] = []
+    self.s = s
 
   def run(self):
     s3 = util.s3(self.params)
@@ -139,24 +142,37 @@ class Parser(threading.Thread):
       i = 0
       while i < len(self.logs):
         [job_id, log_file, item, start_time] = self.logs[i]
-        if util.object_exists(self.params["log"], log_file):
+        m = util.parse_file_name(log_file)
+        m["continue"] = True
+        continue_log_file = util.file_name(m)
+        m["continue"] = False
+        log_file = util.file_name(m)
+        print("Looking for", log_file)
+        if util.object_exists(self.params["log"], log_file) or util.object_exists(self.params["log"], continue_log_file):
+          print("Found", log_file)
           self.logs = self.logs[:i] + self.logs[i + 1:]
           prefix = util.parse_file_name(log_file)["prefix"]
           done = False
           while not done:
             try:
-              obj = s3.Object(self.params["log"], log_file)
+              if util.object_exists(self.params["log"], log_file):
+                obj = s3.Object(self.params["log"], log_file)
+              else:
+                obj = s3.Object(self.params["log"], continue_log_file)
               content = obj.get()["Body"].read()
               lparams = json.loads(content.decode("utf-8"))
               for p in lparams["payloads"]:
-                self.pending.put(Item(self.scheduler, obj.last_modified, prefix, job_id, p))
+                self.pending.put(Item(self.scheduler, obj.last_modified.replace(tzinfo=timezone.utc).timestamp(), prefix, job_id, p))
               done = True
             except botocore.errorfactory.NoSuchKey:
               time.sleep(1)
-        elif (time.time() - start_time) > self.params["timeout"]:
+        elif (time.time() - start_time) > self.params["timeout"] and self.s.run:
           self.logs[i][3] = time.time()
           prefix = item.prefix
           name = pipeline[prefix]["name"]
+          print("Cannot find", name, self.params["log"], continue_log_file)
+          self.logs[i][-1] = time.time()
+          item.payload["continue"] = True
           util.invoke(self.client, name, self.params, item.payload)
           i += 1
         else:
@@ -168,6 +184,8 @@ class Parser(threading.Thread):
           self.logs.append(item)
         except queue.Empty:
           pass
+      time.sleep(10)
+    print("Parser", self.parser_id, "Shutting down")
 
 
 def payload(bucket, key):
@@ -186,7 +204,7 @@ def payload(bucket, key):
 
 
 class Scheduler:
-  def __init__(self, scheduler, params):
+  def __init__(self, scheduler, params, run=True):
     self.params = dict(params)
     self.params["object"] = {}
     self.params["scheduler"] = False
@@ -197,17 +215,18 @@ class Scheduler:
     self.client = util.setup_client("lambda", self.params)
     self.pending = PriorityQueue(self.scheduler)
     self.workers = []
+    self.run = run
 
   def setup(self):
-    max_workers = 100
-    max_parsers = 100
+    max_workers = 10
+    max_parsers = 10
 
     for i in range(max_workers):
       self.workers.append(Worker(i, self.scheduler, self.pending, self.q, self.params, self.condition, self.results))
       self.workers[-1].start()
 
     for i in range(max_parsers):
-      self.workers.append(Parser(i, self.scheduler, self.q, self.pending, self.params, self.client))
+      self.workers.append(Parser(self, i, self.scheduler, self.q, self.pending, self.params, self.client))
       self.workers[-1].start()
 
     # job_id = 0
@@ -220,17 +239,18 @@ class Scheduler:
 
   def wait(self, concurrency):
     while self.results.qsize() < self.params["num_output"] * concurrency:
-      print("Actual", self.results.qsize(), "Expected", self.params["num_output"] * concurrency)
+#      print("Actual", self.results.qsize(), "Expected", self.params["num_output"] * concurrency)
       self.condition.acquire()
       self.condition.wait()
       self.condition.release()
 
     print("Shutting down")
-    for worker in self.workers:
-      worker.running = False
+    for i in range(len(self.workers)):
+      print("Waiting for worker", i, len(self.workers))
+      self.workers[i].running = False
 
-    for worker in self.workers:
-      worker.join()
+  #  for worker in self.workers:
+  #    worker.join()
 
 
 def main():
