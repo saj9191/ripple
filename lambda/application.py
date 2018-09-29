@@ -12,7 +12,7 @@ def run_application(bucket_name, key, input_format, output_format, offsets, para
     obj = s3.Object(bucket_name, key)
     format_lib = importlib.import_module(params["format"])
     iterator_class = getattr(format_lib, "Iterator")
-    iterator = iterator_class(obj, 0, 0, offsets)
+    iterator = iterator_class(obj, 0, offsets)
     temp_file = "/tmp/{0:s}".format(key)
     with open(temp_file, "w") as f:
       f.write(util.read(obj, iterator.current_offset, iterator.content_length))
