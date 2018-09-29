@@ -1,6 +1,5 @@
 import argparse
 import boto3
-import datetime
 import json
 import os
 import paramiko
@@ -24,6 +23,7 @@ WRITE_REGEX = re.compile("([0-9\.]+) - .* STEP ([0-9]+) BIN ([0-9]+) WRITE REQUE
 READ_REGEX = re.compile("([0-9\.]+) - .* STEP ([0-9]+) BIN ([0-9]+) READ REQUEST ID (.*) TOKEN ([0-9]+) FILE NAME (.*)")
 DURATION_REGEX = re.compile("([0-9\.]+) - .* STEP ([0-9]+) BIN [0-9]+ FILE ([0-9]+) REQUEST ID (.*) TOKEN ([0-9]+) DURATION ([0-9]+)")
 COUNT_REGEX = re.compile("STEP ([0-9]+) TOKEN ([0-9]+) READ COUNT ([0-9]+) WRITE COUNT ([0-9]+) LIST COUNT ([0-9]+) BYTE COUNT ([0-9]+)")
+FAILURE_FILE = "failure.temp"
 
 #############################
 #         COMMON            #
@@ -376,9 +376,18 @@ def create_dependency_chain(stats, iterations, params):
 
 
 def run(params, thread_id):
+  if os.path.isfile(FAILURE_FILE):
+    params = json.loads(open(FAILURE_FILE).read())
+    params["upload"] = False
+    params["setup"] = False
+  else:
+    params["upload"] = True
+
   if params["setup"]:
     print_run_information()
-  process_params(params)
+
+  if params["upload"]:
+    process_params(params)
 
   if params["model"] == "lambda" and params["setup"]:
     setup.setup(params)
@@ -389,7 +398,8 @@ def run(params, thread_id):
   iterations = params["iterations"]
 
   for i in range(iterations):
-    process_iteration_params(params, i)
+    if params["upload"]:
+      process_iteration_params(params, i)
     if params["stats"]:
       [stats, upload_duration, duration, failed] = benchmark(i, params, thread_id)
     else:
@@ -397,8 +407,9 @@ def run(params, thread_id):
     total_upload_duration += upload_duration
     total_duration += duration
     total_failed_attempts += (1 if failed else 0)
+    params["upload"] = True
 
-    if params["model"] == "ec2" and params["stats"]:
+    if params["stats"]:
       dir_path = "results/{0:s}/{1:s}/{2:f}-{3:d}".format(params["folder"], params["input_name"], params["now"], params["nonce"])
       os.makedirs(dir_path)
       with open("{0:s}/stats".format(dir_path), "w+") as f:
@@ -406,6 +417,7 @@ def run(params, thread_id):
 
     if params["model"] == "lambda":
       clear_buckets(params)
+    os.remove(FAILURE_FILE)
 
   avg_upload_duration = total_upload_duration / iterations
   avg_duration = total_duration / iterations
@@ -539,12 +551,23 @@ def parse_logs(params, upload_timestamp, upload_duration, total_duration):
 
 def lambda_benchmark(params, thread_id):
   start_time = time.time()
-  [upload_timestamp, upload_duration] = upload_input(params, thread_id)
+  if params["upload"]:
+    [upload_timestamp, upload_duration] = upload_input(params, thread_id)
+    params["upload_timestamp"] = upload_timestamp
+    params["upload_duration"] = upload_duration
+  else:
+    print("Restarting failure")
+    upload_timestamp = params["upload_timestamp"]
+    upload_duration = params["upload_duration"]
+
+  with open(FAILURE_FILE, "w+") as f:
+    f.write(json.dumps(params, indent=4, sort_keys=True))
+
   s = scheduler.Scheduler("fifo", params)
   queue = s.setup()
   payload = scheduler.payload(params["bucket"], params["key"])
   queue.put(scheduler.Item("fifo", upload_timestamp, 0, thread_id, payload))
-  s.wait(params["num_output"])
+  s.wait(1)
   end_time = time.time()
   total_duration = end_time - start_time
   results = [upload_timestamp, total_duration]
@@ -678,7 +701,9 @@ def setup_instance(client, p):
     program = None
   else:
     program = "crux"
+  items.append(program)
 
+  cexec(client, "sudo python3 -m pip install Pillow")
   if not p["ec2"]["use_ami"]:
     cexec(client, "sudo apt-get update -y")
     time.sleep(3)
@@ -696,10 +721,11 @@ def setup_instance(client, p):
     cexec(client, cmd)
 
   for item in items:
+    print("Uploading", item)
     sftp.put(item, item.split("/")[-1])
 
-  if not p["ec2"]["use_ami"]:
-    cexec(client, "chmod u+x {0:s}".format(program))
+#  if not p["ec2"]["use_ami"]:
+  cexec(client, "chmod u+x {0:s}".format(program))
 
   sftp.close()
   end_time = time.time()
@@ -782,10 +808,11 @@ def terminate_instance(instance, client, params):
 def ec2_benchmark(params):
   print("EC2 benchmark")
   start_time = time.time()
-  upload_duration = upload_input(params)[1]
+  upload_duration = 0
+  #upload_duration = upload_input(params)[1]
 
   stats = []
-  stats.append(load_stats(upload_duration))
+  #stats.append(load_stats(upload_duration))
 
   create_stats = create_instance(params)
   instance = create_stats["instance"]
