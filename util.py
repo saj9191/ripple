@@ -30,6 +30,10 @@ FILE_FORMAT = [{
   "type": "int",
   "folder": False,
 }, {
+  "name": "continue",
+  "type": "bool",
+  "folder": False,
+}, {
   "name": "last",
   "type": "bool",
   "folder": False,
@@ -54,15 +58,13 @@ UPLOAD_TIME = 0
 
 
 def invoke(client, name, params, payload):
-  if is_set(params, "scheduler"):
-    params["payloads"].append(payload)
-  else:
-    response = client.invoke(
-      FunctionName=name,
-      InvocationType="Event",
-      Payload=json.JSONEncoder().encode(payload)
-    )
-    assert(response["ResponseMetadata"]["HTTPStatusCode"] == 202)
+  params["payloads"].append(payload)
+  response = client.invoke(
+    FunctionName=name,
+    InvocationType="Event",
+    Payload=json.JSONEncoder().encode(payload)
+  )
+  assert(response["ResponseMetadata"]["HTTPStatusCode"] == 202)
 
 
 def check_output(command):
@@ -169,19 +171,18 @@ def write(m, bucket, key, body, params):
       print("ERROR: RATE LIMIT")
       time.sleep(random.randint(1, 10))
 
-  if is_set(params, "scheduler"):
-    params["payloads"].append({
-      "Records": [{
-        "s3": {
-          "bucket": {
-            "name": bucket
-          },
-          "object": {
-            "key": key
-          }
+  params["payloads"].append({
+    "Records": [{
+      "s3": {
+        "bucket": {
+          "name": bucket
+        },
+        "object": {
+          "key": key
         }
-      }]
-    })
+      }
+    }]
+  })
 
 
 def object_exists(bucket_name, key):
@@ -253,12 +254,18 @@ def get_formats(key, file, params):
     bucket_format = dict(output_format)
   bucket_format["ext"] = "log"
   bucket_format["prefix"] = params["prefix"] + 1
-  if not is_set(params, "scheduler"):
+  if False:
     bucket_format["suffix"] = "{0:f}".format(time.time())
   return [input_format, output_format, bucket_format]
 
 
 def run(bucket_name, key, params, func):
+  m = parse_file_name(key)
+  print("DURATION", START_TIME - m["timestamp"])
+  if not is_set(params, "continue") and (START_TIME - m["timestamp"] > 30) and not is_set(m, "continue"):
+    print("Returning")
+    return None
+
   clear_tmp(params)
   with open("/tmp/warm", "w+") as f:
     f.write("warm")
@@ -272,6 +279,8 @@ def run(bucket_name, key, params, func):
     offsets = {}
 
   [input_format, output_format, bucket_format] = get_formats(key, params["file"], params)
+  if is_set(params, "continue"):
+    output_format["continue"] = True
   params["input_format"] = input_format
   params["output_format"] = output_format
   params["bucket_format"] = bucket_format
@@ -326,7 +335,6 @@ def lambda_setup(event, context):
   bucket_name = s3["bucket"]["name"]
   key = s3["object"]["key"]
   key_fields = parse_file_name(key)
-
   if "extra_params" in s3 and "prefix" in s3["extra_params"]:
     prefix = s3["extra_params"]["prefix"]
   else:
@@ -339,6 +347,8 @@ def lambda_setup(event, context):
   params["token"] = random.randint(1, 100*1000*1000)
   params["request_id"] = context.aws_request_id
   params["key_fields"] = key_fields
+  if is_set(event, "continue"):
+    params["continue"] = True
 
   for value in ["object", "offsets", "pivots"]:
     if value in s3:
@@ -354,6 +364,9 @@ def lambda_setup(event, context):
 
 
 def show_duration(context, m, p):
+  if m is None:
+    return
+
   global READ_COUNT
   READ_COUNT += 1
   p["write_count"] += 1
@@ -500,6 +513,8 @@ def make_folder(file_format):
 
 
 def file_name(m):
+  if "continue" not in m:
+    m["continue"] = True
   return file_format(m)
 
 
