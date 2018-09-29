@@ -243,7 +243,7 @@ def run_compress(file_name, bucket, total=False):
       if "ArInt" in f:
         decompress_input = f
       file_name = "{0:s}/{1:s}".format(compressed_dir, f)
-      s3.Object(bucket, f).put(Body=open(file_name, "rb"))
+      s3().Object(bucket, f).put(Body=open(file_name, "rb"))
   et = time.time()
   print("{0:f} CUPLOAD DURATION: {1:f}".format(time.time(), et - st))
   end_time = time.time()
@@ -264,7 +264,7 @@ def run_decompress(file_name, bucket, total=False):
 def run_methyl(file_name, bucket):
   # s3 = boto3.resource("s3")
   # start_time = time.time()
-  # run_compress(file_name, bucket, total=False)
+  run_compress(file_name, bucket, total=False)
   # run_decompress(file_name, bucket, total=False)
   # st = time.time()
   pass
