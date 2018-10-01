@@ -123,7 +123,6 @@ def process_images(folder, solutions, params):
   border = list()
   inside = list()
   outside = list()
-  total_files = 100
   num_items_per_file = 100 * 1000
   third = int(num_items_per_file / 3)
   file_id = 1
@@ -153,7 +152,7 @@ def process_images(folder, solutions, params):
         outside = []
         write_classification(f, items)
         file_id += 1
-      s3.Object("maccoss-spacenet", key).put(Body=open(temp_name, "rb"))
+      s3.Object(params["bucket"], key).put(Body=open(temp_name, "rb"))
     print("After", "Border", len(border), "Inside", len(inside), "Outside", len(outside))
     i += 1
 
