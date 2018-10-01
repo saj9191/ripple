@@ -236,7 +236,7 @@ def run(args, params):
   with open("results/{0:s}/params".format(folder), "w+") as f:
     f.write(json.dumps(params, indent=4, sort_keys=True))
 
-  task = "clear"
+  task = "run"
   if params["model"] == "lambda" and task == "run":
     setup.setup(params)
 
@@ -261,7 +261,7 @@ def run(args, params):
   num_requests = len(requests)
 
   if task == "clear" or task == "parse":
-    for obj in util.s3(params).Bucket("shjoyner-tide").objects.filter(Prefix="0/"):
+    for obj in util.s3(params).Bucket(params["bucket"]).objects.filter(Prefix="0/"):
       request_queue.put(obj.key.split("/")[1])
   else:
     for i in range(len(requests)):
