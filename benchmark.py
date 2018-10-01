@@ -417,7 +417,8 @@ def run(params, thread_id):
 
     if params["model"] == "lambda":
       clear_buckets(params)
-    os.remove(FAILURE_FILE)
+    if os.path.isfile(FAILURE_FILE):
+      os.remove(FAILURE_FILE)
 
   avg_upload_duration = total_upload_duration / iterations
   avg_duration = total_duration / iterations
@@ -623,7 +624,7 @@ def create_instance(params):
       "ResourceType": "instance",
       "Tags": [{
         "Key": "Name",
-        "Value": "maccoss-benchmark-{0:f}".format(params["now"])
+        "Value": "benchmark-{0:f}".format(params["now"])
       }]
     }]
   )
