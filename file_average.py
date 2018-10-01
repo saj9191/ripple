@@ -24,17 +24,8 @@ def get_ec2_cost_stats(application, key, stats, params):
   costs = list(map(lambda s: 0, stats))
 
   s3 = util.s3(params)
-  if params["tag"] == "smith-waterman":
-    bucket = "ssw-input"
-  else:
-    if key.startswith("TN_"):
-      bucket = "shjoyner-als"
-    elif key.startswith("22Feb"):
-      bucket = "shjoyner-sample-input"
-    else:
-      bucket = "shjoyner-ash"
+  bucket = params["bucket"]
 
-  print(bucket, key)
   obj = s3.Object(bucket, key)
   content_length = obj.content_length
 
@@ -84,15 +75,7 @@ def get_lambda_cost_stats(key, stats, params):
   memory = json.loads(open("json/memory.json").read())
   s3_costs = list(map(lambda s: 0, stats))
   costs = list(map(lambda s: 0, stats))
-  if params["tag"] == "smith-waterman":
-    bucket = "ssw-input"
-  else:
-    if key.startswith("TN_"):
-      bucket = "shjoyner-als"
-    elif key.startswith("22Feb"):
-      bucket = "shjoyner-sample-input"
-    else:
-      bucket = "shjoyner-ash"
+  bucket = params["bucket"]
   s3 = util.s3(params)
   obj = s3.Object(bucket, key)
   content_length = obj.content_length
