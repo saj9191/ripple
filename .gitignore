@@ -11,3 +11,5 @@ data/*
 *.pem
 jupyter
 *.ropeproject
+json/private*
+json/ec2*

@@ -1,5 +1,5 @@
 {
-	"input_name": "22Feb2011-PES-unfract-HIM8-01.mzML",
+	"input_name": "ASH_20170314_HELA_180MIN.mzML",
 	"model": "ec2",
 	"iterations": 10,
 	"region": "us-west-2",
@@ -17,7 +17,7 @@
 	"num_output": 1,
 	"stats": true,
 	"setup": true,
-	"sample_bucket": "shjoyner-sample-input",
+	"sample_bucket": "shjoyner-ash",
 	"ec2": {
 		"application": "tide",
 		"ami": "ami-0f19431450f72a526",

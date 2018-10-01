@@ -8,14 +8,14 @@
 	"tag": "tide",
 	"timeout": 300,
 	"num_bins": 25,
-	"bucket": "shjoyner-tide",
+	"bucket": "tide",
 	"storage_class": "STANDARD",
-	"account": 469290334000,
-	"credential_profile": "shjoyner",
+	"account": 0,
+	"credential_profile": "add-credentials-here",
 	"role": "LambdaExecution",
-	"log": "shjoyner-log",
+	"log": "log",
 	"sample_input": true,
-	"sample_bucket": "shjoyner-als",
+	"sample_bucket": "als",
 	"num_output": 1,
 	"stats": true,
 	"setup": true,
@@ -51,7 +51,7 @@
 			"file": "application",
 			"application": "tide",
 			"memory_size": 2048,
-			"database_bucket": "shjoyner-fasta"
+			"database_bucket": "fasta"
 		},
 		"combine-tsv-files": {
 			"file": "combine_files",
@@ -61,13 +61,13 @@
 		"confidence": {
 			"file": "application",
 			"application": "confidence",
-			"database_bucket": "shjoyner-fasta",
+			"database_bucket": "fasta",
 			"memory_size": 512
 		},
 		"percolator": {
 			"file": "application",
 			"application": "percolator",
-			"database_bucket": "shjoyner-fasta",
+			"database_bucket": "fasta",
 			"memory_size": 3008
 		},
 		"top-mzML": {

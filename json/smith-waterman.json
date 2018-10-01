@@ -9,14 +9,14 @@
 	"timeout": 300,
 	"num_bins": 10,
 	"num_output": 1,
-	"log": "maccoss-log-west-1",
-	"bucket": "maccoss-ssw-west-1",
-	"account": 999145429263,
+	"log": "log",
+	"bucket": "ssw",
+	"account": 0,
 	"role": "service-role/lambdaFullAccessRole",
 	"stats": true,
 	"setup": true,
 	"sample_input": false,
-	"credential_profile": "maccoss",
+	"credential_profile": "add-credentials-here",
 	"functions": {
 		"map-fasta": {
 			"file": "map",

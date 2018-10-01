@@ -1,9 +1,10 @@
 {
 	"input_name": "3band_AOI_1_RIO_img5792.tif",
-	"account": 999145429263,
-	"bucket": "maccoss-knn-east-1",
-	"credential_profile": "maccoss", "folder": "knn",
-	"log": "maccoss-log-east-1",
+	"account": 0,
+	"bucket": "knn",
+	"credential_profile": "add-credentials-here",
+	"folder": "knn",
+	"log": "log",
 	"num_bins": 18,
 	"model": "lambda",
 	"scheduler": false,
@@ -35,7 +36,7 @@
 		},
 		"map-spacenet": {
 			"file": "map",
-		  "map_bucket": "maccoss-spacenet-east-1",
+		  "map_bucket": "spacenet",
 			"memory_size": 128,
 		  "input_key_value": "key",
 		  "bucket_key_value": "train", 
@@ -48,7 +49,7 @@
 			"format": "classification",
 			"application": "run_knn",
 			"memory_size": 3008,
-			"train_bucket": "maccoss-spacenet-east-1",
+			"train_bucket": "-spacenet-east-1",
 			"n": 100
 		},
 		"combine-knn-files": {
