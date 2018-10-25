@@ -14,7 +14,7 @@ import split_file
 sys.path.insert(0, parentdir + "/formats")
 
 content = "A B C\nD E F\nG H I\nJ K L\nM N O\nP Q R\n"
-object1 = Object("0/123.400000-13/1/1-0-suffix.new_line", content)
+object1 = Object("0/123.400000-13/1/1-0-0-suffix.new_line", content)
 bucket1 = Bucket("bucket1", [object1])
 log = Bucket("log", [])
 input_format = util.parse_file_name(object1.key)
@@ -35,6 +35,7 @@ params = {
   "log": "log",
   "split_size": 20,
   "adjust": True,
+  "payloads": [],
 }
 
 
