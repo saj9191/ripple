@@ -139,6 +139,7 @@ def clear_triggers(client, bucket, params):
 
 
 def create_bucket(client, bucket_name, params):
+  return
   try:
     client.create_bucket(
       ACL="public-read-write",
@@ -226,8 +227,7 @@ def setup(params):
 
   client = util.lambda_client(params)
   upload_functions(client, params)
-  if not util.is_set(params, "scheduler"):
-    setup_triggers(params)
+  setup_triggers(params)
 
 
 def main():

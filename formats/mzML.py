@@ -6,6 +6,12 @@ import util
 import xml.etree.ElementTree as ET
 
 
+def add(content, f):
+  if f is not None:
+    f.write(content)
+  return content
+
+
 class Iterator(iterator.Iterator):
   INDEX_LIST_OFFSET_REGEX = re.compile("[\s\S]*<indexListOffset>(\d+)</indexListOffset>")
   OFFSET_REGEX = re.compile("<offset[^>]*>(\d+)</offset>")
@@ -154,33 +160,36 @@ class Iterator(iterator.Iterator):
     content = content.replace(original, replacement)
     return content
 
-  def fromArray(obj, spectra, offsets):
-    content = Iterator.header(obj, offsets["header"]["start"], offsets["header"]["end"], len(spectra))
+  def fromArray(obj, spectra, offsets, f=None):
+    content = add(Iterator.header(obj, offsets["header"]["start"], offsets["header"]["end"], len(spectra)), f)
     offset = len(content)
     offsets = []
 
-    for i in range(len(spectra)):
-      xml = spectra[i]
-      xml.set("index", str(i))
-      m = Iterator.ID_REGEX.match(xml.get("id"))
-      offsets.append((m.group(1), offset))
-      spectrum = ET.tostring(xml).decode()
-      offset += len(spectrum)
-      content += spectrum
+    count = 0
+    for j in range(2):
+      for i in range(len(spectra)):
+        xml = spectra[i]
+        xml.set("index", str(count))
+        m = Iterator.ID_REGEX.match(xml.get("id"))
+        offsets.append((m.group(1), offset))
+        spectrum = ET.tostring(xml).decode()
+        offset += len(spectrum)
+        content += add(spectrum, f)
+        count += 1
 
-    content += "</spectrumList></run></mzML>\n"
+    content += add("</spectrumList></run></mzML>\n", f)
     list_offset = len(content)
-    content += '<indexList count="2">\n'
-    content += '<index name="spectrum">\n'
+    content += add('<indexList count="2">\n', f)
+    content += add('<index name="spectrum">\n', f)
     for offset in offsets:
-      content += '<offset idRef="controllerType=0 controllerNumber=1 scan={0:s}">{1:d}</offset>\n'.format(offset[0], offset[1])
-    content += "</index>\n"
-    content += "</indexList>\n"
-    content += "<indexListOffset>{0:d}</indexListOffset>\n".format(list_offset)
-    content += "<fileChecksum>"
+      content += add('<offset idRef="controllerType=0 controllerNumber=1 scan={0:s}">{1:d}</offset>\n'.format(offset[0], offset[1]), f)
+    content += add("</index>\n", f)
+    content += add("</indexList>\n", f)
+    content += add("<indexListOffset>{0:d}</indexListOffset>\n".format(list_offset), f)
+    content += add("<fileChecksum>", f)
 
-    content += str(hashlib.sha1(content.encode("utf-8")).hexdigest())
-    content += "</fileChecksum>\n</indexedmzML>"
+    content += add(str(hashlib.sha1(content.encode("utf-8")).hexdigest()), f)
+    content += add("</fileChecksum>\n</indexedmzML>", f)
     return content
 
   def createContent(content):

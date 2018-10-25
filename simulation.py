@@ -260,8 +260,11 @@ def run(args, params):
   request_queue = queue.Queue()
   num_requests = len(requests)
 
+  print("Task", task)
   if task == "clear" or task == "parse":
-    for obj in util.s3(params).Bucket(params["bucket"]).objects.filter(Prefix="0/"):
+    objects = list(util.s3(params).Bucket(params["log"]).objects.filter(Prefix="1/"))
+    print("num objects", len(objects))
+    for obj in objects:
       request_queue.put(obj.key.split("/")[1])
   else:
     for i in range(len(requests)):

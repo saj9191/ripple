@@ -116,8 +116,8 @@ def upload_input(p, thread_id=0):
 
   start = time.time()
   if util.is_set(p, "sample_input"):
-    config = boto3.s3.transfer.TransferConfig(multipart_threshold=1024*25, max_concurrency=2,
-                                              multipart_chunksize=1024*25, use_threads=False)
+    config = boto3.s3.transfer.TransferConfig(multipart_threshold=64*1024*1024, max_concurrency=10,
+                                              multipart_chunksize=16*1024*1024, use_threads=False)
     copy_source = {
       "Bucket": p["sample_bucket"],
       "Key": p["input_name"]
@@ -376,7 +376,7 @@ def create_dependency_chain(stats, iterations, params):
 
 
 def run(params, thread_id):
-  if os.path.isfile(FAILURE_FILE):
+  if False: # os.path.isfile(FAILURE_FILE):
     params = json.loads(open(FAILURE_FILE).read())
     params["upload"] = False
     params["setup"] = False
@@ -693,7 +693,7 @@ def initiate_instance(ec2, instance, params):
 def setup_instance(client, p):
   start_time = time.time()
   sftp = client.open_sftp()
-  items = ["formats/iterator.py", "formats/mzML.py", "ec2_script.py", "util.py"]
+  items = ["formats/iterator.py", "formats/mzML.py", "temp_ec2_script.py", "util.py"]
   if p["ec2"]["application"] == "ssw":
     program = "ssw_test"
   elif p["ec2"]["application"] == "methyl":
@@ -702,7 +702,8 @@ def setup_instance(client, p):
     program = None
   else:
     program = "crux"
-  items.append(program)
+  if program is not None:
+    items.append(program)
 
   cexec(client, "sudo python3 -m pip install Pillow")
   if not p["ec2"]["use_ami"]:
@@ -726,7 +727,8 @@ def setup_instance(client, p):
     sftp.put(item, item.split("/")[-1])
 
 #  if not p["ec2"]["use_ami"]:
-  cexec(client, "chmod u+x {0:s}".format(program))
+  if program is not None:
+    cexec(client, "chmod u+x {0:s}".format(program))
 
   sftp.close()
   end_time = time.time()
@@ -748,7 +750,7 @@ def download_input(client, params):
 
 def run_ec2_script(client, params):
   start_time = time.time()
-  cmd = "python3 ec2_script.py --file {0:s} --application {1:s} --bucket {2:s}".format(params["input_name"], params["ec2"]["application"], params["bucket"])
+  cmd = "python3 temp_ec2_script.py --file {0:s} --application {1:s} --bucket {2:s}".format(params["input_name"], params["ec2"]["application"], params["bucket"])
   print(cmd)
   stdout = cexec(client, cmd)
   end_time = time.time()
