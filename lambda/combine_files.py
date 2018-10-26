@@ -19,7 +19,6 @@ def combine(bucket_name, key, input_format, output_format, offsets, params):
 
   [combine, keys, last] = util.combine_instance(bucket_name, key, params)
   if combine:
-    print("Num keys", len(keys), "batch_size" in params)
     if "batch_size" in params:
       output_format["last"] = last
     else:
