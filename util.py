@@ -50,7 +50,6 @@ WRITE_BYTE_COUNT = 0
 READ_COUNT = 0
 LIST_COUNT = 0
 WRITE_COUNT = 0
-START_TIME = None
 FOUND = False
 DOWNLOAD_TIME = 0
 LIST_TIME = 0
@@ -261,9 +260,7 @@ def get_formats(key, file, params):
 
 def run(bucket_name, key, params, func):
   m = parse_file_name(key)
-  print("DURATION", START_TIME - m["timestamp"])
-  if not is_set(params, "continue") and (START_TIME - m["timestamp"] > 30) and not is_set(m, "continue"):
-    print("Returning")
+  if not is_set(params, "continue") and (params["start_time"] - m["timestamp"] > 30) and not is_set(m, "continue"):
     return None
 
   clear_tmp(params)
@@ -317,12 +314,12 @@ def have_all_files(batch, prefix, params):
 
 
 def lambda_setup(event, context):
-  global START_TIME, FOUND, READ_COUNT, READ_BYTE_COUNT, FOUND, LIST_COUNT
+  start_time = time.time()
+  global FOUND, READ_COUNT, READ_BYTE_COUNT, FOUND, LIST_COUNT
   READ_COUNT = 0
   LIST_COUNT = 0
   READ_BYTE_COUNT = 0
   FOUND = False
-  START_TIME = time.time()
   global DOWNLOAD_TIME, LIST_TIME, UPLOAD_TIME, WRITE_BYTE_COUNT
   WRITE_BYTE_COUNT = 0
   DOWNLOAD_TIME = 0
@@ -341,6 +338,7 @@ def lambda_setup(event, context):
     prefix = key_fields["prefix"]
 
   params = json.loads(open("{0:d}.json".format(prefix)).read())
+  params["start_time"] = start_time
   params["payloads"] = []
   params["write_count"] = 0
   params["prefix"] = prefix
@@ -381,7 +379,7 @@ def show_duration(context, m, p):
 
   log_results = {
     "payloads": p["payloads"],
-    "start_time": START_TIME,
+    "start_time": p["start_time"],
     "read_count": READ_COUNT,
     "write_count": p["write_count"],
     "list_count": LIST_COUNT,

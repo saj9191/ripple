@@ -1,6 +1,7 @@
 import inspect
 import os
 import sys
+import time
 import unittest
 from tutils import S3, Bucket, Object, Context, Client
 
@@ -47,6 +48,7 @@ params = {
   "file": "split_file",
   "log": "log",
   "payloads": [],
+  "start_time": time.time(),
 }
 
 

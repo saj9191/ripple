@@ -2,6 +2,7 @@ import inspect
 import os
 import sys
 import unittest
+import time
 import tutils
 from unittest.mock import MagicMock
 from tutils import S3, Bucket, Object
@@ -11,12 +12,12 @@ parentdir = os.path.dirname(currentdir)
 sys.path.insert(0, parentdir)
 import util
 
-object1 = Object("0/123.400000-13/1/1-0-suffix.txt")
-object2 = Object("1/123.400000-13/1/1-0-suffix.txt")
-object3 = Object("0/123.400000-13/1/2-1-suffix.txt")
-object4 = Object("1/123.400000-13/1/2-1-suffix.txt")
-object5 = Object("0/123.400000-13/1/3-1-suffix.txt")
-object6 = Object("1/123.400000-13/1/3-1-suffix.txt")
+object1 = Object("0/123.400000-13/1/1-1-0-suffix.txt")
+object2 = Object("1/123.400000-13/1/1-1-0-suffix.txt")
+object3 = Object("0/123.400000-13/1/2-1-1-suffix.txt")
+object4 = Object("1/123.400000-13/1/2-1-1-suffix.txt")
+object5 = Object("0/123.400000-13/1/3-1-1-suffix.txt")
+object6 = Object("1/123.400000-13/1/3-1-1-suffix.txt")
 bucket1 = Bucket("bucket1", [object1, object2, object3, object4])
 bucket2 = Bucket("bucket2", [object5, object6])
 log = Bucket("log", [object5, object6])
@@ -24,6 +25,7 @@ s3 = S3([bucket1, bucket2, log])
 params = {
   "log": "log",
   "s3": s3,
+  "start_time": time.time(),
   "test": True,
 }
 
@@ -41,7 +43,7 @@ class FileNameMethods(unittest.TestCase):
       "ext": "txt"
     }
     self.assertDictEqual(m, util.parse_file_name(util.file_name(m)))
-    self.assertEqual("0/123.400000-13/1/1-0-suffix.txt", util.file_name(util.parse_file_name("0/123.400000-13/1/1-0-suffix.txt")))
+    self.assertEqual("0/123.400000-13/1/1-0-0-suffix.txt", util.file_name(util.parse_file_name("0/123.400000-13/1/1-0-0-suffix.txt")))
 
 
 class ObjectsMethods(unittest.TestCase):
@@ -66,12 +68,12 @@ class ExecutionMethods(unittest.TestCase):
 
     # Call on object that doesn't have a log entry
     func = MagicMock()
-    util.run("bucket1", "0/123.4-13/1/1-0-suffix.txt", params, func)
+    util.run("bucket1", "0/123.4-13/1/1-1-0-suffix.txt", params, func)
     self.assertTrue(func.called)
 
     # Call on object that does have a log entry
     func = MagicMock()
-    util.run("bucket2", "0/123.4-13/1/3-1-suffix.txt", params, func)
+    util.run("bucket2", "0/123.4-13/1/3-1-1-suffix.txt", params, func)
     self.assertFalse(func.called)
 
 
