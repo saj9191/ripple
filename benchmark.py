@@ -858,7 +858,6 @@ def main():
   [access_key, secret_key] = util.get_credentials(params["credential_profile"])
   params["access_key"] = access_key
   params["secret_key"] = secret_key
-  params["scheduler"] = True
   run(params, 0)
 
 
