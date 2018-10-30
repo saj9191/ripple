@@ -61,6 +61,7 @@ def split_file(bucket_name, key, input_format, output_format, offsets, params):
     iterator_class = getattr(format_lib, "Iterator")
     iterator = iterator_class(obj, params["chunk_size"], offsets)
 
+  num_files = int((obj.content_length + split_size - 1)/ split_size)
   while more:
     file_id += 1
     if util.is_set(params, "adjust"):
@@ -84,7 +85,7 @@ def split_file(bucket_name, key, input_format, output_format, offsets, params):
       s3_params["object"]["key"] = key
       s3_params["extra_params"]["file_id"] = file_id
       s3_params["extra_params"]["id"] = file_id
-      params["bucket_format"]["last"] = False
+      params["bucket_format"]["num_files"] = num_files
 
       util.invoke(client, params["name"], params, payload)
       return

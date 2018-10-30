@@ -7,11 +7,10 @@ def combine(bucket_name, key, input_format, output_format, offsets, params):
   util.print_read(input_format, key, params)
 
   batch_size = params["batch_size"] if "batch_size" in params else 1
-  file_id = int((input_format["file_id"] + batch_size - 1) / batch_size)
 
   # TODO: Fix.
   if "batch_size" in params:
-    output_format["file_id"] = file_id
+    output_format["file_id"] = int((input_format["file_id"] + batch_size - 1) / batch_size)
   else:
     output_format["file_id"] = input_format["bin"]
   output_format["bin"] = 1
@@ -20,9 +19,9 @@ def combine(bucket_name, key, input_format, output_format, offsets, params):
   [combine, keys, last] = util.combine_instance(bucket_name, key, params)
   if combine:
     if "batch_size" in params:
-      output_format["last"] = last
+      output_format["num_files"] = int((input_format["num_files"] + params["batch_size"] - 1) / params["batch_size"])
     else:
-      output_format["last"] = (output_format["file_id"] == params["num_bins"])
+      output_format["num_files"] = params["num_bins"]
     msg = "Combining TIMESTAMP {0:f} NONCE {1:d} BIN {2:d} FILE {3:d}"
     msg = msg.format(input_format["timestamp"], input_format["nonce"], input_format["bin"], input_format["file_id"])
     print(msg)

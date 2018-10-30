@@ -245,7 +245,9 @@ class Scheduler:
   def wait(self, concurrency):
     global OBJS
     s3 = util.s3(self.params)
-    while self.results.qsize() < self.params["num_output"] * concurrency:
+    num_output = None
+
+    while self.results.qsize() == 0 or num_output is None or self.results.qsize() < (num_output * concurrency):
       try:
         OBJS = set(list(map(lambda o: o.key, s3.Bucket(self.params["log"]).objects.all())))
       except Exception:
@@ -256,6 +258,8 @@ class Scheduler:
 #      self.condition.acquire()
 #      self.condition.wait()
 #      self.condition.release()
+      if len(OBJS) > 0 and num_output is None:
+        num_output = util.parse_file_name(list(OBJS)[0])["num_files"]
 
     print("Shutting down")
     for i in range(len(self.workers)):

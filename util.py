@@ -34,8 +34,8 @@ FILE_FORMAT = [{
   "type": "bool",
   "folder": False,
 }, {
-  "name": "last",
-  "type": "bool",
+  "name": "num_files",
+  "type": "int",
   "folder": False,
 }, {
   "name": "suffix",
@@ -207,8 +207,7 @@ def get_batch(bucket_name, key, prefix, params):
     batch_id = int((m["file_id"] - 1) / batch_size) if batch_size else None
     if batch_size is None or batch_id == expected_batch_id:
       batch.append([obj, m])
-      if m["last"]:
-        last = True
+      last = (m["num_files"] == m["file_id"])
 
   return [batch, last]
 
@@ -300,13 +299,13 @@ def current_last_file(batch, current_key, params):
 
 
 def have_all_files(batch, prefix, params):
-  num_files = params["batch_size"] if "batch_size" in params else None
-  for [obj, m] in batch:
-    if m["last"]:
-      if num_files is None:
-        num_files = m["file_id"]
-      else:
-        num_files = ((m["file_id"] - 1) % num_files) + 1
+  batch_id = int(batch[0][1]["file_id"] / params["batch_size"])
+  max_batch_id = int(batch[0][1]["num_files"] / params["batch_size"])
+
+  if batch_id < max_batch_id:
+    num_files = params["batch_size"]
+  else:
+    num_files = ((batch[0][1]["num_files"] - 1) % params["batch_size"]) + 1
 
   matching_keys = list(map(lambda b: b[0].key, batch))
   num_keys = len(matching_keys)

@@ -96,7 +96,7 @@ def process_iteration_params(params, iteration):
     "bin": 1,
     "file_id": 1,
     "suffix": "tide",
-    "last": True,
+    "num_files": 1,
     "ext": params["ext"]
   }
   if params["model"] == "ec2":

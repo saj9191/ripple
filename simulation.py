@@ -195,7 +195,7 @@ def deadline(params):
     "file_id": 1,
     "continue": False,
     "suffix": "tide",
-    "last": True,
+    "num_files": 1,
     "ext": deadline_params["ext"]
   }
   deadline_params["key"] = util.file_name(m)

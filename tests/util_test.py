@@ -38,7 +38,7 @@ class FileNameMethods(unittest.TestCase):
       "nonce": 42,
       "bin": 12,
       "file_id": 3,
-      "last": False,
+      "num_files": 4,
       "suffix": "hello",
       "ext": "txt"
     }
