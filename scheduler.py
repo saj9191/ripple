@@ -115,12 +115,8 @@ class Worker(threading.Thread):
           self.queue.put([item.job_id, log_file, item, item.priority])#time.time()])
         else:
           self.results.put(item)
-#          self.condition.acquire()
-#          self.condition.notify()
-#          self.condition.release()
       except queue.Empty:
         pass
-    print("Thread", self.worker_id, "Shutting down")
     return
 
 
@@ -189,7 +185,6 @@ class Parser(threading.Thread):
         except queue.Empty:
           pass
       time.sleep(random.randint(1, 10))
-    print("Parser", self.parser_id, "Shutting down")
     return
 
 
@@ -253,17 +248,11 @@ class Scheduler:
       except Exception:
         pass
       time.sleep(random.randint(1, 10))
-      print("Found ", len(OBJS), "objects")
-#      print("Actual", self.results.qsize(), "Expected", self.params["num_output"] * concurrency)
-#      self.condition.acquire()
-#      self.condition.wait()
-#      self.condition.release()
       if len(OBJS) > 0 and num_output is None:
         num_output = util.parse_file_name(list(OBJS)[0])["num_files"]
 
     print("Shutting down")
     for i in range(len(self.workers)):
-      print("Waiting for worker", i, len(self.workers))
       self.workers[i].running = False
 
     invokes = []
