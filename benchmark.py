@@ -414,7 +414,7 @@ def run(params, thread_id):
       with open("{0:s}/stats".format(dir_path), "w+") as f:
         f.write(json.dumps({"stats": stats, "failed": failed}, indent=4, sort_keys=True))
 
-    if params["model"] == "lambda":
+    if params["model"] == "lambda" and not util.is_set(params, "keep_logs"):
       clear_buckets(params)
     if os.path.isfile(FAILURE_FILE):
       os.remove(FAILURE_FILE)
