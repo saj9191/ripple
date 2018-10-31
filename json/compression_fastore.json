@@ -1,18 +1,18 @@
 {
-	"input_name": "SP1.fq", //change to desktop/local file
+	"input_name": "SP1.fq",
 	"sample_bucket": "maccoss-methyl-data",
 	"sample_input": false,
 	"model": "lambda",
 	"iterations": 10,
 	"region": "us-west-2",
-	"folder": "fastore-file-lambda", //change folder?
+	"folder": "fastore-file-lambda",
 	"num_output": 84,
 	"timeout": 300,
 	"tag": "dna-compression",
-	"bucket": "fastore", //make new bucket?
+	"bucket": "fastore",
 	"storage_class": "STANDARD",
 	"account": 999145429263,
-	"log": "fastore-log", //change log?
+	"log": "fastore-log",
 	"num_bins": 1,
 	"role": "service-role/lambdaFullAccessRole",
 	"stats": true,
@@ -21,7 +21,7 @@
 	"functions": {
 		"split-fastore": {
 			"file": "split_file",
-			"format": "new_line_fastore", //create on repo
+			"format": "new_line_fastore",
 			"chunk_size": 1000000,
 			"memory_size": 1024,
 			"adjust": true
