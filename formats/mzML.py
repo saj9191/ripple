@@ -13,11 +13,13 @@ def add(content, f):
 
 
 class Iterator(iterator.Iterator):
-  INDEX_LIST_OFFSET_REGEX = re.compile("[\s\S]*<indexListOffset>(\d+)</indexListOffset>")
+  INDEX_LIST_OFFSET_REGEX = re.compile("<indexListOffset>(\d+)</indexListOffset>")
   OFFSET_REGEX = re.compile("<offset[^>]*>(\d+)</offset>")
+  OFFSET_START = "<offset"
   SPECTRUM_LIST_COUNT_REGEX = re.compile('<spectrumList [\s\S]*count="(\d+)"')
   SPECTRUM_LIST_CLOSE_TAG = "</spectrumList>"
   INDEX_CHUNK_SIZE = 1000
+  SPECTRUM_OPEN_TAG = "<spectrum>"
   SPECTRUM_CLOSE_TAG = "</spectrum>"
   ID_REGEX = re.compile(".*scan=([0-9]+).*")
   XML_NAMESPACE = "http://psi.hupo.org/ms/mzml"
@@ -25,63 +27,94 @@ class Iterator(iterator.Iterator):
   def __init__(self, obj, chunk_size, offsets={}):
     iterator.Iterator.__init__(self, Iterator, obj, chunk_size)
     ET.register_namespace("", Iterator.XML_NAMESPACE)
-    self.footer_offset = 235
-    self.batch_size = int(chunk_size / 2500)
+    self.footer_offset = 300
+    self.batch_size = 100
     self.remainder = ""
+    self.__setup__(offsets)
+
+  def __setup__(self, offsets):
+    self.__set_metadata__(offsets)
+    self.__spectra_offsets__(offsets)
+    self.__set_offset_indices__()
+
+  def __set_metadata__(self, offsets):
     if "header" in offsets:
-      self.header_length = offsets["header"]["end"]
-      self.offsets = offsets["offsets"]
-      self.end_byte = self.offsets[-1]
-      self.offsets = self.offsets[:-1]
-      self.content_length = self.end_byte
-      self.current_offset = self.content_length
-      self.total_count = len(self.offsets)
+      self.header_start_index = offsets["header"]["start"]
+      self.header_end_index = offsets["header"]["end"]
+      self.footer_start_index = offsets["footer"]["start"]
+      self.footer_end_index = offsets["footer"]["end"]
+      self.total_count = offsets["count"]
     else:
-      self.start_byte = None
-      self.findOffsets()
+      end_byte = self.content_length
+      start_byte = end_byte - self.footer_offset
+      stream = util.read(self.obj, start_byte, end_byte)
+      m = self.INDEX_LIST_OFFSET_REGEX.search(stream)
+      assert(m is not None)
+      self.index_list_offset = int(m.group(1))
 
-  def findOffsets(self):
-    end_byte = self.content_length
-    start_byte = end_byte - self.footer_offset
-    stream = util.read(self.obj, start_byte, end_byte)
-    m = self.INDEX_LIST_OFFSET_REGEX.match(stream)
-    assert(m is not None)
-    self.spectra_list_offset = int(m.group(1))
-    self.header_length = self.spectra_list_offset
-    self.total_count = 0
+      self.header_start_index = 0
+      start_byte = self.index_list_offset - self.footer_offset
+      end_byte = self.index_list_offset + self.footer_offset
+      stream = util.read(self.obj, start_byte, end_byte)
+      offset_matches = list(self.OFFSET_REGEX.finditer(stream))
+      assert(len(offset_matches) > 0)
+      self.header_end_index = int(offset_matches[0].group(1)) - 1
+      self.footer_start_index = start_byte + stream.rindex(self.SPECTRUM_LIST_CLOSE_TAG)
+      self.footer_end_index = self.obj.content_length
 
-    start_byte = self.spectra_list_offset
-    end_byte = start_byte + self.INDEX_CHUNK_SIZE
-    stream = util.read(self.obj, start_byte, end_byte)
-    index = stream.find("<offset")
-    if index != -1:
-      self.spectra_list_offset += stream.find("<offset")
-    self.current_offset = self.spectra_list_offset
-
-    start_byte = self.spectra_list_offset - self.INDEX_CHUNK_SIZE
-    end_byte = self.spectra_list_offset
-    stream = util.read(self.obj, start_byte, end_byte)
-
-    index = stream.rfind(Iterator.SPECTRUM_CLOSE_TAG)
-    self.end_byte = start_byte + index + len(Iterator.SPECTRUM_CLOSE_TAG) - 1
-
-    self.updateOffsets()
-    if len(self.offsets) != 0:
-      end_byte = self.offsets[0]
-      self.header_length = end_byte - 1
-      stream = util.read(self.obj, 0, end_byte)
+      stream = util.read(self.obj, 0, self.header_end_index)
       m = self.SPECTRUM_LIST_COUNT_REGEX.search(stream)
       assert(m is not None)
       self.total_count = int(m.group(1))
+
+  def __spectra_offsets__(self, offsets):
+    if len(offsets) != 0 and len(offsets["offsets"]) != 0:
+      self.start_index = max(offsets["offsets"][0], self.header_end_index + 1)
+      self.end_index = min(offsets["offsets"][1], self.footer_start_index)
+      if self.start_index > (self.header_end_index + 1):
+        self.start_index -= self.__adjust__(self.start_index, self.SPECTRUM_OPEN_TAG)
+      if self.end_index < self.footer_start_index:
+        self.end_index -= self.__adjust__(self.end_index, self.SPECTRUM_CLOSE_TAG)
+        self.end_index += len(self.SPECTRUM_CLOSE_TAG) + 1
+    else:
+      self.start_index = self.header_end_index + 1
+      self.end_index = self.footer_start_index
+
+  def __set_offset_indices__(self):
+    self.offset_start_index = None
+    self.offset_end_index = None
+    start_byte = self.index_list_offset
+    end_byte = min(self.footer_end_index, start_byte + self.chunk_size)
+
+    while start_byte < self.footer_end_index:
+      stream = util.read(self.obj, start_byte, end_byte)
+      stream = self.remainder + stream
+      offset_matches = list(self.OFFSET_REGEX.finditer(stream))
+      for m in offset_matches:
+        offset = int(m.group(1))
+        if self.offset_start_index is None:
+          if self.offset_start_index is None and offset == self.start_index:
+            self.offset_start_index = start_byte + m.span(0)[0]
+        if offset <= self.end_index:
+          self.offset_end_index = start_byte + m.span(0)[1]
+
+      if len(offset_matches) > 0:
+        self.remainder = stream[offset_matches[-1].span()[1] + 1:]
+      else:
+        self.remainder = stream
+      start_byte = end_byte + 1
+      end_byte = min(self.footer_end_index, start_byte + self.chunk_size)
+
+    self.next_index = self.offset_start_index
 
   def getCount(self):
     return self.total_count
 
   def more(self):
-    return self.current_offset < self.content_length
+    return self.next_index < self.offset_end_index
 
   def nextOffsets(self):
-    if self.content_length == 0 or (len(self.offsets) == 0 and not self.more()):
+    if len(self.offsets) == 0 and not self.more():
       return ({"offsets": []}, False)
 
     # Plus one is so we get end byte of value
@@ -90,18 +123,18 @@ class Iterator(iterator.Iterator):
 
     offsets = self.offsets[:self.batch_size]
     self.offsets = self.offsets[self.batch_size:]
-
     if len(self.offsets) > 0:
-      end = min(self.offsets[0], self.spectra_list_offset)
+      end = min(self.offsets[0], self.end_index)
     else:
-      end = self.spectra_list_offset
+      end = self.end_index
     o = {"offsets": [offsets[0], end - 1]}
-    o["header"] = {"start": 0, "end": self.header_length}
+    o["header"] = {"start": self.header_start_index, "end": self.header_end_index}
+    o["footer"] = {"start": self.footer_start_index, "end": self.footer_end_index}
 
     return (o, len(self.offsets) > 0 or self.more())
 
   def updateOffsets(self):
-    start_byte = self.current_offset
+    start_byte = self.next_index
     end_byte = min(self.content_length, start_byte + self.chunk_size)
     stream = util.read(self.obj, start_byte, end_byte)
     stream = self.remainder + stream
@@ -113,7 +146,7 @@ class Iterator(iterator.Iterator):
       self.remainder = stream
     else:
       self.remainder = ""
-    self.current_offset = end_byte + 1
+    self.next_index = end_byte + 1
 
   def getIdentifier(spectrum, identifier):
     if identifier == "mass":

@@ -37,15 +37,15 @@ class Iterator:
           if not self.indicator_at_beginning:
             self.current_offset += len(self.identifier)
         if self.content_length != self.obj.content_length:
-          self.content_length -= self.offset(self.content_length)
+          self.content_length -= self.__adjust__(self.content_length, self.identifier)
           if self.indicator_at_beginning:
             self.content_length += len(self.identifier)
     self.offsets = [self.current_offset]
 
-  def offset(self, index):
-    content = util.read(self.obj, max(index - 100, 0), index)
+  def __adjust__(self, index, identifier):
+    content = util.read(self.obj, max(index - 300, 0), index)
     last_byte = len(content) - 1
-    offset = last_byte - content.rindex(self.identifier)
+    offset = last_byte - content.rindex(identifier)
     return offset
 
   # This is for the sort function
