@@ -37,6 +37,31 @@ class Iterator(iterator.Iterator):
     self.__spectra_offsets__(offsets)
     self.__set_offset_indices__()
 
+  def __get_index_list_offset__(self):
+    end_byte = self.content_length
+    start_byte = end_byte - self.footer_offset
+    stream = util.read(self.obj, start_byte, end_byte)
+    m = self.INDEX_LIST_OFFSET_REGEX.search(stream)
+    assert(m is not None)
+    self.index_list_offset = int(m.group(1))
+
+  def __get_header_footer_offset__(self):
+    self.header_start_index = 0
+    start_byte = self.index_list_offset - self.footer_offset
+    end_byte = self.index_list_offset + self.footer_offset
+    stream = util.read(self.obj, start_byte, end_byte)
+    offset_matches = list(self.OFFSET_REGEX.finditer(stream))
+    assert(len(offset_matches) > 0)
+    self.header_end_index = int(offset_matches[0].group(1)) - 1
+    self.footer_start_index = start_byte + stream.rindex(self.SPECTRUM_LIST_CLOSE_TAG)
+    self.footer_end_index = self.obj.content_length
+
+  def __get_total_count__(self):
+    stream = util.read(self.obj, 0, self.header_end_index)
+    m = self.SPECTRUM_LIST_COUNT_REGEX.search(stream)
+    assert(m is not None)
+    self.total_count = int(m.group(1))
+
   def __set_metadata__(self, offsets):
     if "header" in offsets:
       self.header_start_index = offsets["header"]["start"]
@@ -45,27 +70,9 @@ class Iterator(iterator.Iterator):
       self.footer_end_index = offsets["footer"]["end"]
       self.total_count = offsets["count"]
     else:
-      end_byte = self.content_length
-      start_byte = end_byte - self.footer_offset
-      stream = util.read(self.obj, start_byte, end_byte)
-      m = self.INDEX_LIST_OFFSET_REGEX.search(stream)
-      assert(m is not None)
-      self.index_list_offset = int(m.group(1))
-
-      self.header_start_index = 0
-      start_byte = self.index_list_offset - self.footer_offset
-      end_byte = self.index_list_offset + self.footer_offset
-      stream = util.read(self.obj, start_byte, end_byte)
-      offset_matches = list(self.OFFSET_REGEX.finditer(stream))
-      assert(len(offset_matches) > 0)
-      self.header_end_index = int(offset_matches[0].group(1)) - 1
-      self.footer_start_index = start_byte + stream.rindex(self.SPECTRUM_LIST_CLOSE_TAG)
-      self.footer_end_index = self.obj.content_length
-
-      stream = util.read(self.obj, 0, self.header_end_index)
-      m = self.SPECTRUM_LIST_COUNT_REGEX.search(stream)
-      assert(m is not None)
-      self.total_count = int(m.group(1))
+      self.__get_index_list_offset__()
+      self.__get_header_footer_offset__()
+      self.__get_total_count__()
 
   def __spectra_offsets__(self, offsets):
     if len(offsets) != 0 and len(offsets["offsets"]) != 0:
