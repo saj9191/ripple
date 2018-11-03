@@ -69,20 +69,20 @@ class Iterator(iterator.Iterator):
 
   def __spectra_offsets__(self, offsets):
     if len(offsets) != 0 and len(offsets["offsets"]) != 0:
-      self.start_index = max(offsets["offsets"][0], self.header_end_index + 1)
-      self.end_index = min(offsets["offsets"][1], self.footer_start_index)
-      if self.start_index > (self.header_end_index + 1):
-        self.start_index -= self.__adjust__(self.start_index, self.SPECTRUM_OPEN_TAG)
-      if self.end_index < self.footer_start_index:
-        self.end_index -= self.__adjust__(self.end_index, self.SPECTRUM_CLOSE_TAG)
-        self.end_index += len(self.SPECTRUM_CLOSE_TAG) + 1
+      self.spectra_start_index = max(offsets["offsets"][0], self.header_end_index + 1)
+      self.spectra_end_index = min(offsets["offsets"][1], self.footer_start_index)
+      if self.spectra_start_index > (self.header_end_index + 1):
+        self.spectra_start_index -= self.__adjust__(self.spectra_start_index, self.SPECTRUM_OPEN_TAG)
+      if self.spectra_end_index < self.footer_start_index:
+        self.spectra_end_index -= self.__adjust__(self.spectra_end_index, self.SPECTRUM_CLOSE_TAG)
+        self.spectra_end_index += len(self.SPECTRUM_CLOSE_TAG) + 1
     else:
-      self.start_index = self.header_end_index + 1
-      self.end_index = self.footer_start_index
+      self.spectra_start_index = self.header_end_index + 1
+      self.spectra_end_index = self.footer_start_index
 
   def __set_offset_indices__(self):
-    self.offset_start_index = None
-    self.offset_end_index = None
+    self.start_index = None
+    self.end_index = None
     start_byte = self.index_list_offset
     end_byte = min(self.footer_end_index, start_byte + self.chunk_size)
 
@@ -92,11 +92,11 @@ class Iterator(iterator.Iterator):
       offset_matches = list(self.OFFSET_REGEX.finditer(stream))
       for m in offset_matches:
         offset = int(m.group(1))
-        if self.offset_start_index is None:
-          if self.offset_start_index is None and offset == self.start_index:
-            self.offset_start_index = start_byte + m.span(0)[0]
-        if offset <= self.end_index:
-          self.offset_end_index = start_byte + m.span(0)[1]
+        if self.start_index is None:
+          if self.start_index is None and offset == self.spectra_start_index:
+            self.start_index = start_byte + m.span(0)[0]
+        if offset <= self.spectra_end_index:
+          self.end_index = start_byte + m.span(0)[1]
 
       if len(offset_matches) > 0:
         self.remainder = stream[offset_matches[-1].span()[1] + 1:]
@@ -105,13 +105,13 @@ class Iterator(iterator.Iterator):
       start_byte = end_byte + 1
       end_byte = min(self.footer_end_index, start_byte + self.chunk_size)
 
-    self.next_index = self.offset_start_index
+    self.next_index = self.start_index
 
   def getCount(self):
     return self.total_count
 
   def more(self):
-    return self.next_index < self.offset_end_index
+    return self.next_index < self.end_index
 
   def nextOffsets(self):
     if len(self.offsets) == 0 and not self.more():
@@ -124,9 +124,9 @@ class Iterator(iterator.Iterator):
     offsets = self.offsets[:self.batch_size]
     self.offsets = self.offsets[self.batch_size:]
     if len(self.offsets) > 0:
-      end = min(self.offsets[0], self.end_index)
+      end = min(self.offsets[0], self.spectra_end_index)
     else:
-      end = self.end_index
+      end = self.spectra_end_index
     o = {"offsets": [offsets[0], end - 1]}
     o["header"] = {"start": self.header_start_index, "end": self.header_end_index}
     o["footer"] = {"start": self.footer_start_index, "end": self.footer_end_index}
