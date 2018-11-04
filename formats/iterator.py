@@ -33,7 +33,7 @@ class Iterator:
       if util.is_set(offsets, "adjust"):
         if self.current_offset != 0:
           # Don't include identifier
-          self.current_offset -= self.offset(self.current_offset)
+          self.current_offset -= self.__adjust__(self.current_offset, self.identifier)
           if not self.indicator_at_beginning:
             self.current_offset += len(self.identifier)
         if self.content_length != self.obj.content_length:
