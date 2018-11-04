@@ -18,6 +18,7 @@ class Iterator(iterator.Iterator):
   OFFSET_START = "<offset"
   SPECTRUM_LIST_COUNT_REGEX = re.compile('<spectrumList [\s\S]*count="(\d+)"')
   SPECTRUM_LIST_CLOSE_TAG = "</spectrumList>"
+  CONTENT_CLOSE_TAG = "</mzML>"
   INDEX_CHUNK_SIZE = 1000
   SPECTRUM_OPEN_TAG = "<spectrum>"
   SPECTRUM_CLOSE_TAG = "</spectrum>"
@@ -27,7 +28,7 @@ class Iterator(iterator.Iterator):
   def __init__(self, obj, chunk_size, offsets={}):
     iterator.Iterator.__init__(self, Iterator, obj, chunk_size)
     ET.register_namespace("", Iterator.XML_NAMESPACE)
-    self.footer_offset = 300
+    self.footer_offset = 1000
     self.batch_size = 100
     self.remainder = ""
     self.__setup__(offsets)
@@ -47,13 +48,13 @@ class Iterator(iterator.Iterator):
 
   def __get_header_footer_offset__(self):
     self.header_start_index = 0
-    start_byte = self.index_list_offset - self.footer_offset
-    end_byte = self.index_list_offset + self.footer_offset
+    start_byte = max(0, self.index_list_offset - self.footer_offset)
+    end_byte = min(self.index_list_offset + self.footer_offset, self.obj.content_length)
     stream = util.read(self.obj, start_byte, end_byte)
     offset_matches = list(self.OFFSET_REGEX.finditer(stream))
     assert(len(offset_matches) > 0)
     self.header_end_index = int(offset_matches[0].group(1)) - 1
-    self.footer_start_index = start_byte + stream.rindex(self.SPECTRUM_LIST_CLOSE_TAG)
+    self.footer_start_index = start_byte + stream.rindex(self.CONTENT_CLOSE_TAG)
     self.footer_end_index = self.obj.content_length
 
   def __get_total_count__(self):
