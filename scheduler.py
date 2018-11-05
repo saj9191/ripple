@@ -107,12 +107,13 @@ class Worker(threading.Thread):
           name = pipeline[prefix]["name"]
           s = payload["Records"][0]["s3"]
           input_key = s["object"]["key"]
+          input_format = util.parse_file_name(input_key)
           rparams = {**self.params, **s}
           rparams["prefix"] = prefix
           rparams["scheduler"] = True
-          [input_format, output_format, bucket_format] = util.get_formats(input_key, functions[name]["file"], rparams)
+          [output_format, bucket_format] = util.get_formats(input_format, functions[name]["file"], rparams)
           log_file = util.file_name(bucket_format)
-          self.queue.put([item.job_id, log_file, item, item.priority])#time.time()])
+          self.queue.put([item.job_id, log_file, item, item.priority])
         else:
           self.results.put(item)
       except queue.Empty:
