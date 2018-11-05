@@ -59,8 +59,8 @@ class ObjectsMethods(unittest.TestCase):
 
 class ExecutionMethods(unittest.TestCase):
   def test_run(self):
-    event = tutils.create_event("bucket1", "0/123.4-13/1/1-1-0-suffix.txt")
-    context = tutils.create_context(params, [bucket1, log])
+    event = tutils.create_event("bucket1", "0/123.4-13/1/1-1-0-suffix.txt", [bucket1, log], params)
+    context = tutils.create_context(params)
 
     # Call on object that doesn't have a log entry
     func = MagicMock()

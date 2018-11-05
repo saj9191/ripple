@@ -78,15 +78,15 @@ class SplitFunction(unittest.TestCase):
       self.assertDictEqual(expected_invokes[i], actual_invokes[i])
 
   def test_basic(self):
-    event = tutils.create_event(bucket1.name, object1.key)
-    context = tutils.create_context(params, [bucket1, log])
+    event = tutils.create_event(bucket1.name, object1.key, [bucket1, log], params)
+    context = tutils.create_context(params)
     split_file.handler(event, context)
 
     invoke1 = get_invoke("an-output-function", bucket1.name, object1.key, prefix=1, offsets=[0, 19], file_id=1, num_files=2)
     invoke2 = get_invoke("an-output-function", bucket1.name, object1.key, prefix=1, offsets=[20, 35], file_id=2, num_files=2)
 
     expected_invokes = [invoke1, invoke2]
-    self.check_payload_equality(expected_invokes, context["client"].invokes)
+    self.check_payload_equality(expected_invokes, event["client"].invokes)
 
 
 if __name__ == "__main__":

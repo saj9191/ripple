@@ -100,8 +100,13 @@ class Client:
     }
 
 
-def create_event(bucket_name, key):
+def create_event(bucket_name, key, buckets, params):
+  load = lambda: params
   return {
+    "test": True,
+    "client": Client(),
+    "load_func": load,
+    "s3": S3(buckets),
     "Records": [{
       "s3": {
         "bucket": {
@@ -115,11 +120,5 @@ def create_event(bucket_name, key):
   }
 
 
-def create_context(params, buckets):
-  load = lambda: params
-  return {
-    "test": True,
-    "client": Client(),
-    "load_func": load,
-    "s3": S3(buckets),
-  }
+def create_context(params):
+  return {}

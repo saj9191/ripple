@@ -225,7 +225,7 @@ def combine_instance(bucket_name, key, params={}):
   return [done and current_last_file(batch, key, params), keys, last]
 
 
-def load_parameters(s3_dict, key_fields, start_time, execute, context):
+def load_parameters(s3_dict, key_fields, start_time, event):
   # For cases where the lambda is triggered by a split / map function
   # wee need to look at the parameters for the prefix value. Otherwise
   # we just use the key prefix.
@@ -234,10 +234,10 @@ def load_parameters(s3_dict, key_fields, start_time, execute, context):
   else:
     prefix = key_fields["prefix"]
 
-  if is_set(context, "test"):
-    params = context["load_func"]()
-    s3 = context["s3"]
-    client = context["client"]
+  if is_set(event, "test"):
+    params = event["load_func"]()
+    s3 = event["s3"]
+    client = event["client"]
   else:
     params = json.loads(open("{0:d}.json".format(prefix)).read())
     s3 = boto3.resource("s3")
@@ -255,7 +255,7 @@ def load_parameters(s3_dict, key_fields, start_time, execute, context):
 
   params["start_time"] = start_time
   params["payloads"] = []
-  params["execute"] = execute
+  params["execute"] = is_set(event, "execute")
 
   return params
 
@@ -267,12 +267,12 @@ def handle(event, context, func):
   key = s3_dict["object"]["key"]
   input_format = parse_file_name(key)
 
-  params = load_parameters(s3_dict, input_format, start_time, is_set(event, "execute"), context)
+  params = load_parameters(s3_dict, input_format, start_time, event)
 
   if run_function(params, input_format):
     [output_format, bucket_format] = get_formats(input_format, params)
     if not duplicate_execution(bucket_format, params):
-      if not is_set(context, "test"):
+      if not is_set(event, "test"):
         clear_tmp(params)
       func(bucket_name, key, input_format, output_format, params["offsets"], params)
 
