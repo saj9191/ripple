@@ -23,11 +23,11 @@ output_format = dict(input_format)
 output_format["prefix"] = 1
 
 params = {
-  "ranges": False,
-  "format": "new_line",
-  "output_function": "an-output-function",
   "file": "split_file",
+  "format": "new_line",
   "log": "log",
+  "output_function": "an-output-function",
+  "ranges": False,
   "split_size": 20,
 }
 

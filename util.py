@@ -150,7 +150,6 @@ def write(m, bucket, key, body, params):
   done = False
   while not done:
     try:
-      params["write_count"] += 1
       st = time.time()
       s3.Object(bucket, key).put(Body=body, StorageClass=params["storage_class"])
       et = time.time()
@@ -441,8 +440,8 @@ def print_action(m, key, action, params):
   if is_set(params, "test"):
     return
 
-  msg = "{8:f} - TIMESTAMP {0:f} NONCE {1:d} STEP {2:d} BIN {3:d} {4:s} TOKEN {5:d} FILE NAME {6:s}"
-  msg = msg.format(m["timestamp"], m["nonce"], params["prefix"], m["bin"], action, params["token"], key, time.time())
+  msg = "{6:f} - TIMESTAMP {0:f} NONCE {1:d} STEP {2:d} BIN {3:d} {4:s} FILE NAME {5:s}"
+  msg = msg.format(m["timestamp"], m["nonce"], params["prefix"], m["bin"], action, key, time.time())
   print(msg)
   msg += "\n"
   with open(LOG_NAME, "a+") as f:

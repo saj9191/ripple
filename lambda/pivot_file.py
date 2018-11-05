@@ -38,6 +38,4 @@ def handle_pivots(bucket_name, key, input_format, output_format, offsets, params
 
 
 def handler(event, context):
-  [bucket_name, key, params] = util.lambda_setup(event, context)
-  m = util.run(bucket_name, key, params, handle_pivots)
-  util.show_duration(context, m, params)
+  util.handle(event, context, handle_pivots)
