@@ -98,3 +98,28 @@ class Client:
         "HTTPStatusCode": 202
       }
     }
+
+
+def create_event(bucket_name, key):
+  return {
+    "Records": [{
+      "s3": {
+        "bucket": {
+          "name": bucket_name,
+        },
+        "object": {
+          "key": key,
+        }
+      }
+    }]
+  }
+
+
+def create_context(params, buckets):
+  load = lambda: params
+  return {
+    "test": True,
+    "client": Client(),
+    "load_func": load,
+    "s3": S3(buckets),
+  }

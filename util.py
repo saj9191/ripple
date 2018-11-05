@@ -30,7 +30,7 @@ FILE_FORMAT = [{
   "type": "int",
   "folder": False,
 }, {
-  "name": "continue",
+  "name": "execute",
   "type": "bool",
   "folder": False,
 }, {
@@ -110,24 +110,15 @@ def download(bucket, file):
 
 
 def get_objects(bucket_name, prefix=None, params={}):
-  global LIST_COUNT
-  global LIST_TIME
-  LIST_COUNT += 1
-  if "s3" in params and params["s3"]:
-    s3 = params["s3"]
-  else:
-    s3 = boto3.resource("s3")
+  s3 = params["s3"]
   bucket = s3.Bucket(bucket_name)
   found = False
   while not found:
     try:
-      st = time.time()
       if prefix is None:
         objects = bucket.objects.all()
       else:
         objects = bucket.objects.filter(Prefix=prefix)
-      et = time.time()
-      LIST_TIME += (et - st)
       objects = list(objects)
       found = True
     except Exception as e:
@@ -235,59 +226,87 @@ def combine_instance(bucket_name, key, params={}):
   return [done and current_last_file(batch, key, params), keys, last]
 
 
-def get_formats(key, file, params):
+def load_parameters(s3_dict, key_fields, start_time, execute, context):
+  # For cases where the lambda is triggered by a split / map function
+  # wee need to look at the parameters for the prefix value. Otherwise
+  # we just use the key prefix.
+  if "extra_params" in s3_dict and "prefix" in s3_dict["extra_params"]:
+    prefix = s3_dict["extra_params"]["prefix"]
+  else:
+    prefix = key_fields["prefix"]
+
+  if is_set(context, "test"):
+    params = context["load_func"]()
+    s3 = context["s3"]
+    client = context["client"]
+  else:
+    params = json.loads(open("{0:d}.json".format(prefix)).read())
+    s3 = boto3.resource("s3")
+    client = boto3.client("lambda")
+
+  params["offsets"] = {}
+  params["prefix"] = prefix
+  params["s3"] = s3
+  params["client"] = client
+
+  if "extra_params" in s3_dict:
+    params = {**params, **s3_dict["extra_params"]}
+    for key in s3_dict["extra_params"].keys():
+      params[key] = s3_dict["extra_params"][key]
+
+  params["start_time"] = start_time
+  params["payloads"] = []
+  params["execute"] = execute
+
+  return params
+
+
+def handle(event, context, func):
+  start_time = time.time()
+  s3_dict = event["Records"][0]["s3"]
+  bucket_name = s3_dict["bucket"]["name"]
+  key = s3_dict["object"]["key"]
   input_format = parse_file_name(key)
+
+  params = load_parameters(s3_dict, input_format, start_time, is_set(event, "execute"), context)
+
+  if run_function(params, input_format):
+    [output_format, bucket_format] = get_formats(input_format, params)
+    if not duplicate_execution(bucket_format, params):
+      if not is_set(context, "test"):
+        clear_tmp(params)
+      func(bucket_name, key, input_format, output_format, params["offsets"], params)
+
+
+def get_formats(input_format, params):
   output_format = dict(input_format)
   output_format["prefix"] = params["prefix"] + 1
-  if "id" in params:
-    output_format["file_id"] = params["id"]
 
-  if "more" in params["object"]:
-    output_format["file_id"] = params["object"]["file_id"]
-    output_format["last"] = not params["object"]["more"]
+  if "object" in params and "num_files" in params["object"]:
+    for key in ["file_id", "num_files"]:
+      output_format[key] = params["object"][key]
 
-  if file in ["combine_files", "split_file"]:
+  if params["file"] in ["combine_files", "split_file"]:
     bucket_format = dict(input_format)
   else:
     bucket_format = dict(output_format)
+
   bucket_format["ext"] = "log"
-  bucket_format["prefix"] = params["prefix"] + 1
-  if False:
-    bucket_format["suffix"] = "{0:f}".format(time.time())
-  return [input_format, output_format, bucket_format]
+  bucket_format["prefix"] = output_format["prefix"]
+  return [output_format, bucket_format]
 
 
-def run(bucket_name, key, params, func):
-  m = parse_file_name(key)
-  if not is_set(params, "continue") and (params["start_time"] - m["timestamp"] > 30) and not is_set(m, "continue"):
-    return None
+def run_function(params, m):
+  # The execute variable is for priority scheduling simulation.
+  # We set it to false if we want to simulate the Lambda function
+  # not executing due to a higher priority job.
+  return is_set(params, "execute") or is_set(m, "execute")
 
-  clear_tmp(params)
-  with open("/tmp/warm", "w+") as f:
-    f.write("warm")
 
-  if "id" in params:
-    params["file_id"] = params["id"]
-
-  if "offsets" in params:
-    offsets = params["offsets"]
-  else:
-    offsets = {}
-
-  [input_format, output_format, bucket_format] = get_formats(key, params["file"], params)
-  if is_set(params, "continue"):
-    output_format["continue"] = True
-  params["input_format"] = input_format
-  params["output_format"] = output_format
-  params["bucket_format"] = bucket_format
-  make_folder(input_format)
-  make_folder(output_format)
+def duplicate_execution(bucket_format, params):
   prefix = "-".join(file_name(bucket_format).split("-")[:-1])
   objects = get_objects(params["log"], prefix, params)
-  if is_set(params, "scheduler") or len(objects) == 0:
-    func(bucket_name, key, input_format, output_format, offsets, params)
-
-  return output_format
+  return len(objects) != 0
 
 
 def current_last_file(batch, current_key, params):
@@ -342,7 +361,6 @@ def lambda_setup(event, context):
   params["write_count"] = 0
   params["prefix"] = prefix
   params["token"] = random.randint(1, 100*1000*1000)
-  params["request_id"] = context.aws_request_id
   params["key_fields"] = key_fields
   if is_set(event, "continue"):
     params["continue"] = True
@@ -372,8 +390,8 @@ def show_duration(context, m, p):
   msg = msg.format(m["prefix"], p["token"], READ_COUNT, WRITE_COUNT, LIST_COUNT, READ_BYTE_COUNT)
   print(msg)
   duration = p["timeout"] * 1000 - context.get_remaining_time_in_millis()
-  msg = "{8:f} - TIMESTAMP {0:f} NONCE {1:d} STEP {2:d} BIN {3:d} FILE {4:d} REQUEST ID {5:s} TOKEN {6:d} DURATION {7:d}"
-  msg = msg.format(m["timestamp"], m["nonce"], p["prefix"], m["bin"], m["file_id"], p["request_id"], p["token"], duration, time.time())
+  msg = "{8:f} - TIMESTAMP {0:f} NONCE {1:d} STEP {2:d} BIN {3:d} FILE {4:d} TOKEN {5:d} DURATION {6:d}"
+  msg = msg.format(m["timestamp"], m["nonce"], p["prefix"], m["bin"], m["file_id"], p["token"], duration, time.time())
   print(msg)
 
   log_results = {
@@ -400,8 +418,8 @@ def print_request(m, params):
   if is_set(params, "test"):
     return
 
-  msg = "{7:f} - TIMESTAMP {0:f} NONCE {1:d} STEP {2:d} BIN {3:d} FILE {4:d} REQUEST ID {5:s} TOKEN {6:d}"
-  msg = msg.format(m["timestamp"], m["nonce"], params["prefix"], m["bin"], m["file_id"], params["request_id"], params["token"], time.time())
+  msg = "{7:f} - TIMESTAMP {0:f} NONCE {1:d} STEP {2:d} BIN {3:d} FILE {4:d} TOKEN {5:d}"
+  msg = msg.format(m["timestamp"], m["nonce"], params["prefix"], m["bin"], m["file_id"], params["token"], time.time())
   if "parent_token" in params:
     msg += " INVOKED BY TOKEN {0:d}".format(params["parent_token"])
   print(msg)
@@ -423,8 +441,8 @@ def print_action(m, key, action, params):
   if is_set(params, "test"):
     return
 
-  msg = "{8:f} - TIMESTAMP {0:f} NONCE {1:d} STEP {2:d} BIN {3:d} {4:s} REQUEST ID {5:s} TOKEN {6:d} FILE NAME {7:s}"
-  msg = msg.format(m["timestamp"], m["nonce"], params["prefix"], m["bin"], action, params["request_id"], params["token"], key, time.time())
+  msg = "{8:f} - TIMESTAMP {0:f} NONCE {1:d} STEP {2:d} BIN {3:d} {4:s} TOKEN {5:d} FILE NAME {6:s}"
+  msg = msg.format(m["timestamp"], m["nonce"], params["prefix"], m["bin"], action, params["token"], key, time.time())
   print(msg)
   msg += "\n"
   with open(LOG_NAME, "a+") as f:
@@ -510,8 +528,8 @@ def make_folder(file_format):
 
 
 def file_name(m):
-  if "continue" not in m:
-    m["continue"] = True
+  if "execute" not in m:
+    m["execute"] = True
   return file_format(m)
 
 
@@ -547,5 +565,3 @@ def get_key_regex(m):
 def clear_tmp(params={}):
   if not is_set(params, "test"):
     subprocess.call("rm -rf /tmp/*", shell=True)
-
-

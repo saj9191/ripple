@@ -3,7 +3,7 @@ import pivot
 import util
 
 
-def create_payload(bucket, key, offsets, token, prefix, file_id=None, num_files=None):
+def create_payload(bucket, key, offsets, prefix, file_id=None, num_files=None):
   payload = {
     "Records": [{
       "s3": {
@@ -15,7 +15,6 @@ def create_payload(bucket, key, offsets, token, prefix, file_id=None, num_files=
         },
         "offsets": offsets,
         "extra_params": {
-          "token": token,
           "prefix": prefix
         }
       }
@@ -46,35 +45,22 @@ def split_file(bucket_name, key, input_format, output_format, offsets, params):
   file_id = params["file_id"] if "file_id" in params else 1
 
   num_files = int((obj.content_length + split_size - 1) / split_size)
+
   while file_id <= num_files:
     offsets = {
       "offsets": [(file_id - 1) * split_size, min(obj.content_length, (file_id) * split_size) - 1]
     }
 
-    payload = create_payload(input_bucket, input_key, offsets, params["token"], output_format["prefix"], file_id, num_files)
+    payload = create_payload(input_bucket, input_key, offsets, output_format["prefix"], file_id, num_files)
 
     s3_params = payload["Records"][0]["s3"]
 
     if util.is_set(params, "ranges"):
       s3_params["extra_params"]["pivots"] = ranges
 
-    if params["context"].get_remaining_time_in_millis() < 20*1000:
-      s3_params["extra_params"]["prefix"] = input_format["prefix"]
-      s3_params["object"]["key"] = key
-      s3_params["extra_params"]["file_id"] = file_id
-      s3_params["extra_params"]["id"] = file_id
-      params["bucket_format"]["num_files"] = num_files
-
-      util.invoke(client, params["name"], params, payload)
-      return
-    else:
-      util.invoke(client, params["output_function"], params, payload)
+    util.invoke(client, params["output_function"], params, payload)
     file_id += 1
 
 
 def handler(event, context):
-  [bucket_name, key, params] = util.lambda_setup(event, context)
-  params["context"] = context
-  m = util.run(bucket_name, key, params, split_file)
-  del params["context"]
-  util.show_duration(context, m, params)
+  util.handle(event, context, split_file)

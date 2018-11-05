@@ -2,9 +2,9 @@ import inspect
 import json
 import os
 import sys
-import time
 import unittest
-from tutils import S3, Bucket, Object, Context, Client
+import tutils
+from tutils import Bucket, Object
 
 currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
 parentdir = os.path.dirname(currentdir)
@@ -23,24 +23,16 @@ output_format = dict(input_format)
 output_format["prefix"] = 1
 
 params = {
-  "test": True,
-  "s3": S3([bucket1, log]),
   "ranges": False,
-  "batch_size": 3,
-  "chunk_size": 20,
-  "token": 45,
   "format": "new_line",
   "output_function": "an-output-function",
-  "bucket_format": dict(input_format),
   "file": "split_file",
   "log": "log",
   "split_size": 20,
-  "payloads": [],
-  "start_time": time.time(),
 }
 
 
-def get_payload(bucket_name, key, token, prefix, offsets=None):
+def get_payload(bucket_name, key, prefix, offsets=None):
   payload = {
     "Records": [{
       "s3": {
@@ -51,7 +43,6 @@ def get_payload(bucket_name, key, token, prefix, offsets=None):
           "key": key,
         },
         "extra_params": {
-          "token": token,
           "prefix": prefix,
         },
       }
@@ -65,8 +56,8 @@ def get_payload(bucket_name, key, token, prefix, offsets=None):
   return payload
 
 
-def get_invoke(name, bucket_name, key, token, prefix, offsets, file_id, num_files, bin=None):
-  payload = get_payload(bucket_name, key, token, prefix, offsets)
+def get_invoke(name, bucket_name, key, prefix, offsets, file_id, num_files, bin=None):
+  payload = get_payload(bucket_name, key, prefix, offsets)
   if bin is None:
     payload["Records"][0]["s3"]["object"]["file_id"] = file_id
     payload["Records"][0]["s3"]["object"]["num_files"] = num_files
@@ -87,69 +78,15 @@ class SplitFunction(unittest.TestCase):
       self.assertDictEqual(expected_invokes[i], actual_invokes[i])
 
   def test_basic(self):
-    p = dict(params)
-    p["client"] = Client()
-    p["context"] = Context(50*1000)
-    client = p["client"]
+    event = tutils.create_event(bucket1.name, object1.key)
+    context = tutils.create_context(params, [bucket1, log])
+    split_file.handler(event, context)
 
-    split_file.split_file(bucket1.name, object1.key, input_format, output_format, {}, p)
-    self.assertEqual(len(client.invokes), 2)
-
-    invoke1 = get_invoke("an-output-function", bucket1.name, object1.key, token=45, prefix=1, offsets=[0, 19], file_id=1, num_files=2)
-    invoke2 = get_invoke("an-output-function", bucket1.name, object1.key, token=45, prefix=1, offsets=[20, 35], file_id=2, num_files=2)
+    invoke1 = get_invoke("an-output-function", bucket1.name, object1.key, prefix=1, offsets=[0, 19], file_id=1, num_files=2)
+    invoke2 = get_invoke("an-output-function", bucket1.name, object1.key, prefix=1, offsets=[20, 35], file_id=2, num_files=2)
 
     expected_invokes = [invoke1, invoke2]
-    self.check_payload_equality(expected_invokes, client.invokes)
-
-  def test_next_invoke_trigger(self):
-    p = dict(params)
-    p["client"] = Client()
-    p["context"] = Context(1000)
-    p["name"] = "split-file"
-    client = p["client"]
-
-    input_format = util.parse_file_name(object1.key)
-    output_format = dict(input_format)
-    output_format["prefix"] = 1
-    split_file.split_file(bucket1.name, object1.key, input_format, output_format, {}, p)
-    self.assertEqual(len(client.invokes), 1)
-
-    payload = get_payload(bucket1.name, object1.key, token=45, prefix=0, offsets=[0,19])
-    payload["Records"][0]["s3"]["object"]["file_id"] = 1
-    payload["Records"][0]["s3"]["object"]["num_files"] = 2
-    payload["Records"][0]["s3"]["extra_params"]["file_id"] = 1
-    payload["Records"][0]["s3"]["extra_params"]["id"] = 1
-
-    invoke = {
-      "name": "split-file",
-      "type": "Event",
-      "payload": json.JSONEncoder().encode(payload),
-    }
-
-    expected_invokes = [invoke]
-    self.check_payload_equality(expected_invokes, client.invokes)
-
-  def test_next_invoke(self):
-    p = dict(params)
-    p["client"] = Client()
-    p["context"] = Context(50 * 1000)
-    client = p["client"]
-    p["prefix"] = 0
-    p["id"] = 2
-    p["object"] = { "num_files": 2, "file_id": 2 }
-
-    util.run(bucket1.name, object1.key,  p, split_file.split_file)
-    payload = get_payload(bucket1.name, object1.key, token=45, prefix=1, offsets=[20, 35])
-    payload["Records"][0]["s3"]["object"]["file_id"] = 2
-    payload["Records"][0]["s3"]["object"]["num_files"] = 2
-    invoke = {
-      "name": "an-output-function",
-      "type": "Event",
-      "payload": json.JSONEncoder().encode(payload),
-    }
-
-    expected_invokes = [invoke]
-    self.check_payload_equality(expected_invokes, client.invokes)
+    self.check_payload_equality(expected_invokes, context["client"].invokes)
 
 
 if __name__ == "__main__":

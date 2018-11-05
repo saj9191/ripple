@@ -2,10 +2,9 @@ import inspect
 import os
 import sys
 import unittest
-import time
 import tutils
 from unittest.mock import MagicMock
-from tutils import S3, Bucket, Object
+from tutils import S3, Bucket, Client, Object
 
 currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
 parentdir = os.path.dirname(currentdir)
@@ -16,16 +15,15 @@ object1 = Object("0/123.400000-13/1/1-1-0-suffix.txt")
 object2 = Object("1/123.400000-13/1/1-1-0-suffix.txt")
 object3 = Object("0/123.400000-13/1/2-1-1-suffix.txt")
 object4 = Object("1/123.400000-13/1/2-1-1-suffix.txt")
-object5 = Object("0/123.400000-13/1/3-1-1-suffix.txt")
-object6 = Object("1/123.400000-13/1/3-1-1-suffix.txt")
+object5 = Object("0/123.400000-13/1/3-1-1-suffix.log")
+object6 = Object("1/123.400000-13/1/3-1-1-suffix.log")
 bucket1 = Bucket("bucket1", [object1, object2, object3, object4])
 bucket2 = Bucket("bucket2", [object5, object6])
 log = Bucket("log", [object5, object6])
 s3 = S3([bucket1, bucket2, log])
 params = {
+  "file": "application",
   "log": "log",
-  "s3": s3,
-  "start_time": time.time(),
   "test": True,
 }
 
@@ -38,6 +36,7 @@ class FileNameMethods(unittest.TestCase):
       "nonce": 42,
       "bin": 12,
       "file_id": 3,
+      "execute": False,
       "num_files": 4,
       "suffix": "hello",
       "ext": "txt"
@@ -48,6 +47,7 @@ class FileNameMethods(unittest.TestCase):
 
 class ObjectsMethods(unittest.TestCase):
   def test_get_objects(self):
+    params["s3"] = S3([bucket1, log])
     objects = util.get_objects("bucket1", prefix=None, params=params)
     self.assertEqual(len(objects), 4)
     self.assertTrue(tutils.equal_lists(objects, [object1, object2, object3, object4]))
@@ -59,21 +59,19 @@ class ObjectsMethods(unittest.TestCase):
 
 class ExecutionMethods(unittest.TestCase):
   def test_run(self):
-    params["prefix"] = 0
-    params["request_id"] = "987abc"
-    params["token"] = 1357
-    params["object"] = {}
-    params["file"] = "test_function"
-    params["s3"] = s3
+    event = tutils.create_event("bucket1", "0/123.4-13/1/1-1-0-suffix.txt")
+    context = tutils.create_context(params, [bucket1, log])
 
     # Call on object that doesn't have a log entry
     func = MagicMock()
-    util.run("bucket1", "0/123.4-13/1/1-1-0-suffix.txt", params, func)
+    util.handle(event, context, func)
     self.assertTrue(func.called)
 
     # Call on object that does have a log entry
     func = MagicMock()
-    util.run("bucket2", "0/123.4-13/1/3-1-1-suffix.txt", params, func)
+    event["Records"][0]["s3"]["bucket"]["name"] = "bucket2"
+    event["Records"][0]["s3"]["object"]["key"] = "0/123.4-13/1/3-1-1-suffix.txt"
+    util.handle(event, context, func)
     self.assertFalse(func.called)
 
 
