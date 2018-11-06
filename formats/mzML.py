@@ -80,9 +80,9 @@ class Iterator(iterator.Iterator):
       self.spectra_start_index = max(offsets["offsets"][0], self.header_end_index + 1)
       self.spectra_end_index = min(offsets["offsets"][1], self.footer_start_index)
       if self.spectra_start_index > (self.header_end_index + 1):
-        self.spectra_start_index -= self.__adjust__(self.spectra_start_index, self.SPECTRUM_OPEN_TAG)
+        self.spectra_start_index -= self.__adjust__(self.spectra_start_index, self.SPECTRUM_OPEN_TAG, self.chunk_size)
       if self.spectra_end_index < self.footer_start_index:
-        self.spectra_end_index -= self.__adjust__(self.spectra_end_index, self.SPECTRUM_CLOSE_TAG)
+        self.spectra_end_index -= self.__adjust__(self.spectra_end_index, self.SPECTRUM_CLOSE_TAG, self.chunk_size)
         self.spectra_end_index += len(self.SPECTRUM_CLOSE_TAG) + 1
     else:
       self.spectra_start_index = self.header_end_index + 1

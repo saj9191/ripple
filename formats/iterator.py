@@ -42,8 +42,8 @@ class Iterator:
             self.content_length += len(self.identifier)
     self.offsets = [self.current_offset]
 
-  def __adjust__(self, index, identifier):
-    content = util.read(self.obj, max(index - 300, 0), index)
+  def __adjust__(self, index, identifier, chunk_size=300):
+    content = util.read(self.obj, max(index - chunk_size, 0), index)
     last_byte = len(content) - 1
     offset = last_byte - content.rindex(identifier)
     return offset
