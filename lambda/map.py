@@ -1,5 +1,4 @@
 import boto3
-import json
 import pivot
 import util
 
@@ -11,14 +10,14 @@ def map_file(bucket_name, key, input_format, output_format, offsets, params):
   if util.is_set(params, "ranges"):
     [bucket_name, key, ranges] = pivot.get_pivot_ranges(bucket_name, key)
     prefix = util.key_prefix(key)
-    objects = util.get_objects(bucket_name, prefix=prefix)
+    objects = util.get_objects(bucket_name, prefix=prefix, params=params)
     objects = list(set(map(lambda o: o.key, objects)))
   else:
     if "map_bucket_key_prefix" in params:
-      objects = util.get_objects(params["map_bucket"], prefix=prefix)
+      objects = util.get_objects(params["map_bucket"], prefix=prefix, params=params)
       objects = list(set(map(lambda o: o.key, objects)))
     else:
-      objects = util.get_objects(params["map_bucket"])
+      objects = util.get_objects(params["map_bucket"], params=params)
       if params["directories"]:
         objects = list(filter(lambda o: "/" in o.key, objects))
         objects = list(set(map(lambda o: o.key.split("/")[0], objects)))
@@ -26,8 +25,9 @@ def map_file(bucket_name, key, input_format, output_format, offsets, params):
         objects = list(set(map(lambda o: o.key, objects)))
 
   file_id = 0
-
-  for i in range(len(objects)):
+  num_files = len(objects)
+  objects.sort()
+  for i in range(num_files):
     obj = objects[i]
     file_id += 1
     target_file = obj
@@ -39,14 +39,13 @@ def map_file(bucket_name, key, input_format, output_format, offsets, params):
             "name": bucket_name,
           },
           "object": {
-            "file_id": file_id,
-            "more": (i + 1) != len(objects)
           },
           "extra_params": {
-            "token": params["token"],
             "target_bucket": params["map_bucket"],
             "target_file": target_file,
             "prefix": output_format["prefix"],
+            "file_id": file_id,
+            "num_files": num_files,
           }
         }
       }]
@@ -69,6 +68,4 @@ def map_file(bucket_name, key, input_format, output_format, offsets, params):
 
 
 def handler(event, context):
-  [bucket_name, key, params] = util.lambda_setup(event, context)
-  m = util.run(bucket_name, key, params, map_file)
-  util.show_duration(context, m, params)
+  util.handle(event, context, map_file)

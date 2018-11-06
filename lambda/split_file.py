@@ -13,17 +13,17 @@ def create_payload(bucket, key, offsets, prefix, file_id=None, num_files=None):
         "object": {
           "key": key,
         },
-        "offsets": offsets,
         "extra_params": {
-          "prefix": prefix
+          "prefix": prefix,
+          "offsets": offsets,
         }
       }
     }]
   }
   if file_id is not None:
-    payload["Records"][0]["s3"]["object"]["file_id"] = file_id
+    payload["Records"][0]["s3"]["extra_params"]["file_id"] = file_id
   if num_files is not None:
-    payload["Records"][0]["s3"]["object"]["num_files"] = num_files
+    payload["Records"][0]["s3"]["extra_params"]["num_files"] = num_files
 
   return payload
 

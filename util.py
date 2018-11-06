@@ -281,9 +281,9 @@ def get_formats(input_format, params):
   output_format = dict(input_format)
   output_format["prefix"] = params["prefix"] + 1
 
-  if "object" in params and "num_files" in params["object"]:
-    for key in ["file_id", "num_files"]:
-      output_format[key] = params["object"][key]
+  for key in ["file_id", "num_files"]:
+    if key in params:
+      output_format[key] = params[key]
 
   if params["file"] in ["combine_files", "split_file"]:
     bucket_format = dict(input_format)
