@@ -274,6 +274,7 @@ def handle(event, context, func):
     if not duplicate_execution(bucket_format, params):
       if not is_set(event, "test"):
         clear_tmp(params)
+      make_folder(output_format)
       func(bucket_name, key, input_format, output_format, params["offsets"], params)
 
 
@@ -317,13 +318,20 @@ def current_last_file(batch, current_key, params):
 
 
 def have_all_files(batch, prefix, params):
-  batch_id = int(batch[0][1]["file_id"] / params["batch_size"])
-  max_batch_id = int(batch[0][1]["num_files"] / params["batch_size"])
+  if "batch_size" in params:
+    batch_id = int(batch[0][1]["file_id"] / params["batch_size"])
+    max_batch_id = int(batch[0][1]["num_files"] / params["batch_size"])
+  else:
+    batch_id = 1
+    max_batch_id = 1
 
   if batch_id < max_batch_id:
     num_files = params["batch_size"]
   else:
-    num_files = ((batch[0][1]["num_files"] - 1) % params["batch_size"]) + 1
+    if "batch_size" in params:
+      num_files = ((batch[0][1]["num_files"] - 1) % params["batch_size"]) + 1
+    else:
+      num_files = batch[0][1]["num_files"]
 
   matching_keys = list(map(lambda b: b[0].key, batch))
   num_keys = len(matching_keys)
