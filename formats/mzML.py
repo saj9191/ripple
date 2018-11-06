@@ -201,6 +201,11 @@ class Iterator(iterator.Iterator):
     content = content.replace(original, replacement)
     return content
 
+  def format_offsets(self, offsets):
+    offsets["header"] = {"start": self.header_start_index, "end": self.header_end_index}
+    offsets["footer"] = {"start": self.footer_start_index, "end": self.footer_end_index}
+    return offsets
+
   def fromArray(obj, spectra, offsets, f=None):
     content = add(Iterator.header(obj, offsets["header"]["start"], offsets["header"]["end"], len(spectra)), f)
     offset = len(content)

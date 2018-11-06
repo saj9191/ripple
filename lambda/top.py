@@ -1,4 +1,3 @@
-import boto3
 import heapq
 import importlib
 import util
@@ -14,13 +13,12 @@ class Element:
 
 
 def find_top(bucket_name, key, input_format, output_format, offsets, params):
-  s3 = boto3.resource("s3")
+  s3 = params["s3"]
   obj = s3.Object(bucket_name, key)
-  if len(offsets) == 0:
-    util.print_read(input_format, key, params)
   format_lib = importlib.import_module(params["format"])
   iterator = getattr(format_lib, "Iterator")
-  it = iterator(obj, offsets, params["chunk_size"])
+  it = iterator(obj, params["chunk_size"], offsets)
+  offsets = it.format_offsets(offsets)
 
   top = []
   more = True
@@ -41,6 +39,4 @@ def find_top(bucket_name, key, input_format, output_format, offsets, params):
 
 
 def handler(event, context):
-  [bucket_name, key, params] = util.lambda_setup(event, context)
-  m = util.run(bucket_name, key, params, find_top)
-  util.show_duration(context, m, params)
+  util.handle(event, context, find_top)
