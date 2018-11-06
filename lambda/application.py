@@ -35,6 +35,4 @@ def run_application(bucket_name, key, input_format, output_format, offsets, para
 
 
 def handler(event, context):
-  [bucket_name, key, params] = util.lambda_setup(event, context)
-  m = util.run(bucket_name, key, params, run_application)
-  util.show_duration(context, m, params)
+  util.handle(event, context, run_application)
