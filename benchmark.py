@@ -375,6 +375,12 @@ def create_dependency_chain(stats, iterations, params):
 
 
 def run(params, thread_id):
+  if not os.path.isdir("results"):
+    os.mkdir("results")
+  if not os.path.isdir("results/{0:s}".format(params["folder"])):
+    os.mkdir("results/{0:s}".format(params["folder"]))
+
+
   if False: # os.path.isfile(FAILURE_FILE):
     params = json.loads(open(FAILURE_FILE).read())
     params["upload"] = False
