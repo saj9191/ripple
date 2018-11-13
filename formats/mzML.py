@@ -212,16 +212,15 @@ class Iterator(iterator.Iterator):
     offsets = []
 
     count = 0
-    for j in range(2):
-      for i in range(len(spectra)):
-        xml = spectra[i]
-        xml.set("index", str(count))
-        m = Iterator.ID_REGEX.match(xml.get("id"))
-        offsets.append((m.group(1), offset))
-        spectrum = ET.tostring(xml).decode()
-        offset += len(spectrum)
-        content += add(spectrum, f)
-        count += 1
+    for i in range(len(spectra)):
+      xml = spectra[i]
+      xml.set("index", str(count))
+      m = Iterator.ID_REGEX.match(xml.get("id"))
+      offsets.append((m.group(1), offset))
+      spectrum = ET.tostring(xml).decode()
+      offset += len(spectrum)
+      content += add(spectrum, f)
+      count += 1
 
     content += add("</spectrumList></run></mzML>\n", f)
     list_offset = len(content)
