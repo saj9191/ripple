@@ -32,7 +32,7 @@ params = {
 }
 
 
-def get_payload(bucket_name, key, prefix, offsets=None):
+def get_payload(bucket_name, key, prefix, file_id, num_files, offsets=None):
   payload = {
     "Records": [{
       "s3": {
@@ -44,23 +44,22 @@ def get_payload(bucket_name, key, prefix, offsets=None):
         },
         "extra_params": {
           "prefix": prefix,
+          "file_id": file_id,
+          "num_files": num_files,
         },
       }
     }]
   }
 
   if offsets is not None:
-    payload["Records"][0]["s3"]["offsets"] = {
+    payload["Records"][0]["s3"]["extra_params"]["offsets"] = {
       "offsets": offsets
     }
   return payload
 
 
-def get_invoke(name, bucket_name, key, prefix, offsets, file_id, num_files, bin=None):
-  payload = get_payload(bucket_name, key, prefix, offsets)
-  if bin is None:
-    payload["Records"][0]["s3"]["object"]["file_id"] = file_id
-    payload["Records"][0]["s3"]["object"]["num_files"] = num_files
+def get_invoke(name, bucket_name, key, prefix, offsets, file_id, num_files):
+  payload = get_payload(bucket_name, key, prefix, file_id, num_files, offsets)
 
   return {
     "name": name,
