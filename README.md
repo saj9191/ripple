@@ -84,6 +84,18 @@ The bin ID specifies which bin the file is in. The bins are mostly in place for 
 Each file in a bin is given a number between 1 and the number of files in the bin.
 The `last` value indicates whether this is the maximum file ID associated with the bin. This is useful for combining files in bins.
 
+## Scripts
+To setup a pipeline on Lambda, run:
+python3 setup.py --parameters <path-to-json-file>
+
+This creates the Lambda functions specified in the JSON file and sets up the necessary S3 triggers.
+
+
+To upload a file to a Lambda pipeline, run:
+python3 upload.py --destination_bucket_name <bucket-used-for-application> --key <name-of-file-to-upload> [--source_bucket_name <s3-bucket-input-file-is-located-in>
+
+A user can either upload a file from their computer or from S3. To update a file from your local computer, in this repos root directory, create a data folder and place the file in the data folder. If the file is already in S3, specify the S3 bucket the input file is located in.
+
 ## Functions
 ### Application
 The application function allows a user to execute arbitrary code on the input file
