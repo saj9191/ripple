@@ -3,12 +3,12 @@ import boto3
 import json
 import os
 import paramiko
-import random
 import re
 import scheduler
 import setup
 import subprocess
 import time
+import upload
 import util
 
 MASS = re.compile("Z\s+([0-9\.]+)\s+([0-9\.]+)")
@@ -69,6 +69,8 @@ def process_params(params):
   _, ext = os.path.splitext(params["input_name"])
   params["ext"] = ext[1:]
   params["input"] = params["input_name"]
+  if not util.is_set(params, "sample_input"):
+    params["sample_bucket"] = None
   params["input_bucket"] = params["bucket"]
   params["output_bucket"] = params["bucket"]
   for i in range(len(params["pipeline"])):
@@ -77,35 +79,6 @@ def process_params(params):
         params["pipeline"][i][p] = params[p]
         params["pipeline"][i][p] = params[p]
         params["pipeline"][i][p] = params[p]
-
-
-def process_iteration_params(params, iteration):
-  now = time.time()
-  if params["model"] == "lambda" and util.is_set(params, "trigger"):
-    input_format = util.parse_file_name(params["input_name"])
-    params["now"] = input_format["timestamp"]
-    params["nonce"] = input_format["nonce"]
-  else:
-    params["now"] = now
-    params["nonce"] = random.randint(1, 1000)
-
-  m = {
-    "prefix": "0",
-    "timestamp": params["now"],
-    "nonce": params["nonce"],
-    "bin": 1,
-    "file_id": 1,
-    "suffix": "tide",
-    "num_files": 1,
-    "ext": params["ext"]
-  }
-  if params["model"] == "ec2":
-    params["key"] = params["input_name"]
-  else:
-    if params["model"] == "ec2":
-      params["key"] = params["input_name"]
-    else:
-      params["key"] = util.file_name(m)
 
 
 def upload_input(p, thread_id=0):
@@ -403,8 +376,6 @@ def run(params, thread_id):
   iterations = params["iterations"]
 
   for i in range(iterations):
-    if params["upload"]:
-      process_iteration_params(params, i)
     if params["stats"]:
       [stats, upload_duration, duration, failed] = benchmark(i, params, thread_id)
     else:
@@ -558,7 +529,8 @@ def parse_logs(params, upload_timestamp, upload_duration, total_duration):
 def lambda_benchmark(params, thread_id):
   start_time = time.time()
   if params["upload"]:
-    [upload_timestamp, upload_duration] = upload_input(params, thread_id)
+    s3_key, upload_timestamp, upload_duration =  upload.upload(params["bucket"], params["input_name"], params["sample_bucket"])
+    params["key"] = s3_key
     params["upload_timestamp"] = upload_timestamp
     params["upload_duration"] = upload_duration
   else:
