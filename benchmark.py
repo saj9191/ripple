@@ -415,8 +415,9 @@ def clear_buckets(params):
   num_steps = len(params["pipeline"]) + 1
   bucket = s3.Bucket(params["bucket"])
   log_bucket = s3.Bucket(params["log"]) if "log" in params else None
+  token = params["key"].split("/")[1]
   for i in range(num_steps):
-    prefix = "{0:d}/{1:f}-{2:d}/".format(i, params["now"], params["nonce"])
+    prefix = "{0:d}/{1:s}/".format(i, token)
     done = False
     while not done:
       try:
