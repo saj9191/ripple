@@ -33,33 +33,6 @@ class BenchmarkException(Exception):
   pass
 
 
-def check_output(params):
-  s3 = setup_connection("s3", params)
-
-  prefix = "tide-search-{0:f}-{1:d}".format(params["now"], params["nonce"])
-  bucket_name = params["pipeline"][-2]["output_bucket"]
-  print("Checking output from bucket", bucket_name)
-  bucket = s3.Bucket(bucket_name)
-  for obj in bucket.objects.all():
-    if obj.key.startswith(prefix):
-      content = obj.get()["Body"].read().decode("utf-8")
-      num_lines = len(content.split("\n"))
-      print("key", obj.key, "num_lines", num_lines, flush=True)
-
-  bucket_name = params["pipeline"][-1]["output_bucket"]
-  bucket = s3.Bucket(bucket_name)
-  for obj in bucket.objects.all():
-    token = "{0:f}-{1:d}".format(params["now"], params["nonce"])
-    if token in obj.key and "target" in obj.key:
-      content = obj.get()["Body"].read().decode("utf-8")
-
-      lines = content.split("\n")[1:]
-      lines = list(filter(lambda line: len(line.strip()) > 0, lines))
-      qvalues = list(map(lambda line: float(line.split("\t")[7]), lines))
-      count = len(list(filter(lambda qvalue: qvalue <= CHECKS["qvalue"], qvalues)))
-      print("key", obj.key, "qvalues", count, flush=True)
-
-
 def print_run_information():
   git_output = subprocess.check_output("git log --oneline | head -n 1", shell=True).decode("utf-8").strip()
   print("Current Git commit", git_output, "\n", flush=True)
@@ -104,22 +77,6 @@ def upload_input(p, thread_id=0):
         print("ERROR: upload_input", e)
   else:
     print("Uploading {0:s} to s3://{1:s}".format(p["input"], bucket_name), flush=True)
-    # p["input"] = "compressed"
-    # p["now"] = 1537812841.362679
-    # p["nonce"] = 254
-    # key = p["key"]
-  #  for i in range(38):
-  #    for r in ["outfileChrom", "outfileName"]:
-  #      z = 0 if i < 37 else 1
-  #      c = "data/compressed/{0:d}-{2:d}-{1:s}.bed".format(i+1, r, z)
-  #      k = key[:key.rindex("/")] + "/{0:d}-{2:d}-{1:s}.bed".format(i+1, r, z)
-  #      s3.Object(bucket_name, k).put(Body=open(c, 'rb'), StorageClass=p["storage_class"])
-
-#    for i in range(38):
-#      z = 0 if i < 37 else 1
-#      c = "data/compressed/{0:d}-{1:d}-outfileArInt.bed".format(i+1, z)
-#      k = key[:key.rindex("/")] + "/{0:d}-{1:d}-outfileArInt.bed".format(i+1, z)
-#      s3.Object(bucket_name, k).put(Body=open(c, 'rb'), StorageClass=p["storage_class"])
     s3.Object(bucket_name, key).put(Body=open("data/{0:s}".format(p["input"]), 'rb'), StorageClass=p["storage_class"])
   end = time.time()
 
