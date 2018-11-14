@@ -176,11 +176,16 @@ class Iterator(iterator.Iterator):
     return Iterator.cvParam(spectrum, "total ion current")
 
   def get(obj, start_byte, end_byte, identifier):
-    content = util.read(obj, start_byte, end_byte)
+    content = util.read(obj, start_byte, end_byte).strip()
     index = content.rfind(Iterator.SPECTRUM_LIST_CLOSE_TAG)
     if index != -1:
       content = content[:index]
+      content = content.strip()
 
+
+    # TODO: Look into this more
+    if not content.endswith(Iterator.SPECTRUM_CLOSE_TAG):
+      return []
     root = ET.fromstring("<data>" + content.strip() + "</data>")
     spectra = root.iter("spectrum")
 
