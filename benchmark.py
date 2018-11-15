@@ -1,5 +1,6 @@
 import argparse
 import boto3
+import clear
 import json
 import os
 import paramiko
@@ -56,7 +57,7 @@ def process_params(params):
 
 def upload_input(p, thread_id=0):
   bucket_name = p["input_bucket"]
-  s3 = setup_connection("s3", p)
+  s3 = util.setup_connection("s3", p)
   key = p["key"]
 
   start = time.time()
@@ -401,32 +402,11 @@ def print_stats(stats):
   print("Total Memory Used", stats["memory_used"], "MB", flush=True)
 
 
-def setup_connection(service, params):
-  session = boto3.Session(
-    aws_access_key_id=params["access_key"],
-    aws_secret_access_key=params["secret_key"],
-    region_name=params["region"]
-  )
-  return session.resource(service)
-
-
 def clear_buckets(params):
-  s3 = setup_connection("s3", params)
-  num_steps = len(params["pipeline"]) + 1
-  bucket = s3.Bucket(params["bucket"])
-  log_bucket = s3.Bucket(params["log"]) if "log" in params else None
   token = params["key"].split("/")[1]
-  for i in range(num_steps):
-    prefix = "{0:d}/{1:s}/".format(i, token)
-    done = False
-    while not done:
-      try:
-        bucket.objects.filter(Prefix=prefix).delete()
-        if log_bucket:
-          log_bucket.objects.filter(Prefix=prefix).delete()
-        done = True
-      except Exception as e:
-        pass
+  clear.clear(params["bucket"], token=token)
+  clear.clear(params["log"], token=token)
+
 
 #############################
 #         LAMBDA            #
@@ -532,7 +512,7 @@ def calculate_results(duration, cost):
 
 def create_instance(params):
   print("Creating instance")
-  ec2 = setup_connection("ec2", params)
+  ec2 = util.setup_connection("ec2", params)
   ami = params["ec2"]["default_ami"]
   if params["model"] == "ec2" and params["ec2"]["use_ami"]:
     ami = params["ec2"]["ami"]
