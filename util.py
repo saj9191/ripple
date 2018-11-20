@@ -277,6 +277,8 @@ def handle(event, context, func):
       make_folder(output_format)
       func(bucket_name, key, input_format, output_format, params["offsets"], params)
 
+    show_duration(context, input_format, bucket_format, params)
+
 
 def get_formats(input_format, params):
   output_format = dict(input_format)
@@ -385,27 +387,18 @@ def lambda_setup(event, context):
   return [bucket_name, key, params]
 
 
-def show_duration(context, m, p):
-  if m is None:
-    return
-
-  global READ_COUNT
+def show_duration(context, input_format, bucket_format, params):
+  global READ_COUNT, WRITE_COUNT
   READ_COUNT += 1
-  p["write_count"] += 1
+  WRITE_COUNT += 1
 
-  msg = "STEP {0:d} TOKEN {1:d} READ COUNT {2:d} WRITE COUNT {3:d} LIST COUNT {4:d} READ BYTE COUNT {5:d}\n"
-  msg = msg.format(m["prefix"], p["token"], READ_COUNT, WRITE_COUNT, LIST_COUNT, READ_BYTE_COUNT)
-  print(msg)
-  duration = p["timeout"] * 1000 - context.get_remaining_time_in_millis()
-  msg = "{8:f} - TIMESTAMP {0:f} NONCE {1:d} STEP {2:d} BIN {3:d} FILE {4:d} TOKEN {5:d} DURATION {6:d}"
-  msg = msg.format(m["timestamp"], m["nonce"], p["prefix"], m["bin"], m["file_id"], p["token"], duration, time.time())
-  print(msg)
+  duration = params["timeout"] * 1000 - context.get_remaining_time_in_millis()
 
   log_results = {
-    "payloads": p["payloads"],
-    "start_time": p["start_time"],
+    "payloads": params["payloads"],
+    "start_time": params["start_time"],
     "read_count": READ_COUNT,
-    "write_count": p["write_count"],
+    "write_count": WRITE_COUNT,
     "list_count": LIST_COUNT,
     "write_byte_count": WRITE_BYTE_COUNT,
     "read_byte_count": READ_BYTE_COUNT,
@@ -415,10 +408,10 @@ def show_duration(context, m, p):
     "upload_time": UPLOAD_TIME,
     "found": FOUND,
   }
-  log_results = {**p, **m, **log_results}
 
-  s3 = boto3.resource("s3")
-  s3.Object(p["log"], file_name(p["bucket_format"])).put(Body=str.encode(json.dumps(log_results)))
+  for key in ["name"]:
+    log_results[key] = params[key]
+  params["s3"].Object(params["log"], file_name(bucket_format)).put(Body=str.encode(json.dumps(log_results)))
 
 
 def print_request(m, params):

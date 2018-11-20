@@ -60,7 +60,7 @@ class Object:
     return {"Body": Content(self.content[start:end + 1])}
 
   def put(self, Body="", StorageClass=""):
-    if type(Body) == str:
+    if type(Body) == str or type(Body) == bytes:
       self.content = Body
     else:
       self.content = Body.read().decode("utf-8")
@@ -101,7 +101,9 @@ class Client:
 
 
 def create_event(bucket_name, key, buckets, params):
-  load = lambda: params
+  def load():
+    return params
+
   return {
     "test": True,
     "client": Client(),
@@ -121,4 +123,4 @@ def create_event(bucket_name, key, buckets, params):
 
 
 def create_context(params):
-  return {}
+  return Context(params["timeout"])

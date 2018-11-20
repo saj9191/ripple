@@ -4,7 +4,7 @@ import sys
 import unittest
 import tutils
 from unittest.mock import MagicMock
-from tutils import S3, Bucket, Client, Object
+from tutils import S3, Bucket, Object
 
 currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
 parentdir = os.path.dirname(currentdir)
@@ -24,7 +24,9 @@ s3 = S3([bucket1, bucket2, log])
 params = {
   "file": "application",
   "log": "log",
+  "name": "util",
   "test": True,
+  "timeout": 60,
 }
 
 

@@ -3,12 +3,10 @@ import os
 import sys
 import unittest
 import tutils
-from tutils import Bucket, Object, Context
+from tutils import Bucket, Object
 
 currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
 parentdir = os.path.dirname(currentdir)
-sys.path.insert(0, parentdir)
-import util
 sys.path.insert(0, parentdir + "/lambda")
 import combine_files
 sys.path.insert(0, parentdir + "/formats")
@@ -36,9 +34,11 @@ params = {
   "file": "combine_file",
   "format": "new_line",
   "log": "log",
+  "name": "combine",
   "ranges": False,
   "sort": False,
   "storage_class": "test",
+  "timeout": 60,
 }
 
 

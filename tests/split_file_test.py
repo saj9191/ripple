@@ -26,9 +26,11 @@ params = {
   "file": "split_file",
   "format": "new_line",
   "log": "log",
+  "name": "split",
   "output_function": "an-output-function",
   "ranges": False,
   "split_size": 20,
+  "timeout": 60,
 }
 
 
