@@ -160,13 +160,13 @@ class Iterator:
     end_byte = min(start_byte + self.chunk_size, self.content_length)
     stream = util.read(self.obj, start_byte, end_byte)
     stream = self.remainder + stream
-    start_byte -= len(self.remainder)
     if end_byte == self.content_length:
       self.offsets.append(self.content_length - 1)
       self.current_offset = self.content_length
     else:
       index = stream.rindex(self.identifier) if self.identifier in stream else -1
       if index != -1:
+        start_byte -= len(self.remainder)
         offset = start_byte + index
         if self.indicator_at_beginning:
           offset -= 1
@@ -179,6 +179,7 @@ class Iterator:
 
         stream = stream[index:]
       else:
+        start_byte = end_byte + 1
         self.current_offset = start_byte
     self.remainder = stream
 

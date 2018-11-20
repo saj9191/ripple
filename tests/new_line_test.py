@@ -101,6 +101,23 @@ class IteratorMethods(unittest.TestCase):
     self.assertFalse(more)
     self.assertEqual(o, ["A B C", "a b c", "1 2 3", ""])
 
+  def test_overflow(self):
+    obj = Object("test.new_line", "A B C D E F G H\na b c d e f g h\n1 2 3 4 5 6 7 8 9\n")
+
+    # Requires multiple passes
+    it = new_line.Iterator(obj, 10)
+    [o, more] = it.next()
+    self.assertTrue(more)
+    self.assertEqual(o, ["A B C D E F G H", ""])
+
+    [o, more] = it.next()
+    self.assertTrue(more)
+    self.assertEqual(o, ["a b c d e f g h", ""])
+                         #", "1 2 3", ""])
+    [o, more] = it.next()
+    self.assertFalse(more)
+    self.assertEqual(o, ["1 2 3 4 5 6 7 8 9", ""])
+
   def test_combine(self):
     object1 = Object("test1.new_line", "A B C\na b c\n1 2 3\n")
     object2 = Object("test2.new_line", "D E F\nd e f\n4 5 6\n")
