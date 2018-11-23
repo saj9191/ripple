@@ -13,6 +13,7 @@ jupyter
 *.ropeproject
 json/private*
 json/ec2*
+scripts/crux-output*
 scripts/*.index
 scripts/*.csv
 scripts/*.mzML

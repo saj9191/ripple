@@ -1,4 +1,6 @@
+import argparse
 import boto3
+import math
 import matplotlib
 import os
 import shutil
@@ -59,30 +61,23 @@ def scores(file_name, scan_index, score_index):
   return scores
 
 
-def bin_spectra(spectra, percolator_scores, confidence_scores, bin_size):
+def bin_spectra(spectra, percolator_scores, confidence_scores):
   percolator_bins = {}
   confidence_bins = {}
 
   def increment(bins, bin_id, scores, scan_id):
     if bin_id not in bins:
-      bins[bin_id] = 0
-    if scan_id in scores and scores[scan_id][0] <= 0.01:
-      bins[bin_id] += 1
+      bins[bin_id] = [0, 0]
 
-  max_intensity = spectra[0][1]
-  # print("max intensity", max_intensity)
+    bins[bin_id][1] += 1
+
+    if scan_id in scores and scores[scan_id][0] <= 0.01:
+      bins[bin_id][0] += 1
+
+#  max_intensity = spectra[0][1]
   for i in range(len(spectra)):
     [scan_id, intensity] = spectra[i]
-    bin_id = int((float(intensity) / max_intensity) * 100)
-    # print("id", scan_id, "intensity", intensity, "max", max_intensity, "bin", bin_id)
-    # if scan_id not in percolator_scores:
-    #   print("percolator confidence", "N/A")
-    # else:
-    #   print("percolator confidence", percolator_scores[scan_id][0])
-    # if scan_id not in confidence_scores:
-    #   print("confidence confidence", "N/A")
-    # else:
-    #   print("confidence confidence", confidence_scores[scan_id][0])
+    bin_id = math.exp(int(math.log(intensity)))
     increment(percolator_bins, bin_id, percolator_scores, scan_id)
     increment(confidence_bins, bin_id, confidence_scores, scan_id)
 
@@ -90,27 +85,34 @@ def bin_spectra(spectra, percolator_scores, confidence_scores, bin_size):
   return [percolator_bins, confidence_bins]
 
 
-def graph(percolator_bins, confidence_bins):
-  py = []
-  cy = []
-  fig = plt.figure()
-  ax = fig.add_subplot(1, 1, 1)
+def graph(file_name, spectra, percolator_bins, percolator_percentages):
+  bin_y = []
+  total_y = []
+  percentage_y = []
+  fig, ax1 = plt.subplots()
   bins = list(percolator_bins.keys())
   bins.sort()
-#  num_bins = len(percolator_bins)
-  for i in bins: #range(num_bins - 1, -1, -1):
-    py.append(percolator_bins[i])
-    if i in confidence_bins:
-      cy.append(confidence_bins[i])
-    else:
-      cy.append(0)
+  for i in bins:
+    bin_y.append(percolator_bins[i][0])
+    total_y.append(percolator_bins[i][1])
+  ax1.plot(bins, bin_y, "r--")
+  ax1.plot(bins, total_y, "g-")
+  ax1.set_xscale("log")
 
-  print("bins", bins)
-  print("py", py)
-  print("cy", cy)
-  ax.plot(bins, py, "r--", bins, cy, "bs")
-  ax.set_yscale("log")
-  fig.legend(["Percolator", "Confidence"], loc="upper left")
+  ax2 = ax1.twinx()
+  percentages = list(percolator_percentages.keys())
+  percentages.sort()
+  for i in bins:
+    percentage_y.append(percolator_percentages[i])
+
+  ax2.plot(percentages, percentage_y, "bs")
+  ax2.set_xscale("log")
+  fig.legend(["Match Count", "Total Count", "Percentage"], loc="upper left")
+
+  for v in [500, 1000]:
+    plt.axvline(x=spectra[v][1])
+
+  plt.title(file_name)
   fig.savefig("results.png")
   plt.close()
 
@@ -160,17 +162,40 @@ def print_sets():
   print_peptides(phosphorylation)
 
 
-def graph_intensities():
-  file_name = "TN_CSF_062617_03.mzML"
-  prefix = "normalHuman"
-  bucket = "ALS_CSF_Biomarker_Study-1530309740015"
+def calculate_percentages(bins):
+  percentages = {}
+  total = 0
+  for bin_id in bins:
+    total += bins[bin_id][1]
+    percentages[bin_id] = (float(bins[bin_id][0]) / bins[bin_id][1]) * 100
+  print("Total", total)
+  return percentages
+
+
+def graph_intensities(folder, file_name, fasta):
+  generate(folder, file_name, fasta)
   spectra = spectra_intensities(file_name)
-  print(spectra[:100])
-#  generate(bucket, file_name, prefix)
-  percolator_scores = scores("crux-output-{0:s}/percolator.target.psms.txt".format(prefix), 1, 7)
-  confidence_scores = scores("crux-output-{0:s}/assign-confidence.target.txt".format(prefix), 1, 9)
-  [percolator_bins, confidence_bins] = bin_spectra(spectra, percolator_scores, confidence_scores, 1000)
-  graph(percolator_bins, confidence_bins)
+  percolator_scores = scores("crux-output-{0:s}/percolator.target.psms.txt".format(fasta), 1, 7)
+  confidence_scores = scores("crux-output-{0:s}/assign-confidence.target.txt".format(fasta), 1, 9)
+  [percolator_bins, confidence_bins] = bin_spectra(spectra, percolator_scores, confidence_scores)
+  percolator_percentages = calculate_percentages(percolator_bins)
+#  confidence_percentages = calculate_percentages(confidence_bins)
+#  print("percolator", percolator_percentages)
+#  print("")
+#  print("confidence", confidence_percentages)
+#  print("")
+#  graph(percolator_bins, confidence_bins)
+  graph(file_name, spectra, percolator_bins, percolator_percentages)
 
 
-graph_intensities()
+def main():
+  parser = argparse.ArgumentParser()
+  parser.add_argument("--folder", type=str, required=True, help="Name of folder file resides in")
+  parser.add_argument("--file", type=str, required=True, help="Name of file to analyze")
+  parser.add_argument("--fasta", type=str, required=True, help="FASTA index to use")
+  args = parser.parse_args()
+  graph_intensities(args.folder, args.file, args.fasta)
+
+
+if __name__ == "__main__":
+  main()
