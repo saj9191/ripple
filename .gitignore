@@ -13,3 +13,6 @@ jupyter
 *.ropeproject
 json/private*
 json/ec2*
+scripts/*.index
+scripts/*.csv
+scripts/*.mzML
