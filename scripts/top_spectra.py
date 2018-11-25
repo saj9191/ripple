@@ -1,14 +1,21 @@
 import argparse
 import boto3
+import clear
+import inspect
 import math
 import matplotlib
 import os
 import shutil
 import subprocess
+import time
 import xml.etree.ElementTree as ET
 ET.register_namespace("", "http://psi.hupo.org/ms/mzml")
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+
+currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
+parentdir = os.path.dirname(currentdir)
+import upload
 
 
 def cv_param(spectrum, name):
@@ -188,13 +195,64 @@ def graph_intensities(folder, file_name, fasta):
   graph(file_name, spectra, percolator_bins, percolator_percentages)
 
 
+
+def setup(folder, top):
+  confidence_folder = "confidence_scores"
+  if not os.path.isdir(confidence_folder):
+    os.mkdir(confidence_folder)
+
+  top_folder = confidence_folder + "/" + str(top)
+  if not os.path.isdir(top_folder):
+    os.mkdir(top_folder)
+
+  subset_folder = top_folder + "/" + folder
+  if not os.path.isdir(subset_folder):
+    os.mkdir(subset_folder)
+
+  return subset_folder
+
+
+def process_files(folder, subset_folder):
+  s3 = boto3.resource("s3")
+  source_bucket = s3.Bucket("tide-source-data")
+  data_bucket = s3.Bucket("maccoss-tide")
+  objects = list(source_bucket.objects.filter(Prefix=folder))
+  for obj in objects:
+    obj_folder = subset_folder + "/" + obj.key.split("/")[-1]
+    if not os.path.isdir(obj_folder):
+      os.mkdir(obj_folder)
+
+    upload.upload("maccoss-tide", obj.key, "tide-source-data")
+    keys = []
+
+    while len(keys) < 1:
+      keys = list(map(lambda o: o.key, list(data_bucket.objects.filter(Prefix="5/"))))
+      time.sleep(10)
+
+    match_file = obj_folder + "/match"
+    with open(match_file, "wb+") as f:
+      data_bucket.download_fileobj(keys[0], f)
+
+    top_match = open(match_file).read().strip()
+    with open(obj_folder + "/confidence", "wb+") as f:
+      data_bucket.download_fileobj(top_match, f)
+    clear.clear("maccoss-tide")
+    clear.clear("maccoss-log")
+
+
 def main():
   parser = argparse.ArgumentParser()
   parser.add_argument("--folder", type=str, required=True, help="Name of folder file resides in")
-  parser.add_argument("--file", type=str, required=True, help="Name of file to analyze")
-  parser.add_argument("--fasta", type=str, required=True, help="FASTA index to use")
+  #parser.add_argument("--file", type=str, required=True, help="Name of file to analyze")
+  #parser.add_argument("--fasta", type=str, required=True, help="FASTA index to use")
+  parser.add_argument("--top", type=int, required=True, help="Number of top spectra to use")
   args = parser.parse_args()
-  graph_intensities(args.folder, args.file, args.fasta)
+
+  subset_folder = setup(args.folder, args.top)
+  process_files(args.folder, subset_folder)
+
+#  graph_intensities(args.folder, args.file, args.fasta)
+#  os.remove(args.file)
 
 
 if __name__ == "__main__":
