@@ -111,7 +111,8 @@ class Worker(threading.Thread):
           rparams = {**self.params, **s}
           rparams["prefix"] = prefix
           rparams["scheduler"] = True
-          [output_format, bucket_format] = util.get_formats(input_format, functions[name]["file"], rparams)
+          rparams["file"] = functions[name]["file"]
+          [output_format, bucket_format] = util.get_formats(input_format, rparams)
           log_file = util.file_name(bucket_format)
           self.queue.put([item.job_id, log_file, item, item.priority])
         else:
