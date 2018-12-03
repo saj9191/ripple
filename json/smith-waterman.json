@@ -8,7 +8,6 @@
 	"storage_class": "STANDARD",
 	"timeout": 300,
 	"num_bins": 10,
-	"num_output": 1,
 	"log": "log",
 	"bucket": "ssw",
 	"account": 0,

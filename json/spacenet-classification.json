@@ -1,6 +1,5 @@
 {
 	"input_name": "3band_AOI_1_RIO_img5792.tif",
-	"account": 0,
 	"bucket": "knn",
 	"credential_profile": "add-credentials-here",
 	"folder": "knn",
@@ -8,7 +7,6 @@
 	"num_bins": 18,
 	"model": "lambda",
 	"scheduler": false,
-	"num_output": 1,
 	"iterations": 1,
 	"region": "us-east-1",
 	"role": "service-role/lambdaFullAccessRole",

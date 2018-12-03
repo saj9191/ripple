@@ -6,7 +6,6 @@
 	"iterations": 10,
 	"region": "us-west-2",
 	"folder": "methyl-file-lambda",
-	"num_output": 84,
 	"timeout": 300,
 	"tag": "dna-compression",
 	"bucket": "methyl",

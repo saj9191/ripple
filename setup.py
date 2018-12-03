@@ -1,4 +1,5 @@
 import argparse
+import boto3
 import botocore
 import json
 import os
@@ -10,11 +11,12 @@ import util
 def upload_function_code(client, zip_file, name, p, create):
   zipped_code = open(zip_file, "rb").read()
   fparams = p["functions"][name]
+  account_id = int(boto3.client("sts").get_caller_identity().get("Account"))
   if create:
     response = client.create_function(
       FunctionName=name,
       Runtime="python3.6",
-      Role="arn:aws:iam::{0:d}:role/{1:s}".format(p["account"], p["role"]),
+      Role="arn:aws:iam::{0:d}:role/{1:s}".format(account_id, p["role"]),
       Handler="{0:s}.handler".format(fparams["file"]),
       Code={
         "ZipFile": zipped_code
@@ -34,7 +36,7 @@ def upload_function_code(client, zip_file, name, p, create):
     )
     assert(response["ResponseMetadata"]["HTTPStatusCode"] == 200)
     response = client.tag_resource(
-      Resource="arn:aws:lambda:{0:s}:{1:d}:function:{2:s}".format(p["region"], p["account"], name),
+      Resource="arn:aws:lambda:{0:s}:{1:d}:function:{2:s}".format(p["region"], account_id, name),
       Tags={
         "Application": p["tag"],
       }

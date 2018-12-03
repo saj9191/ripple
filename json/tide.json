@@ -10,13 +10,11 @@
 	"num_bins": 25,
 	"bucket": "shjoyner-tide-west-1",
 	"storage_class": "STANDARD",
-	"account": 0,
 	"credential_profile": "add-credentials-here",
 	"role": "LambdaExecution",
 	"log": "shjoyner-log-west-1",
 	"sample_input": true,
 	"sample_bucket": "als",
-	"num_output": 1,
 	"stats": true,
 	"setup": true,
 	"functions": {
