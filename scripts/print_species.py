@@ -38,8 +38,8 @@ class Request(threading.Thread):
     token_to_file[token] = self.file_name
 
 
-def run(token=None):
-  bucket = s3.Bucket("maccoss-tide")
+def run(bucket_name, token=None):
+  bucket = s3.Bucket(bucket_name)
   keys = []
   prefix = "4/"
   if token is not None:
@@ -57,7 +57,7 @@ def run(token=None):
 
   print("Processing...")
   for i in range(len(keys)):
-    obj = s3.Object("maccoss-tide", keys[i])
+    obj = s3.Object(bucket_name, keys[i])
     it = confidence.Iterator(obj, 10*1000)
     s = it.sum("q-value")
     specie = util.parse_file_name(obj.key)["suffix"]

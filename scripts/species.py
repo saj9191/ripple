@@ -34,9 +34,9 @@ species = [
 ]
 
 
-def run(folder, top):
+def run(folder, top, pfile, is_medic):
   os.chdir("..")
-  params = json.loads(open("json/private-tide.json").read())
+  params = json.loads(open(pfile).read())
   params["sample_bucket"] = "tide-source-data"
   params["folder"] = "tide"
   [access_key, secret_key] = util.get_credentials(params["credential_profile"])
@@ -54,7 +54,10 @@ def run(folder, top):
   if not os.path.isdir(data_folder):
     os.mkdir(data_folder)
 
-  top_folder = data_folder + "/" + str(top)
+  if is_medic:
+    top_folder = data_folder + "/medic_" + str(top)
+  else:
+    top_folder = data_folder + "/" + str(top)
   if not os.path.isdir(top_folder):
     os.mkdir(top_folder)
 
@@ -66,7 +69,7 @@ def run(folder, top):
     s3_key, _, _ = upload.upload(params["bucket"], key, sample_bucket_name)
     token = s3_key.split("/")[1]
     params["key"] = s3_key
-    species_to_score = print_species.run(token)
+    species_to_score = print_species.run(params["bucket"], token)
     file_to_results[key] = species_to_score
     [costs, _] = statistics.statistics(params["log"], token=token, prefix=None, params=params, show=False)
     file_to_costs[key] = costs
@@ -117,8 +120,9 @@ def main():
   parser = argparse.ArgumentParser()
   parser.add_argument("--folder", type=str, required=True, help="Name of folder file resides in")
   parser.add_argument("--top", type=int, required=True, help="Number of top spectra to use")
+  parser.add_argument("--parameters", type=str, required=True, help="Parameter file to use")
   args = parser.parse_args()
-  run(args.folder, args.top)
+  run(args.folder, args.top, args.parameters, "medic" in args.parameters)
 
 
 if __name__ == "__main__":
