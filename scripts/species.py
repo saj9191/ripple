@@ -43,7 +43,7 @@ def run(folder, top):
   params["access_key"] = access_key
   params["secret_key"] = secret_key
 
-  setup.setup(params)
+  #setup.setup(params)
 
   s3 = boto3.resource("s3")
   sample_bucket_name = "tide-source-data"
@@ -66,12 +66,12 @@ def run(folder, top):
     s3_key, _, _ = upload.upload(params["bucket"], key, sample_bucket_name)
     token = s3_key.split("/")[1]
     params["key"] = s3_key
-    species_to_score = print_species.run()
+    species_to_score = print_species.run(token)
     file_to_results[key] = species_to_score
     [costs, _] = statistics.statistics(params["log"], token=token, prefix=None, params=params, show=False)
     file_to_costs[key] = costs
-    clear.clear(params["bucket"], None, None)
-    clear.clear(params["log"], None, None)
+    clear.clear(params["bucket"], token, None)
+    clear.clear(params["log"], token, None)
 
   keys = list(file_to_results.keys())
   keys.sort()
@@ -103,7 +103,11 @@ def run(folder, top):
   for fasta in sorted_fastas:
     f.write(fasta)
     for key in keys:
-      f.write(",{0:d}".format(file_to_results[key][fasta]))
+      if key not in file_to_results or fasta not in file_to_results[key]:
+        v = 0
+      else:
+        v = file_to_results[key][fasta]
+      f.write(",{0:d}".format(v))
     f.write("\n")
 
   f.close()
