@@ -191,13 +191,14 @@ def setup_triggers(params):
   client = util.setup_client("s3", params)
   lambda_client = util.lambda_client(params)
   configurations = []
+  account_id = boto3.client("sts").get_caller_identity().get("Account")
   for name in params["functions"]:
     args = {
       "FunctionName": name,
       "StatementId": name + "-" + params["bucket"],
       "Action": "lambda:InvokeFunction",
       "Principal": "s3.amazonaws.com",
-      "SourceAccount": str(params["account"]),
+      "SourceAccount": account_id,
       "SourceArn": "arn:aws:s3:::{0:s}".format(params["bucket"]),
     }
     lambda_client.add_permission(**args)
