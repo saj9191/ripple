@@ -13,7 +13,6 @@ import confidence
 
 s3 = boto3.resource("s3")
 bucket = s3.Bucket("shjoyner-logs")
-prefix = "5/"
 
 token_to_scores = {}
 token_to_file = {}
@@ -39,11 +38,18 @@ class Request(threading.Thread):
     token_to_file[token] = self.file_name
 
 
-def run():
+def run(token=None):
   bucket = s3.Bucket("maccoss-tide")
   keys = []
-  while len(keys) < 180:
-    keys = list(map(lambda o: o.key, list(bucket.objects.filter(Prefix="4/"))))
+  prefix = "4/"
+  if token is not None:
+    prefix += token + "/"
+
+  num_keys = None
+  while num_keys is None or len(keys) < num_keys:
+    keys = list(map(lambda o: o.key, list(bucket.objects.filter(Prefix=prefix))))
+    if len(keys) > 0:
+      num_keys = util.parse_file_name(keys[0])["num_files"]
     time.sleep(10)
   keys.sort(key=lambda k: util.parse_file_name(k)["suffix"])
 
