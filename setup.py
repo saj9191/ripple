@@ -64,6 +64,10 @@ def create_parameter_files(zip_directory, function_name, params):
       for value in ["timeout", "num_bins", "bucket", "storage_class", "log", "scheduler"]:
         if value in params:
           p[value] = params[value]
+
+      if i != len(params["pipeline"]) - 1:
+        p["output_function"] = params["pipeline"][i + 1]["name"]
+
       name = "{0:d}.json".format(i)
       json_path = "{0:s}/{1:s}".format(zip_directory, name)
       f = open(json_path, "w")
@@ -139,7 +143,6 @@ def clear_triggers(client, bucket, params):
 
 
 def create_bucket(client, bucket_name, params):
-  return
   try:
     client.create_bucket(
       ACL="public-read-write",
