@@ -24,7 +24,7 @@ def main():
   parser.add_argument("--token", type=str, default=None, help="Only delete objects with the specified timestamp / nonce pair")
   parser.add_argument("--prefix", type=int, default=None, help="Only delete objects with the specified prefix")
   args = parser.parse_args()
-  clear(args.bucket_name, args.prefix, args.token)
+  clear(args.bucket_name, args.token, args.prefix)
 
 
 if __name__ == "__main__":
