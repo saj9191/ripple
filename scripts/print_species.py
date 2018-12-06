@@ -38,18 +38,21 @@ class Request(threading.Thread):
     token_to_file[token] = self.file_name
 
 
-def run(bucket_name, token=None):
+def run(bucket_name, prefix, token=None):
   bucket = s3.Bucket(bucket_name)
   keys = []
-  prefix = "4/"
   if token is not None:
     prefix += token + "/"
 
   num_keys = None
   while num_keys is None or len(keys) < num_keys:
-    keys = list(map(lambda o: o.key, list(bucket.objects.filter(Prefix=prefix))))
-    if len(keys) > 0:
-      num_keys = util.parse_file_name(keys[0])["num_files"]
+    try:
+      keys = list(map(lambda o: o.key, list(bucket.objects.filter(Prefix=prefix))))
+      if len(keys) > 0:
+        num_keys = util.parse_file_name(keys[0])["num_files"]
+    except Exception as e:
+      print("Error reading", e)
+      keys = []
     time.sleep(10)
   keys.sort(key=lambda k: util.parse_file_name(k)["suffix"])
 
@@ -65,6 +68,6 @@ def run(bucket_name, token=None):
     if s > 0:
       print(keys[i])
       print("***", i+2, specie, s)
-  #    else:
-  #      print(i+2, util.parse_file_name(obj.key)["suffix"], s)
+    # else:
+    #   print(i+2, util.parse_file_name(obj.key)["suffix"], s)
   return species_to_score

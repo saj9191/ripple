@@ -64,12 +64,14 @@ def run(folder, top, pfile, is_medic):
   file_to_results = {}
   file_to_costs = {}
 
+  prefix = "5/" if is_medic else "4/"
+
   for obj in objects:
     key = obj.key
     s3_key, _, _ = upload.upload(params["bucket"], key, sample_bucket_name)
     token = s3_key.split("/")[1]
     params["key"] = s3_key
-    species_to_score = print_species.run(params["bucket"], token)
+    species_to_score = print_species.run(params["bucket"], prefix, token)
     file_to_results[key] = species_to_score
     [costs, _] = statistics.statistics(params["log"], token=token, prefix=None, params=params, show=False)
     file_to_costs[key] = costs
