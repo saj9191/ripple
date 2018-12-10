@@ -8,38 +8,36 @@ import threading
 import time
 import util
 
-OBJS = set()
-
 class Item:
-  def __init__(self, scheduler, priority, prefix, job_id, payload):
+  def __init__(self, policy, priority, prefix, job_id, payload):
     self.priority = priority
     self.prefix = prefix
     self.payload = payload
     self.job_id = job_id
-    self.scheduler = scheduler
+    self.policy = policy
 
   def __lt__(self, other):
-    if self.scheduler == "robin":
+    if self.policy == "robin":
       return self.priority < other.priority
-    elif self.scheduler == "fifo":
+    elif self.policy == "fifo":
       return [self.job_id, self.priority] < [other.job_id, other.priority]
 
 
 class PriorityQueue:
-  def __init__(self, scheduler):
-    self.scheduler = scheduler
-    if scheduler == "fifo":
+  def __init__(self, policy):
+    self.policy = policy
+    if policy == "fifo":
       self.queue = queue.PriorityQueue()
-    elif scheduler == "robin":
+    elif policy == "robin":
       self.queue = []
       self.index = 0
     else:
       raise Exception("Not Implemented")
 
   def put(self, item):
-    if self.scheduler == "fifo":
+    if self.policy == "fifo":
       self.queue.put(item)
-    elif self.scheduler == "robin":
+    elif self.policy == "robin":
       while len(self.queue) <= item.job_id:
         self.queue.append(queue.PriorityQueue())
       self.queue[item.job_id].put(item)
@@ -47,10 +45,10 @@ class PriorityQueue:
       raise Exception("Not Implemented")
 
   def get(self):
-    if self.scheduler == "fifo":
+    if self.policy == "fifo":
       item = self.queue.get(timeout=0)
       return item
-    elif self.scheduler == "robin":
+    elif self.policy == "robin":
       count = 0
       while count < len(self.queue):
         index = self.index
@@ -66,41 +64,24 @@ class PriorityQueue:
 
 
 class Worker(threading.Thread):
-  def __init__(self, worker_id, scheduler, pending, q, params, condition, results):
+  def __init__(self, worker_id, policy, pending_queue, running_queue, params, condition, done_queue):
     super(Worker, self).__init__()
     self.worker_id = worker_id
-    self.pending = pending
-    self.queue = q
+    self.done_queue = done_queue
+    self.pending_queue = pending_queue
+    self.running_queue = running_queue
     self.running = True
     self.params = dict(params)
     self.condition = condition
-    self.results = results
     self.index = 0
-    self.scheduler = scheduler
-    self.invokes = []
-
-  def get_item(self):
-    if self.scheduler == "robin":
-      count = 0
-      while count < len(self.pending):
-        try:
-          item = self.pending[self.index].get(timeout=0)
-          return item
-        except queue.Empty:
-          count += 1
-          self.index = (self.index + 1) % self.pending
-      raise queue.Empty
-    elif self.scheduler == "fifo":
-      item = self.pending.get(timeout=0)
-    else:
-      raise Exception("Not Implemented")
+    self.policy = policy
 
   def run(self):
     functions = self.params["functions"]
     pipeline = self.params["pipeline"]
     while self.running:
       try:
-        item = self.pending.get()
+        item = self.pending_queue.get()
         prefix = item.prefix
         payload = item.payload
         if prefix < len(pipeline):
@@ -114,39 +95,37 @@ class Worker(threading.Thread):
           rparams["file"] = functions[name]["file"]
           [output_format, bucket_format] = util.get_formats(input_format, rparams)
           log_file = util.file_name(bucket_format)
-          self.queue.put([item.job_id, log_file, item, item.priority])
+          self.running_queue.put([item.job_id, log_file, item, item.priority])
         else:
-          self.results.put(item)
+          self.done_queue.put(item)
       except queue.Empty:
         pass
     return
 
 
 class Parser(threading.Thread):
-  def __init__(self, s, parser_id, scheduler, q, pending, params, client):
+  def __init__(self, s, parser_id, policy, running_queue, pending_queue, params, client, log_keys):
     super(Parser, self).__init__()
     self.parser_id = parser_id
-    self.queue = q
+    self.pending_queue = pending_queue
+    self.running_queue = running_queue
     self.logs = set()
     self.log_data = {}
     self.params = params
-    self.pending = pending
     self.running = True
     self.log_length = 1000
-    self.scheduler = scheduler
+    self.policy = policy
     self.client = client
     self.params["payloads"] = []
     self.s = s
-    self.invokes = []
-    self.f = open("tasks/task-{0:d}".format(parser_id), "w+", buffering=1)
+    self.log_keys = log_keys
 
   def run(self):
-    global OBJS
     s3 = util.s3(self.params)
     pipeline = self.params["pipeline"]
     while self.running:
-      found = OBJS.intersection(self.logs)
-      not_found = self.logs.difference(OBJS)
+      found = self.log_keys.intersection(self.logs)
+      not_found = self.logs.difference(self.log_keys)
       for log_file in found:
         [job_id, log_file, item, start_time] = self.log_data[log_file]
         prefix = util.parse_file_name(log_file)["prefix"]
@@ -157,7 +136,7 @@ class Parser(threading.Thread):
             content = obj.get()["Body"].read()
             lparams = json.loads(content.decode("utf-8"))
             for p in lparams["payloads"]:
-              self.pending.put(Item(self.scheduler, obj.last_modified.replace(tzinfo=timezone.utc).timestamp(), prefix, job_id, p))
+              self.pending_queue.put(Item(self.policy, obj.last_modified.replace(tzinfo=timezone.utc).timestamp(), prefix, job_id, p))
             done = True
           except botocore.errorfactory.NoSuchKey:
             time.sleep(random.randint(1, 5))
@@ -169,8 +148,6 @@ class Parser(threading.Thread):
         if (time.time() - start_time) > self.params["timeout"] and self.s.run:
           now = time.time()
           self.log_data[log_file][3] = now
-          self.invokes.append(now)
-          self.f.write("{0:f}\n".format(now))
           prefix = item.prefix
           name = pipeline[prefix]["name"]
           print("Cannot find", name, self.params["log"], log_file)
@@ -179,9 +156,9 @@ class Parser(threading.Thread):
           util.invoke(self.client, name, self.params, item.payload)
           time.sleep(random.randint(1, 10))
 
-      while len(self.logs) <= self.log_length and not self.queue.empty():
+      while len(self.logs) <= self.log_length and not self.running_queue.empty():
         try:
-          item = self.queue.get(timeout=0)
+          item = self.running_queue.get(timeout=0)
           self.logs.add(item[1])
           self.log_data[item[1]] = item
         except queue.Empty:
@@ -206,29 +183,31 @@ def payload(bucket, key):
 
 
 class Scheduler:
-  def __init__(self, scheduler, params, run=True):
+  def __init__(self, policy, params, run=True):
     self.params = dict(params)
     self.params["object"] = {}
     self.params["scheduler"] = False
-    self.scheduler = scheduler
-    self.q = queue.Queue()
-    self.condition = threading.Condition()
-    self.results = queue.Queue()
+
     self.client = util.setup_client("lambda", self.params)
-    self.pending = PriorityQueue(self.scheduler)
-    self.workers = []
+    self.condition = threading.Condition()
+    self.done_queue = queue.Queue()
+    self.log_keys = set()
+    self.pending_queue = PriorityQueue(policy)
     self.run = run
+    self.running_queue = queue.Queue()
+    self.policy = policy
+    self.workers = []
 
   def setup(self):
     max_workers = 50
     max_parsers = 50
 
-    for i in range(max_workers):
-      self.workers.append(Worker(i, self.scheduler, self.pending, self.q, self.params, self.condition, self.results))
+    for worker_id in range(max_workers):
+      self.workers.append(Worker(worker_id, self.policy, self.pending_queue, self.running_queue, self.params, self.condition, self.done_queue))
       self.workers[-1].start()
 
-    for i in range(max_parsers):
-      self.workers.append(Parser(self, i, self.scheduler, self.q, self.pending, self.params, self.client))
+    for parser_id in range(max_parsers):
+      self.workers.append(Parser(self, parser_id, self.policy, self.running_queue, self.pending_queue, self.params, self.client, self.log_keys))
       self.workers[-1].start()
 
     # job_id = 0
@@ -237,25 +216,24 @@ class Scheduler:
     # m = util.parse_file_name(start_key)
     # item = Item(m["timestamp"], 0, job_id, payload(params["bucket"], start_key))
     # pending.put(item)
-    return self.pending
+    return self.pending_queue
 
   def wait(self, concurrency):
-    global OBJS
     s3 = util.s3(self.params)
     num_output = None
 
-    while self.results.qsize() == 0 or num_output is None or self.results.qsize() < (num_output * concurrency):
+    while self.done_queue.qsize() == 0 or num_output is None or self.done_queue.qsize() < (num_output * concurrency):
       try:
-        OBJS = set(list(map(lambda o: o.key, s3.Bucket(self.params["log"]).objects.all())))
+        self.log_keys = set(list(map(lambda o: o.key, s3.Bucket(self.params["log"]).objects.all())))
       except Exception:
         pass
       time.sleep(random.randint(1, 10))
-      if len(OBJS) > 0 and num_output is None:
-        num_output = util.parse_file_name(list(OBJS)[0])["num_files"]
+      if len(self.log_keys) > 0 and num_output is None:
+        num_output = util.parse_file_name(list(self.log_keys)[0])["num_files"]
 
     print("Shutting down")
-    for i in range(len(self.workers)):
-      self.workers[i].running = False
+    for worker_id in range(len(self.workers)):
+      self.workers[worker_id].running = False
 
     invokes = []
     for worker in self.workers:
