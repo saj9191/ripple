@@ -16,7 +16,9 @@ def update_score(specie_scores, specie, score, index):
 def calculate_score(file, specie, threshold):
   specie_scores = {}
   f = open(file)
-  lines = f.readlines()[2:]
+  lines = f.readlines()
+  cost = sum(list(map(lambda c: float(c), lines[1].split(",")[1:])))
+  lines = lines[2:]
   file_count = 0
   for line in lines:
     parts = line.strip().split(",")
@@ -39,8 +41,10 @@ def calculate_score(file, specie, threshold):
       unknown_count += 1
     elif top_specie == specie:
       correct_count += 1
+    else:
+      print("top", top_specie, "expected", specie, file)
 
-  return [correct_count, unknown_count, total_count, file_count]
+  return [correct_count, unknown_count, total_count, file_count, cost]
 
 
 def calculate_scores(threshold):
@@ -59,7 +63,7 @@ def calculate_scores(threshold):
     "Differential_analysis_of_hemolyzed_mouse_plasma-1534802693575": "normalMouse",
     "Momo_Control_Yeast_DDA": "normalYeast",
     "PES_Unfractionated-1533935400961": "normalRoundworm",
-    "PXD001873": "silac8",
+    "PXD001873": "silacLys6Arg6Human",
     "PXD002079": "phosphorylationHuman",
     "PXD005323": "normalHuman",
     "PXD005709": "normalHuman",
@@ -67,6 +71,8 @@ def calculate_scores(threshold):
   }
 
   folders = list(datasets.keys())
+  costs = { "medic_": 0.0, "": 0.0 }
+  count = 0
   for folder in folders:
     for top in tops:
       for medic in ["medic_", ""]:
@@ -77,14 +83,13 @@ def calculate_scores(threshold):
             scores[token] = [0, 0, 0]
 
           counts = calculate_score(file, datasets[folder], threshold * top)
-          #print("Wrong", token, folder, counts[2] - counts[0] - counts[1])
-          print("Top", token, folder, counts[3])
+          count += counts[-2]
+          costs[medic] += counts[-1]
           for i in range(len(counts[:3])):
             scores[token][i] += counts[i]
         else:
           print("Cannot find top", token, "for", folder)
           pass
-    print("")
 
   correct = {}
   wrong = {}
@@ -103,6 +108,10 @@ def calculate_scores(threshold):
         print("Top", token, "Unknown count", unknown_count)
         print("Top", token, "Total count", total_count)
         print("")
+
+  print("COUNT", count)
+  print("PARAMEDIC COST", costs["medic_"] / count)
+  print("NORMAL COST", costs[""] / count)
   return [correct, unknown, wrong]
 
 
