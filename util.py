@@ -461,6 +461,15 @@ def setup_client(service, params):
   return client
 
 
+def setup_connection(service, params):
+  session = boto3.Session(
+    aws_access_key_id=params["access_key"],
+    aws_secret_access_key=params["secret_key"],
+    region_name=params["region"]
+  )
+  return session.resource(service)
+
+
 def key_prefix(key):
   return "/".join(key.split("/")[:-1])
 
