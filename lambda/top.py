@@ -35,7 +35,7 @@ def find_top(bucket_name, key, input_format, output_format, offsets, params):
   [content, metadata] = iterator.from_array(obj, values, offsets)
 
   file_name = util.file_name(output_format)
-  util.write(output_format, bucket_name, file_name, str.encode(content), params)
+  util.write(bucket_name, file_name, str.encode(content), metadata, params)
 
 
 def handler(event, context):

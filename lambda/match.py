@@ -35,7 +35,7 @@ def find_match(bucket_name, key, input_format, output_format, offsets, params):
 
     output_format["ext"] = "match"
     file_name = util.file_name(output_format)
-    util.write(input_format, bucket_name, file_name, str.encode(best_match), params)
+    util.write(bucket_name, file_name, str.encode(best_match), {}, params)
 
 
 def handler(event, context):

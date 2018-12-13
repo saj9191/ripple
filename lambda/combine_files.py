@@ -34,7 +34,7 @@ def combine(bucket_name, key, input_format, output_format, offsets, params):
     keys.sort()
     iterator.combine(bucket_name, keys, temp_name, params)
     f = open(temp_name, "rb")
-    util.write(input_format, params["bucket"], file_name, f, params)
+    util.write(params["bucket"], file_name, f, metadata, params)
     f.close()
     os.remove(temp_name)
 

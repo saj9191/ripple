@@ -31,7 +31,7 @@ def run_application(bucket_name, key, input_format, output_format, offsets, para
     else:
       new_key = util.file_name(p)
 
-    util.write(input_format, params["bucket"], new_key, open(output_file, "rb"), params)
+    util.write(params["bucket"], new_key, open(output_file, "rb"), {}, params)
 
 
 def handler(event, context):

@@ -142,19 +142,11 @@ def read(obj, start_byte, end_byte):
   return content.decode("utf-8")
 
 
-def write(m, bucket, key, body, params):
-  global UPLOAD_TIME
-  global WRITE_BYTE_COUNT
-  print_write(m, key, params)
-  s3 = params["s3"] if "s3" in params else boto3.resource("s3")
+def write(bucket, key, body, metadata, params):
   done = False
   while not done:
     try:
-      st = time.time()
-      s3.Object(bucket, key).put(Body=body, StorageClass=params["storage_class"])
-      et = time.time()
-      UPLOAD_TIME += (et - st)
-      WRITE_BYTE_COUNT += s3.Object(bucket, key).content_length
+      params["s3"].Object(bucket, key).put(Body=body, Metadata=metadata, StorageClass=params["storage_class"])
       done = True
     except botocore.exceptions.ClientError as e:
       print("ERROR: RATE LIMIT")

@@ -26,7 +26,7 @@ def bin_input(s3, obj, sorted_input, format_lib, input_format, output_format, bi
     content = iterator_class.fromArray(obj, binned_input[i], offsets)
     output_format["bin"] = bin_ranges[i]["bin"]
     bin_key = util.file_name(output_format)
-    util.write(input_format, params["bucket"], bin_key, str.encode(content), params)
+    util.write(params["bucket"], bin_key, str.encode(content), metadata, params)
 
 
 def handle_sort(bucket_name, key, input_format, output_format, offsets, params):
