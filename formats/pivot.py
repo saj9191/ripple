@@ -16,8 +16,10 @@ class Iterator(iterator.Iterator):
       obj = s3.Object(bucket_name, key)
       content = util.read(obj, 0, obj.content_length)
       [file_bucket, file_key, pivot_content] = content.split("\n")
-      new_pivots = list(map(lambda p: float(p), pivot_content.split("\t")))
-      pivots += new_pivots
+      pivot_content = pivot_content.strip()
+      if len(pivot_content) > 0:
+        new_pivots = list(map(lambda p: float(p), pivot_content.split("\t")))
+        pivots += new_pivots
     assert(file_key is not None)
 
     pivots = sorted(pivots)
@@ -31,6 +33,7 @@ class Iterator(iterator.Iterator):
     content = "{0:s}\n{1:s}\n{2:s}".format(file_bucket, file_key, "\t".join(spivots))
     with open(temp_name, "w+") as f:
       f.write(content)
+    return {}
 
   def next(self, identifier=False):
     [start_byte, end_byte, more] = self.nextOffsets()
