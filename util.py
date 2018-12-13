@@ -175,6 +175,11 @@ def object_exists(bucket_name, key):
     return False
 
 
+def get_auxilary_key(key, name):
+  m = parse_file_name(key)
+  return "aux/{0:f}-{1:d}/{2:s}".format(m["timestamp"], m["nonce"], name)
+
+
 def get_batch(bucket_name, key, prefix, params):
   objects = get_objects(bucket_name, prefix, params)
   batch_size = None if "batch_size" not in params else params["batch_size"]

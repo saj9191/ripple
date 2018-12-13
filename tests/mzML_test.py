@@ -43,7 +43,7 @@ INPUT = """<?xml version="1.0" encoding="utf-8"?>
 
 class IteratorMethods(unittest.TestCase):
   def test_next_offsets(self):
-    obj = Object("test.mzML", INPUT)
+    obj = Object("bucket", "test.mzML", INPUT)
     it = mzML.Iterator(obj, 200)
     [offsets, more] = it.nextOffsets()
     self.assertFalse(more)
@@ -64,16 +64,31 @@ class IteratorMethods(unittest.TestCase):
     self.assertEqual(spectra[2].get("id"), "controllerType=0 controllerNumber=1 scan=3")
 
   def test_adjust(self):
-    offsets = {
-      "offsets": [120, 440]
-    }
-
     obj = Object("test.mzML", INPUT)
+
+    # Multiple spectra start in range
+    offsets = {"offsets": [120, 440]}
     it = mzML.Iterator(obj, 200, offsets)
     [o, more] = it.nextOffsets()
     self.assertFalse(more)
     self.assertEqual(o["offsets"][0], 123)
-    self.assertEqual(o["offsets"][1], 424)
+    self.assertEqual(o["offsets"][1], 433)
+
+    # One spectra starts in range
+    offsets = {"offsets": [120, 250]}
+    it = mzML.Iterator(obj, 200, offsets)
+    [o, more] = it.nextOffsets()
+    self.assertFalse(more)
+    self.assertEqual(o["offsets"][0], 123)
+    self.assertEqual(o["offsets"][1], 267)
+
+    # No spectra start in range
+    offsets = {"offsets": [126, 240]}
+    it = mzML.Iterator(obj, 200, offsets)
+    [o, more] = it.nextOffsets()
+    self.assertFalse(more)
+    self.assertEqual(o["offsets"][0], 123)
+    self.assertEqual(o["offsets"][1], 267)
 
 
 if __name__ == "__main__":

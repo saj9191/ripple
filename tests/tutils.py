@@ -16,7 +16,7 @@ class S3:
   def Object(self, bucket_name, key):
     objs = list(self.buckets[bucket_name].objects.filter(Prefix=key))
     if len(objs) == 0:
-      obj = Object(key)
+      obj = Object(key, bucket_name=bucket_name)
       self.buckets[bucket_name].objects.objects.append(obj)
       return obj
     return objs[0]
@@ -47,9 +47,11 @@ class Objects:
 
 
 class Object:
-  def __init__(self, key, content="", last_modified=0):
+  def __init__(self, key, content="", last_modified=0, bucket_name=""):
+    self.bucket_name = bucket_name
     self.key = key
     self.content = content
+    self.metadata = {}
     self.last_modified = last_modified
     self.content_length = len(content)
 
@@ -59,7 +61,8 @@ class Object:
     end = min(int(parts[1]), self.content_length - 1)
     return {"Body": Content(self.content[start:end + 1])}
 
-  def put(self, Body="", StorageClass=""):
+  def put(self, Body="", Metadata={}, StorageClass=""):
+    self.metadata={}
     if type(Body) == str or type(Body) == bytes:
       self.content = Body
     else:
