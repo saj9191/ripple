@@ -26,11 +26,17 @@ class Iterator(tsv.Iterator):
     return lines
 
   def sum(self, identifier):
+    [count, total] = self.fraction(identifier)
+    return count
+
+  def fraction(self, identifier):
     more = True
     count = 0
+    total = 0
     while more:
+      total += 1
       [lines, more] = self.next(identifier)
       for line in lines:
         if line[0] <= Iterator.THRESHOLD:
           count += 1
-    return count
+    return [count, total]
