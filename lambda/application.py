@@ -5,15 +5,18 @@ import util
 
 def run_application(bucket_name, key, input_format, output_format, offsets, params):
   s3 = boto3.resource('s3')
+  temp_file = "/tmp/{0:s}".format(key)
+  util.make_folder(util.parse_file_name(temp_file))
 
   if len(offsets) == 0:
     temp_file = util.download(bucket_name, key)
+    with open(temp_file, "wb+") as f:
+      s3.Bucket(bucket_name).download_fileobj(key, f)
   else:
     obj = s3.Object(bucket_name, key)
     format_lib = importlib.import_module(params["format"])
     iterator_class = getattr(format_lib, "Iterator")
     iterator = iterator_class(obj, 0, offsets)
-    temp_file = "/tmp/{0:s}".format(key)
     with open(temp_file, "w") as f:
       f.write(util.read(obj, iterator.current_offset, iterator.content_length))
 
