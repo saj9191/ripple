@@ -274,6 +274,7 @@ class Iterator(iterator.Iterator):
     iterators = []
     count = 0
     s3 = boto3.resource("s3")
+    metadata = {}
 
     for key in keys:
       obj = s3.Object(bucket_name, key)
@@ -281,11 +282,13 @@ class Iterator(iterator.Iterator):
       iterators.append(iterator)
       count += iterator.getCount()
 
-    header = Iterator.header(obj, 0, iterator.header_length, count)
+    metadata["count"] = str(count)
 
     with open(temp_name, "w+") as f:
-      content = header
+      content = util.read(obj, 0, int(obj.metadata["header_end_index"]))
       f.write(content)
+      metadata["header_start_index"] = str(0)
+      metadata["header_end_index"] = str(len(content))
       offset = len(content)
       offsets = []
       index = 0
@@ -306,6 +309,7 @@ class Iterator(iterator.Iterator):
           f.write(content)
 
       content = "</spectrumList></run></mzML>\n"
+      metadata["footer_start_index"] = str(len(content))
       list_offset = len(content) + offset
       content += '<indexList count="2">\n'
       content += '<index name="spectrum">\n'
@@ -313,7 +317,11 @@ class Iterator(iterator.Iterator):
         content += '<offset idRef="controllerType=0 controllerNumber=1 scan={0:s}">{1:d}</offset>\n'.format(offset[0], offset[1])
       content += "</index>\n"
       content += "</indexList>\n"
+      metadata["index_list_offset"] = str(len(content))
       content += "<indexListOffset>{0:d}</indexListOffset>\n".format(list_offset)
       content += "<fileChecksum>"
       content += "</fileChecksum>\n</indexedmzML>"
+      metadata["footer_end_index"] = str(len(content))
       f.write(content)
+
+    return metadata

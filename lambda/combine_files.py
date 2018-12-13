@@ -32,7 +32,7 @@ def combine(bucket_name, key, input_format, output_format, offsets, params):
     temp_name = "/tmp/{0:s}".format(file_name)
     # Make this deterministic and combine in the same order
     keys.sort()
-    iterator.combine(bucket_name, keys, temp_name, params)
+    metadata = iterator.combine(bucket_name, keys, temp_name, params)
     f = open(temp_name, "rb")
     util.write(params["bucket"], file_name, f, metadata, params)
     f.close()
