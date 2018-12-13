@@ -6,10 +6,9 @@ import util
 def run_application(bucket_name, key, input_format, output_format, offsets, params):
   s3 = boto3.resource('s3')
   temp_file = "/tmp/{0:s}".format(key)
-  util.make_folder(util.parse_file_name(temp_file))
+  util.make_folder(util.parse_file_name(key))
 
   if len(offsets) == 0:
-    temp_file = util.download(bucket_name, key)
     with open(temp_file, "wb+") as f:
       s3.Bucket(bucket_name).download_fileobj(key, f)
   else:
