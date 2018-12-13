@@ -1,6 +1,7 @@
 import argparse
 import boto3
 import json
+import setup
 import util
 
 
@@ -57,6 +58,7 @@ def main():
   parser.add_argument("--parameters", type=str, help="JSON file containing application setup")
   args = parser.parse_args()
   params = json.loads(open(args.parameters).read())
+  setup.process_functions(params)
   statistics(args.bucket_name, args.token, args.prefix, params, show=True)
 
 

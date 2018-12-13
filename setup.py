@@ -86,50 +86,153 @@ def copy_file(directory, file_path):
   return file_name
 
 
-def upload_functions(client, params):
+def zip_libraries(zip_directory):
+  files = []
+  for folder, subdir, ff in os.walk("libraries"):
+    if folder.count("/") == 0:
+      for d in subdir:
+        shutil.copytree("libraries/" + d, zip_directory + "/" + d)
+        files.append(d)
+  return files
+
+
+def zip_formats(zip_directory, fparams, params):
+  files = []
+  if "format" in fparams:
+    form = fparams["format"]
+    if "dependencies" in params and form in params["dependencies"]["formats"]:
+      for file in params["dependencies"]["formats"][form]:
+        files.append(copy_file(zip_directory, file))
+    files.append(copy_file(zip_directory, "formats/{0:s}.py".format(form)))
+  return files
+
+
+def zip_application(zip_directory, fparams):
+  files = []
+  if "application" in fparams:
+    files.append(copy_file(zip_directory, "applications/{0:s}.py".format(fparams["application"])))
+  return files
+
+
+def zip_ripple_file(zip_directory, fparams):
+  files = []
+  file = "{0:s}.py".format(fparams["file"])
+  shutil.copyfile("lambda/{0:s}".format(file), "{0:s}/{1:s}".format(zip_directory, file))
+  files.append(file)
+  for file in ["formats/iterator.py", "formats/pivot.py", "util.py"]:
+    files.append(copy_file(zip_directory, file))
+  return files
+
+
+def upload_function(client, name, functions, params):
   zip_directory = "lambda_dependencies"
   zip_file = "lambda.zip"
-
-  response = client.list_functions()
-  functions = set(list(map(lambda f: f["FunctionName"], response["Functions"])))
 
   if os.path.isdir(zip_directory):
     shutil.rmtree(zip_directory)
 
+  fparams = params["functions"][name]
+  files = []
+  os.makedirs(zip_directory)
+  if "knn" in params["folder"]:
+    raise Exception("Unhardcode")
+    files += zip_libraries(zip_directory)
+
+  files += zip_ripple_file(zip_directory, fparams)
+  files += zip_application(zip_directory, fparams)
+  files += zip_formats(zip_directory, fparams, params)
+  files += create_parameter_files(zip_directory, name, params)
+  os.chdir(zip_directory)
+  subprocess.call("zip -r ../{0:s} {1:s}".format(zip_file, " ".join(files)), shell=True)
+  os.chdir("..")
+
+  upload_function_code(client, zip_file, name, params, name not in functions)
+  os.remove(zip_file)
+  shutil.rmtree(zip_directory)
+
+
+def add_sort_pipeline(sort_params):
+  functions = {}
+  pipeline = []
+
+  fformat = sort_params["format"]
+
+  def add_function(name, function_params, pipeline_params):
+    if name in functions:
+      raise Exception("Cannot add sort pipeline. Function with name " + name + " already exists")
+
+    function_params["memory_size"] = 1024
+    function_params["chunk_size"] = sort_params["chunk_size"]
+    functions[name] = function_params
+    pipeline_params["name"] = name
+    pipeline.append(pipeline_params)
+
+  add_function("split-" + fformat, {
+    "file": "split_file",
+    "format": fformat,
+    "split_size": sort_params["chunk_size"],
+  }, {
+    "ranges": False,
+  })
+
+  add_function("pivot-" + fformat, {
+    "file": "pivot_file",
+    "format": fformat,
+    "identifier": sort_params["identifier"]
+  }, {})
+
+  add_function("combine-pivot-" + fformat, {
+    "file": "combine_files",
+    "format": "pivot",
+    "sort": True,
+  }, {})
+
+  pipeline.append({
+    "name": "split-" + fformat,
+    "ranges": True
+  })
+
+  add_function("sort-" + fformat, {
+    "format": fformat,
+    "file": "sort",
+    "identifier": "mass",
+  }, {})
+
+  add_function("combine-" + fformat, {
+    "file": "combine_files",
+    "format": fformat,
+    "sort": False,
+  }, {})
+
+  return functions, pipeline
+
+
+def process_functions(params):
+  pipeline = params["pipeline"]
+  i = 0
+  while i < len(pipeline):
+    name = pipeline[i]["name"]
+    if params["functions"][name]["file"] == "sort":
+      sort_params = params["functions"][name]
+      del params["functions"][name]
+
+      sort_functions, sort_pipeline = add_sort_pipeline(sort_params)
+      pipeline = pipeline[:i] + sort_pipeline + pipeline[i+1:]
+      params["functions"] = { **params["functions"], **sort_functions }
+      i += len(sort_pipeline)
+    else:
+      i += 1
+
+  params["pipeline"] = pipeline
+
+
+def upload_functions(client, params):
+  response = client.list_functions()
+  function_names = set(list(map(lambda f: f["FunctionName"], response["Functions"])))
+  process_functions(params)
+
   for name in params["functions"]:
-    fparams = params["functions"][name]
-    files = []
-    os.makedirs(zip_directory)
-    if "knn" in params["folder"]:
-      for folder, subdir, ff in os.walk("libraries"):
-        if folder.count("/") == 0:
-          for d in subdir:
-            shutil.copytree("libraries/" + d, zip_directory + "/" + d)
-            files.append(d)
-    file = "{0:s}.py".format(fparams["file"])
-    shutil.copyfile("lambda/{0:s}".format(file), "{0:s}/{1:s}".format(zip_directory, file))
-    files.append(file)
-    for file in ["formats/iterator.py", "formats/pivot.py", "util.py"]:
-      files.append(copy_file(zip_directory, file))
-
-    if "application" in fparams:
-      files.append(copy_file(zip_directory, "applications/{0:s}.py".format(fparams["application"])))
-
-    if "format" in fparams:
-      form = fparams["format"]
-      if "dependencies" in params and form in params["dependencies"]["formats"]:
-        for file in params["dependencies"]["formats"][form]:
-          files.append(copy_file(zip_directory, file))
-      files.append(copy_file(zip_directory, "formats/{0:s}.py".format(form)))
-
-    files += create_parameter_files(zip_directory, name, params)
-    os.chdir(zip_directory)
-    subprocess.call("zip -r ../{0:s} {1:s}".format(zip_file, " ".join(files)), shell=True)
-    os.chdir("..")
-
-    upload_function_code(client, zip_file, name, params, name not in functions)
-    os.remove(zip_file)
-    shutil.rmtree(zip_directory)
+    upload_function(client, name, function_names, params)
 
 
 def setup_notifications(client, bucket, config):
@@ -201,7 +304,11 @@ def setup_triggers(params):
       "SourceAccount": account_id,
       "SourceArn": "arn:aws:s3:::{0:s}".format(params["bucket"]),
     }
-    lambda_client.add_permission(**args)
+
+    try:
+      lambda_client.add_permission(**args)
+    except Exception:
+      pass
 
     for prefix in prefixes[name]:
       configurations.append({
