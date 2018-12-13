@@ -36,7 +36,7 @@ class Iterator(new_line.Iterator):
     iterator.Iterator.__init__(self, Iterator, obj, chunk_size)
     iterator.Iterator.__setup__(self, offsets)
 
-  def fromArray(obj, lines, offsets):
+  def from_array(obj, lines, offsets):
     assert(len(offsets["offsets"]) == 0)
     return new_line.Iterator.IDENTIFIER.join(list(map(lambda line: mapLine(line), lines)))
 

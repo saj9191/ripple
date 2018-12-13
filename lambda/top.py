@@ -32,7 +32,7 @@ def find_top(bucket_name, key, input_format, output_format, offsets, params):
         heapq.heappop(top)
 
   values = list(map(lambda t: t.value, top))
-  content = iterator.fromArray(obj, values, offsets)
+  [content, metadata] = iterator.from_array(obj, values, offsets)
 
   file_name = util.file_name(output_format)
   util.write(output_format, bucket_name, file_name, str.encode(content), params)

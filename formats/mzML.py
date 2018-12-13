@@ -75,6 +75,15 @@ class Iterator(iterator.Iterator):
       self.__get_header_footer_offset__()
       self.__get_total_count__()
 
+  @classmethod
+  def __get_header__(cls, obj):
+    bucket = obj.bucket_name
+    key = obj.key
+    header_key = util.get_auxilary_key(key, "header")
+    s3 = boto3.resource("s3")
+    header_obj = s3.Object(bucket, header_key)
+    return util.read(header_obj, 0, header_obj.content_length)
+
   def __spectra_offsets__(self, offsets):
     if len(offsets) != 0 and len(offsets["offsets"]) != 0:
       self.spectra_start_index = max(offsets["offsets"][0], self.header_end_index + 1)
@@ -211,8 +220,14 @@ class Iterator(iterator.Iterator):
     offsets["footer"] = {"start": self.footer_start_index, "end": self.footer_end_index}
     return offsets
 
-  def fromArray(obj, spectra, offsets, f=None):
-    content = add(Iterator.header(obj, offsets["header"]["start"], offsets["header"]["end"], len(spectra)), f)
+  @classmethod
+  def from_array(cls, obj, spectra, offsets, f=None):
+    metadata = {}
+    header = Iterator.__get_header__(obj)
+    metadata["header_start_index"] = str(0)
+    metadata["header_end_index"] = str(len(header))
+
+    content = add(header, f)
     offset = len(content)
     offsets = []
 
@@ -235,12 +250,15 @@ class Iterator(iterator.Iterator):
       content += add('<offset idRef="controllerType=0 controllerNumber=1 scan={0:s}">{1:d}</offset>\n'.format(offset[0], offset[1]), f)
     content += add("</index>\n", f)
     content += add("</indexList>\n", f)
+    metadata["index_list_offset"] = str(len(content))
     content += add("<indexListOffset>{0:d}</indexListOffset>\n".format(list_offset), f)
     content += add("<fileChecksum>", f)
-
     content += add(str(hashlib.sha1(content.encode("utf-8")).hexdigest()), f)
     content += add("</fileChecksum>\n</indexedmzML>", f)
-    return content
+    metadata["footer_start_index"] = str(list_offset)
+    metadata["footer_end_index"] = str(len(content))
+    metadata["count"] = str(count)
+    return content, metadata
 
   def createContent(content):
     index = content.rindex(Iterator.SPECTRUM_CLOSE_TAG)

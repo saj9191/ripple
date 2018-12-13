@@ -55,7 +55,7 @@ class Iterator:
   def createContent(self, content):
     raise Exception("Not Implemented")
 
-  def fromArray(obj, items, offsets):
+  def from_array(obj, items, offsets):
     raise Exception("Not Implemented")
 
   def getCount(self):
@@ -63,7 +63,7 @@ class Iterator:
 
   @classmethod
   def write(cls, f, values, first):
-    content = cls.fromArray(None, values, None)
+    [content, metadata] = cls.from_array(None, values, None)
     if first:
       f.write(content.strip())
     else:

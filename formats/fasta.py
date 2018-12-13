@@ -11,7 +11,7 @@ class Iterator(iterator.Iterator):
     self.indicator_at_beginning = True
     iterator.Iterator.__setup__(self, offsets)
 
-  def fromArray(items, includeHeader=False):
+  def from_array(items, includeHeader=False):
     assert(not includeHeader)
     items = list(map(lambda item: item.strip(), items))
     content = Iterator.IDENTIFIER.join(items)

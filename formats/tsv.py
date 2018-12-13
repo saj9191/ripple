@@ -34,7 +34,7 @@ class Iterator(iterator.Iterator):
     self.current_offset = stream.index(Iterator.IDENTIFIER) + 1
     iterator.Iterator.__setup__(self, offsets)
 
-  def fromArray(items, includeHeader=False):
+  def from_array(items, includeHeader=False):
     items = list(map(lambda item: item.strip(), items))
     content = Iterator.IDENTIFIER.join(items)
     if includeHeader:
@@ -66,3 +66,4 @@ class Iterator(iterator.Iterator):
           f.write(content)
         else:
           f.write(content[content.find("\n") + 1:])
+    return {}
