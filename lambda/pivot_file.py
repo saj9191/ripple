@@ -4,6 +4,9 @@ import util
 
 
 def create_pivots(s3, sorted_input, params):
+  if len(sorted_input) == 0:
+    return []
+
   max_identifier = int(sorted_input[-1][0] + 1)
   pivots = list(map(lambda p: p[0], sorted_input))
   num_bins = 2 * params["num_bins"]
