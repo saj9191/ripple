@@ -25,12 +25,16 @@ class Iterator(iterator.Iterator):
   ID_REGEX = re.compile(".*scan=([0-9]+).*")
   XML_NAMESPACE = "http://psi.hupo.org/ms/mzml"
 
-  def __init__(self, obj, chunk_size, offsets={}):
+  def __init__(self, obj, chunk_size, offsets={}, s3=None):
     iterator.Iterator.__init__(self, Iterator, obj, chunk_size)
     ET.register_namespace("", Iterator.XML_NAMESPACE)
     self.footer_offset = 1000
     self.batch_size = 100
     self.remainder = ""
+    if s3 is not None:
+      self.s3 = s3
+    else:
+      self.s3 = boto3.resource("s3")
     self.__setup__(offsets)
 
   def __setup__(self, offsets):
@@ -87,16 +91,15 @@ class Iterator(iterator.Iterator):
     key = self.obj.key
     header_key = util.get_auxilary_key(key, "header")
     self.__get_index_list_offset__()
-    s3 = boto3.resource("s3")
 
-    if util.object_exists(bucket, header_key):
+    if util.object_exists(self.s3, bucket, header_key):
       self.header_start_index = 0
-      header_obj = s3.Object(bucket, header_key)
+      header_obj = self.s3.Object(bucket, header_key)
       self.header_end_index = header_obj.content_length - 1  # One char added to object
     else:
       self.__get_header_offset__()
       stream = util.read(self.obj, self.header_start_index, self.header_end_index)
-      s3.Object(bucket, header_key).put(Body=str.encode(stream))
+      self.s3.Object(bucket, header_key).put(Body=str.encode(stream))
 
     self.__get_footer_offset__()
     self.__get_total_count__()
@@ -191,7 +194,7 @@ class Iterator(iterator.Iterator):
         start_byte = end_byte + 1
         end_byte = min(self.footer_end_index, start_byte + self.chunk_size)
 
-    self.next_index = self.spectra_start_index
+    self.next_index = self.start_index #self.spectra_start_index
 
   def getCount(self):
     return self.total_count
@@ -257,6 +260,7 @@ class Iterator(iterator.Iterator):
     # TODO: Look into this more
     if not content.endswith(Iterator.SPECTRUM_CLOSE_TAG):
       return []
+
     root = ET.fromstring("<data>" + content.strip() + "</data>")
     spectra = list(root.iter("spectrum"))
 

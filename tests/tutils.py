@@ -1,3 +1,6 @@
+import botocore
+
+
 def equal_lists(list1, list2):
   s1 = set(list1)
   s2 = set(list2)
@@ -47,7 +50,7 @@ class Objects:
 
 
 class Object:
-  def __init__(self, key, content="", last_modified=0, bucket_name=""):
+  def __init__(self, key, content="", last_modified=0, bucket_name="bucket"):
     self.bucket_name = bucket_name
     self.key = key
     self.content = content
@@ -62,11 +65,14 @@ class Object:
     return {"Body": Content(self.content[start:end + 1])}
 
   def put(self, Body="", Metadata={}, StorageClass=""):
-    self.metadata={}
+    self.metadata = {}
     if type(Body) == str or type(Body) == bytes:
       self.content = Body
     else:
       self.content = Body.read().decode("utf-8")
+
+  def load(self):
+    raise Exception("")
 
 
 class Content:

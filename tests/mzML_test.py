@@ -2,7 +2,7 @@ import inspect
 import os
 import sys
 import unittest
-from tutils import Object
+from tutils import S3, Bucket, Object
 
 currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
 parentdir = os.path.dirname(currentdir)
@@ -32,7 +32,7 @@ INPUT = """<?xml version="1.0" encoding="utf-8"?>
   <indexList count="2">
     <index name="spectrum">
       <offset idRef="controllerType=0 controllerNumber=1 scan=1">123</offset>
-      <offset idRef="controllerType=0 controllerNumber=1 scan=2">268</offset>
+      <offset idRef="controllerType=0 controllerNumber=1 scan=2">267</offset>
       <offset idRef="controllerType=0 controllerNumber=1 scan=3">434</offset>
     </index>
   </indexList>
@@ -40,22 +40,21 @@ INPUT = """<?xml version="1.0" encoding="utf-8"?>
 </indexedmzML>
 """
 
+bucket = Bucket("bucket", [])
+s3 = S3([bucket])
 
 class IteratorMethods(unittest.TestCase):
   def test_next_offsets(self):
-    obj = Object("bucket", "test.mzML", INPUT)
-    it = mzML.Iterator(obj, 200)
+    obj = Object("0/123.4-13/1/1-1-1-test.mzML", INPUT)
+    it = mzML.Iterator(obj, 200, s3=s3)
     [offsets, more] = it.nextOffsets()
     self.assertFalse(more)
     self.assertEqual(offsets["offsets"][0], 123)
     self.assertEqual(offsets["offsets"][1], 647)
-    self.assertEqual(offsets["header"]["start"], 0)
-    self.assertEqual(offsets["header"]["end"], 122)
-    self.assertEqual(offsets["footer"]["start"], 648)
 
   def test_next(self):
-    obj = Object("test.mzML", INPUT)
-    it = mzML.Iterator(obj, 200)
+    obj = Object("0/123.4-13/1/1-1-1-test.mzML", INPUT)
+    it = mzML.Iterator(obj, 200, s3=s3)
     [spectra, more] = it.next()
     self.assertFalse(more)
     self.assertEqual(len(spectra), 3)
@@ -64,11 +63,11 @@ class IteratorMethods(unittest.TestCase):
     self.assertEqual(spectra[2].get("id"), "controllerType=0 controllerNumber=1 scan=3")
 
   def test_adjust(self):
-    obj = Object("test.mzML", INPUT)
+    obj = Object("0/123.4-13/1/1-1-1-test.mzML", INPUT)
 
     # Multiple spectra start in range
     offsets = {"offsets": [120, 440]}
-    it = mzML.Iterator(obj, 200, offsets)
+    it = mzML.Iterator(obj, 200, offsets, s3=s3)
     [o, more] = it.nextOffsets()
     self.assertFalse(more)
     self.assertEqual(o["offsets"][0], 123)
@@ -76,19 +75,19 @@ class IteratorMethods(unittest.TestCase):
 
     # One spectra starts in range
     offsets = {"offsets": [120, 250]}
-    it = mzML.Iterator(obj, 200, offsets)
+    it = mzML.Iterator(obj, 200, offsets, s3=s3)
     [o, more] = it.nextOffsets()
     self.assertFalse(more)
     self.assertEqual(o["offsets"][0], 123)
-    self.assertEqual(o["offsets"][1], 267)
+    self.assertEqual(o["offsets"][1], 266)
 
     # No spectra start in range
     offsets = {"offsets": [126, 240]}
-    it = mzML.Iterator(obj, 200, offsets)
+    it = mzML.Iterator(obj, 200, offsets, s3=s3)
     [o, more] = it.nextOffsets()
     self.assertFalse(more)
     self.assertEqual(o["offsets"][0], 123)
-    self.assertEqual(o["offsets"][1], 267)
+    self.assertEqual(o["offsets"][1], 266)
 
 
 if __name__ == "__main__":

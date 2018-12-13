@@ -166,12 +166,11 @@ def write(bucket, key, body, metadata, params):
   })
 
 
-def object_exists(bucket_name, key):
+def object_exists(s3, bucket_name, key):
   try:
-    s3 = boto3.resource("s3")
     s3.Object(bucket_name, key).load()
     return True
-  except botocore.exceptions.ClientError as e:
+  except Exception:
     return False
 
 
