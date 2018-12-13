@@ -8,6 +8,7 @@ import threading
 import time
 import util
 
+
 class Item:
   def __init__(self, policy, priority, prefix, job_id, payload):
     self.priority = priority
@@ -90,6 +91,9 @@ class Worker(threading.Thread):
           input_key = s["object"]["key"]
           input_format = util.parse_file_name(input_key)
           rparams = {**self.params, **s}
+          if "extra_params" in s:
+            rparams = {**rparams, **s["extra_params"]}
+
           rparams["prefix"] = prefix
           rparams["scheduler"] = True
           rparams["file"] = functions[name]["file"]
@@ -140,7 +144,7 @@ class Parser(threading.Thread):
             done = True
           except botocore.errorfactory.NoSuchKey:
             time.sleep(random.randint(1, 5))
-        time.sleep(random.randint(1,10))
+        time.sleep(random.randint(1, 10))
 
       self.logs = self.logs.difference(found)
       for log_file in not_found:
@@ -199,8 +203,8 @@ class Scheduler:
     self.workers = []
 
   def setup(self):
-    max_workers = 50
-    max_parsers = 50
+    max_workers = 10
+    max_parsers = 10
 
     for worker_id in range(max_workers):
       self.workers.append(Worker(worker_id, self.policy, self.pending_queue, self.running_queue, self.params, self.condition, self.done_queue))
@@ -224,7 +228,8 @@ class Scheduler:
 
     while self.done_queue.qsize() == 0 or num_output is None or self.done_queue.qsize() < (num_output * concurrency):
       try:
-        self.log_keys = set(list(map(lambda o: o.key, s3.Bucket(self.params["log"]).objects.all())))
+        for obj in s3.Bucket(self.params["log"]).objects.all():
+          self.log_keys.add(obj.key)
       except Exception:
         pass
       time.sleep(random.randint(1, 10))
@@ -235,13 +240,8 @@ class Scheduler:
     for worker_id in range(len(self.workers)):
       self.workers[worker_id].running = False
 
-    invokes = []
     for worker in self.workers:
       worker.join()
-      invokes += worker.invokes
-    with open("invokes", "w+") as f:
-      f.write(json.dumps({"invokes": invokes}))
-
 
 
 def main():
