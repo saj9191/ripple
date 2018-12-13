@@ -29,7 +29,7 @@ def handle_pivots(bucket_name, key, input_format, output_format, offsets, params
     sorted_input = iterator.get(obj, 0, obj.content_length, params["identifier"])
   else:
     it = iterator(obj, 100*1000, offsets)
-    sorted_input = iterator.get(obj, it.start_index, it.end_index, params["identifier"])
+    sorted_input = iterator.get(obj, it.spectra_start_index, it.spectra_end_index, params["identifier"])
   sorted_input = sorted(sorted_input, key=lambda k: k[0])
   pivots = create_pivots(s3, sorted_input, params)
 
