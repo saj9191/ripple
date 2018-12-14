@@ -194,7 +194,7 @@ class Iterator(iterator.Iterator):
         start_byte = end_byte + 1
         end_byte = min(self.footer_end_index, start_byte + self.chunk_size)
 
-    self.next_index = self.start_index #self.spectra_start_index
+    self.next_index = self.spectra_start_index
 
   def getCount(self):
     return self.total_count
