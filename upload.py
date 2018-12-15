@@ -48,7 +48,7 @@ def upload(bucket_name, key, input_bucket_name=None):
         print("ERROR: upload_input", e)
   else:
     print("Uploading {0:s} to s3://{1:s}".format(key, bucket_name), flush=True)
-    s3.Object(bucket_name, s3_key).put(Body=open("data/{0:s}".format(key), 'rb'))
+    s3.Object(bucket_name, s3_key).put(Body=open("data/{0:s}".format(key), 'rb'), Metadata={"original_name": key})
 
   end = time.time()
 
