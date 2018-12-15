@@ -13,14 +13,12 @@ def add(content, f):
 
 
 class Iterator(iterator.Iterator):
+  CHROMATOGRAM_OFFSET_REGEX = re.compile('<offset idRef="TIC">(\d+)</offset>')
+  CHROMATOGRAM_LIST_CLOSE_TAG = "</chromotogramList>"
   INDEX_LIST_OFFSET_REGEX = re.compile("<indexListOffset>(\d+)</indexListOffset>")
   OFFSET_REGEX = re.compile("<offset[^>]*>(\d+)</offset>")
-  OFFSET_START = "<offset"
   SPECTRUM_LIST_COUNT_REGEX = re.compile('<spectrumList [\s\S]*count="(\d+)"')
   SPECTRUM_LIST_CLOSE_TAG = "</spectrumList>"
-  CONTENT_CLOSE_TAG = "</mzML>"
-  INDEX_CHUNK_SIZE = 1000
-  SPECTRUM_OPEN_TAG = "<spectrum>"
   SPECTRUM_CLOSE_TAG = "</spectrum>"
   ID_REGEX = re.compile(".*scan=([0-9]+).*")
   XML_NAMESPACE = "http://psi.hupo.org/ms/mzml"
@@ -45,13 +43,22 @@ class Iterator(iterator.Iterator):
   def __get_index_list_offset__(self):
     if "index_list_offset" in self.obj.metadata:
       self.index_list_offset = int(self.obj.metadata["index_list_offset"])
+      self.chromatogram_start_index = int(self.obj.metadata["chromatogram_start_index"])
+      self.chromatogram_end_index = int(self.obj.metadata["chromatogram_end_index"])
     else:
       end_byte = self.content_length
       start_byte = end_byte - self.footer_offset
       stream = util.read(self.obj, start_byte, end_byte)
       m = self.INDEX_LIST_OFFSET_REGEX.search(stream)
-      assert(m is not None)
       self.index_list_offset = int(m.group(1))
+
+      self.chromatogram_start_index = -1
+      self.chromatogram_end_index = -1
+      m = self.CHROMATOGRAM_OFFSET_REGEX.search(stream)
+      if m is not None:
+        self.chromatogram_start_index = int(m.group(1))
+        index = stream.find(self.CHROMATOGRAM_LIST_CLOSE_TAG)
+        self.chromatogram_end_index = start_byte + index
 
   def __get_header_offset__(self):
     if "header_start_index" in self.obj.metadata:
@@ -71,10 +78,14 @@ class Iterator(iterator.Iterator):
       self.footer_start_index = int(self.obj.metadata["footer_start_index"])
       self.footer_end_index = int(self.obj.metadata["footer_end_index"])
     else:
-      start_byte = max(0, self.index_list_offset - self.footer_offset)
-      end_byte = min(self.index_list_offset + self.footer_offset, self.obj.content_length)
+      if self.chromatogram_start_index == -1:
+        start_byte = self.index_list_offset - self.footer_offset
+      else:
+        start_byte = self.chromatogram_start_index - self.footer_offset
+      start_byte = max(0, start_byte)
+      end_byte = min(start_byte + self.footer_offset, self.obj.content_length)
       stream = util.read(self.obj, start_byte, end_byte)
-      self.footer_start_index = start_byte + stream.rindex(self.CONTENT_CLOSE_TAG)
+      self.footer_start_index = start_byte + stream.rindex(self.SPECTRUM_LIST_CLOSE_TAG)
       self.footer_end_index = self.obj.content_length
 
   def __get_total_count__(self):
@@ -142,9 +153,6 @@ class Iterator(iterator.Iterator):
       if len(included_offsets) == 0:
         self.spectra_start_index = before_offset
         self.spectra_end_index = after_offset
-      elif len(included_offsets) > 1:
-        self.spectra_start_index = included_offsets[0]
-        self.spectra_end_index = included_offsets[-1]
       else:
         self.spectra_start_index = included_offsets[0]
         self.spectra_end_index = after_offset
@@ -160,19 +168,15 @@ class Iterator(iterator.Iterator):
     if len(offset_regex) > 0:
       regex_offset = offset_regex[-1].span(0)[1]
       stream = stream[regex_offset:]
-      remainder = stream
-    else:
-      remainder = ""
+    remainder = stream
 
     return [offsets, remainder]
 
   def __set_offset_indices__(self, offsets):
-    if len(offsets) == 0:
-      self.start_index = self.index_list_offset
-      self.end_index = self.footer_end_index
-    else:
-      self.start_index = None
-      self.end_index = None
+    self.start_index = self.index_list_offset
+    self.end_index = self.footer_end_index
+
+    if len(offsets) != 0:
       start_byte = self.index_list_offset
       end_byte = min(self.footer_end_index, start_byte + self.chunk_size)
 
@@ -185,7 +189,7 @@ class Iterator(iterator.Iterator):
           if offset == self.spectra_start_index:
             self.start_index = start_byte + m.span(0)[0]
           if offset == self.spectra_end_index:
-            self.end_index = start_byte + m.span(0)[1]
+            self.end_index = start_byte + m.span(0)[0]
 
         if len(offset_matches) > 0:
           self.remainder = stream[offset_matches[-1].span()[1] + 1:]
@@ -194,7 +198,7 @@ class Iterator(iterator.Iterator):
         start_byte = end_byte + 1
         end_byte = min(self.footer_end_index, start_byte + self.chunk_size)
 
-    self.next_index = self.spectra_start_index
+    self.next_index = self.start_index
 
   def getCount(self):
     return self.total_count
@@ -225,7 +229,7 @@ class Iterator(iterator.Iterator):
 
   def updateOffsets(self):
     start_byte = self.next_index
-    end_byte = min(self.content_length, start_byte + self.chunk_size)
+    end_byte = min(self.end_index, start_byte + self.chunk_size)
     [offsets, remainder] = self.__get_offsets__(start_byte, end_byte, self.remainder)
     self.remainder = remainder
     self.offsets += offsets
@@ -260,7 +264,6 @@ class Iterator(iterator.Iterator):
     # TODO: Look into this more
     if not content.endswith(Iterator.SPECTRUM_CLOSE_TAG):
       return []
-
     root = ET.fromstring("<data>" + content.strip() + "</data>")
     spectra = list(root.iter("spectrum"))
 
@@ -290,6 +293,8 @@ class Iterator(iterator.Iterator):
     header = Iterator.__get_header__(obj)
     metadata["header_start_index"] = str(0)
     metadata["header_end_index"] = str(len(header))
+    metadata["chromatogram_start_index"] = "-1"
+    metadata["chromatogram_end_index"] = "-1"
 
     content = add(header, f)
     offset = len(content)
@@ -308,13 +313,13 @@ class Iterator(iterator.Iterator):
 
     content += add("</spectrumList></run></mzML>\n", f)
     list_offset = len(content)
-    content += add('<indexList count="2">\n', f)
+    metadata["index_list_offset"] = str(list_offset)
+    content += add('<indexList count="1">\n', f)
     content += add('<index name="spectrum">\n', f)
     for offset in offsets:
       content += add('<offset idRef="controllerType=0 controllerNumber=1 scan={0:s}">{1:d}</offset>\n'.format(offset[0], offset[1]), f)
     content += add("</index>\n", f)
     content += add("</indexList>\n", f)
-    metadata["index_list_offset"] = str(len(content))
     content += add("<indexListOffset>{0:d}</indexListOffset>\n".format(list_offset), f)
     content += add("<fileChecksum>", f)
     content += add(str(hashlib.sha1(content.encode("utf-8")).hexdigest()), f)
@@ -337,22 +342,20 @@ class Iterator(iterator.Iterator):
   def combine(cls, bucket_name, keys, temp_name, params):
     iterators = []
     count = 0
-    s3 = boto3.resource("s3")
-    metadata = {}
-
     for key in keys:
-      obj = s3.Object(bucket_name, key)
-      iterator = Iterator(obj, params["chunk_size"], {})
+      obj = params["s3"].Object(bucket_name, key)
+      iterator = Iterator(obj, params["chunk_size"], s3=params["s3"])
       iterators.append(iterator)
       count += iterator.getCount()
 
-    metadata["count"] = str(count)
+    metadata = {"count": str(count), "chromatogram_start_index": "-1", "chromatogram_end_index": "-1"}
 
     with open(temp_name, "w+") as f:
       content = util.read(obj, 0, int(obj.metadata["header_end_index"]))
       f.write(content)
       metadata["header_start_index"] = str(0)
-      metadata["header_end_index"] = str(len(content))
+      metadata["header_end_index"] = str(len(content) - 1)
+      metadata["spectra_start_index"] = str(len(content))
       offset = len(content)
       offsets = []
       index = 0
@@ -372,20 +375,22 @@ class Iterator(iterator.Iterator):
             index += 1
           f.write(content)
 
+      content = ""
+      metadata["spectra_end_index"] = str(offset)
+      metadata["footer_start_index"] = str(offset)
       content = "</spectrumList></run></mzML>\n"
-      metadata["footer_start_index"] = str(len(content))
       list_offset = len(content) + offset
-      content += '<indexList count="2">\n'
+      content += '<indexList count="1">\n'
       content += '<index name="spectrum">\n'
-      for offset in offsets:
-        content += '<offset idRef="controllerType=0 controllerNumber=1 scan={0:s}">{1:d}</offset>\n'.format(offset[0], offset[1])
+      for o in offsets:
+        content += '<offset idRef="controllerType=0 controllerNumber=1 scan={0:s}">{1:d}</offset>\n'.format(o[0], o[1])
       content += "</index>\n"
       content += "</indexList>\n"
-      metadata["index_list_offset"] = str(len(content))
+      metadata["index_list_offset"] = str(list_offset)
       content += "<indexListOffset>{0:d}</indexListOffset>\n".format(list_offset)
       content += "<fileChecksum>"
       content += "</fileChecksum>\n</indexedmzML>"
-      metadata["footer_end_index"] = str(len(content))
+      metadata["footer_end_index"] = str(offset + len(content))
       f.write(content)
 
     return metadata

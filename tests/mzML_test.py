@@ -29,14 +29,53 @@ INPUT = """<?xml version="1.0" encoding="utf-8"?>
       </spectrumList>
     </run>
   </mzML>
+  <indexList count="1">
+    <index name="spectrum">
+      <offset idRef="controllerType=0 controllerNumber=1 scan=1">123</offset>
+      <offset idRef="controllerType=0 controllerNumber=1 scan=2">267</offset>
+      <offset idRef="controllerType=0 controllerNumber=1 scan=3">433</offset>
+    </index>
+  </indexList>
+  <indexListOffset>659</indexListOffset>
+</indexedmzML>
+"""
+
+CHROMATOGRAM_INPUT = """<?xml version="1.0" encoding="utf-8"?>
+<indexedmzML>
+  <mzML>
+    <run id="run_id">
+      <spectrumList count="3">
+        <spectrum id="controllerType=0 controllerNumber=1 scan=1" index="0">
+          <cvParam name="ms level" value="2"/>
+        </spectrum>
+        <spectrum id="controllerType=0 controllerNumber=1 scan=2" index="1">
+          <cvParam name="ms level" value="2"/>
+          <cvParam />
+        </spectrum>
+        <spectrum id="controllerType=0 controllerNumber=1 scan=3" index="2">
+          <cvParam name="ms level" value="2"/>
+          <cvParam />
+          <cvParam />
+        </spectrum>
+      </spectrumList>
+      <chromotogramList count="1" defaultDataProcessingRef="pwiz_Reader_Thermo_conversion">
+        <chromatogram index="0" id="TIC" defaultArrayLength=24426">
+          <cvParam />
+        </chromatogram>
+      </chromotogramList>
+    </run>
+  </mzML>
   <indexList count="2">
     <index name="spectrum">
       <offset idRef="controllerType=0 controllerNumber=1 scan=1">123</offset>
       <offset idRef="controllerType=0 controllerNumber=1 scan=2">267</offset>
-      <offset idRef="controllerType=0 controllerNumber=1 scan=3">434</offset>
+      <offset idRef="controllerType=0 controllerNumber=1 scan=3">433</offset>
     </index>
+    <index name="chromatogram">
+      <offset idRef="TIC">641</offset>
+    <index>
   </indexList>
-  <indexListOffset>659</indexListOffset>
+  <indexListOffset>890</indexListOffset>
 </indexedmzML>
 """
 
@@ -44,13 +83,38 @@ bucket = Bucket("bucket", [])
 s3 = S3([bucket])
 
 class IteratorMethods(unittest.TestCase):
+  def test_metadata(self):
+    obj = Object("0/123.4-13/1/1-1-1-test.mzML", INPUT)
+    it = mzML.Iterator(obj, 200, s3=s3)
+    self.assertEqual(it.header_start_index, 0)
+    self.assertEqual(it.header_end_index, 122)
+    self.assertEqual(it.spectra_start_index, 123)
+    self.assertEqual(it.spectra_end_index, 619)
+    self.assertEqual(it.chromatogram_start_index, -1)
+    self.assertEqual(it.chromatogram_end_index, -1)
+    self.assertEqual(it.index_list_offset, 659)
+    self.assertEqual(it.footer_start_index, 619)
+    self.assertEqual(it.footer_end_index, len(obj.content))
+
+    obj = Object("0/123.4-13/1/1-1-1-ctest.mzML", CHROMATOGRAM_INPUT)
+    it = mzML.Iterator(obj, 200, s3=s3)
+    self.assertEqual(it.header_start_index, 0)
+    self.assertEqual(it.header_end_index, 122)
+    self.assertEqual(it.spectra_start_index, 123)
+    self.assertEqual(it.spectra_end_index, 619)
+    self.assertEqual(it.chromatogram_start_index, 641)
+    self.assertEqual(it.chromatogram_end_index, 847)
+    self.assertEqual(it.index_list_offset, 890)
+    self.assertEqual(it.footer_start_index, 619)
+    self.assertEqual(it.footer_end_index, len(obj.content))
+
   def test_next_offsets(self):
     obj = Object("0/123.4-13/1/1-1-1-test.mzML", INPUT)
     it = mzML.Iterator(obj, 200, s3=s3)
     [offsets, more] = it.nextOffsets()
     self.assertFalse(more)
     self.assertEqual(offsets["offsets"][0], 123)
-    self.assertEqual(offsets["offsets"][1], 647)
+    self.assertEqual(offsets["offsets"][1], 618)
 
   def test_next(self):
     obj = Object("0/123.4-13/1/1-1-1-test.mzML", INPUT)
@@ -71,7 +135,7 @@ class IteratorMethods(unittest.TestCase):
     [o, more] = it.nextOffsets()
     self.assertFalse(more)
     self.assertEqual(o["offsets"][0], 123)
-    self.assertEqual(o["offsets"][1], 433)
+    self.assertEqual(o["offsets"][1], 618)
 
     # One spectra starts in range
     offsets = {"offsets": [120, 250]}
@@ -88,6 +152,38 @@ class IteratorMethods(unittest.TestCase):
     self.assertFalse(more)
     self.assertEqual(o["offsets"][0], 123)
     self.assertEqual(o["offsets"][1], 266)
+
+  def test_combine(self):
+    metadata = {
+      "header_start_index": "0",
+      "header_end_index": "122",
+      "spectra_start_index": "123",
+      "spectra_end_index": "619",
+      "chromatogram_start_index": "641",
+      "chromatogram_end_index": "847",
+      "index_list_offset": "890",
+      "footer_start_index": "619",
+      "footer_end_index": "1340",
+    }
+    obj1 = Object("0/123.4-13/1/1-1-2-test.mzML", CHROMATOGRAM_INPUT, metadata=metadata)
+    obj2 = Object("0/123.4-13/1/2-1-2-test.mzML", CHROMATOGRAM_INPUT, metadata=metadata)
+    bucket = Bucket("bucket", [obj1, obj2])
+    s3 = S3([bucket])
+    params = {
+      "chunk_size": 100,
+      "s3": s3,
+    }
+    metadata = mzML.Iterator.combine(obj1.bucket_name, [obj1.key, obj2.key], "/tmp/test_combine", params)
+    self.assertEqual(metadata["count"], "6")
+    self.assertEqual(metadata["header_start_index"], "0")
+    self.assertEqual(metadata["header_end_index"], "122")
+    self.assertEqual(metadata["spectra_start_index"], "123")
+    self.assertEqual(metadata["spectra_end_index"], "1107")
+    self.assertEqual(metadata["chromatogram_start_index"], "-1")
+    self.assertEqual(metadata["chromatogram_end_index"], "-1")
+    self.assertEqual(metadata["index_list_offset"], "1136")
+    self.assertEqual(metadata["footer_start_index"], "1107")
+    self.assertEqual(metadata["footer_end_index"], "1966")
 
 
 if __name__ == "__main__":

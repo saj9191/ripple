@@ -1,6 +1,3 @@
-import botocore
-
-
 def equal_lists(list1, list2):
   s1 = set(list1)
   s2 = set(list2)
@@ -50,11 +47,11 @@ class Objects:
 
 
 class Object:
-  def __init__(self, key, content="", last_modified=0, bucket_name="bucket"):
+  def __init__(self, key, content="", last_modified=0, bucket_name="bucket", metadata={}):
     self.bucket_name = bucket_name
     self.key = key
     self.content = content
-    self.metadata = {}
+    self.metadata = metadata
     self.last_modified = last_modified
     self.content_length = len(content)
 
