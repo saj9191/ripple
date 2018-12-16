@@ -5,7 +5,7 @@ import util
 
 def initiate(bucket_name, key, input_format, output_format, offsets, params):
   util.print_read(input_format, key, params)
-  input_format["prefix"] = params["input_key_prefix"]
+  input_format["prefix"] = params["input_prefix"]
   prefix = util.key_prefix(util.file_name(input_format))
   objects = util.get_objects(params["bucket"], prefix, params)
   assert(len(objects) == 1)

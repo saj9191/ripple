@@ -209,14 +209,19 @@ def add_sort_pipeline(sort_params):
 
 def process_functions(params):
   pipeline = params["pipeline"]
+  variable_to_step = { "input": 0 }
   i = 0
   while i < len(pipeline):
     name = pipeline[i]["name"]
+    fn_params = params["functions"][name]
+    if "output" in fn_params:
+      variable_to_step[fn_params["output"]] = i + 1
+    if "input" in fn_params:
+      fn_params["input_prefix"] = variable_to_step[fn_params["input"]]
     if params["functions"][name]["file"] == "sort":
-      sort_params = params["functions"][name]
       del params["functions"][name]
 
-      sort_functions, sort_pipeline = add_sort_pipeline(sort_params)
+      sort_functions, sort_pipeline = add_sort_pipeline(fn_params)
       pipeline = pipeline[:i] + sort_pipeline + pipeline[i+1:]
       params["functions"] = { **params["functions"], **sort_functions }
       i += len(sort_pipeline)

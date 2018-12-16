@@ -5,7 +5,7 @@ import util
 
 def run(key, params, input_format, output_format, offsets):
   s3 = boto3.resource("s3")
-  input_format["prefix"] = params["match_prefix"]
+  input_format["prefix"] = params["input_prefix"]
   prefix = util.key_prefix(util.file_name(input_format))
   objects = util.get_objects(params["bucket"], prefix, params)
   assert(len(objects) == 1)
