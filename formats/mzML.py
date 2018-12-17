@@ -16,7 +16,7 @@ class Iterator(iterator.Iterator):
   CHROMATOGRAM_OFFSET_REGEX = re.compile('<offset idRef="TIC">(\d+)</offset>')
   CHROMATOGRAM_LIST_CLOSE_TAG = "</chromotogramList>"
   INDEX_LIST_OFFSET_REGEX = re.compile("<indexListOffset>(\d+)</indexListOffset>")
-  OFFSET_REGEX = re.compile("<offset[^>]*>(\d+)</offset>")
+  OFFSET_REGEX = re.compile("<offset[^>]*scan=[^>]*>(\d+)</offset>")
   SPECTRUM_LIST_COUNT_REGEX = re.compile('<spectrumList [\s\S]*count="(\d+)"')
   SPECTRUM_LIST_CLOSE_TAG = "</spectrumList>"
   SPECTRUM_CLOSE_TAG = "</spectrum>"
