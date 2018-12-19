@@ -9,7 +9,6 @@ currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentfram
 parentdir = os.path.dirname(currentdir)
 sys.path.insert(0, parentdir)
 import clear
-import setup
 import statistics
 import upload
 import util
@@ -49,6 +48,8 @@ def run(folder, top, pfile, is_medic):
   sample_bucket_name = "tide-source-data"
   sample_bucket = s3.Bucket(sample_bucket_name)
   objects = list(sample_bucket.objects.filter(Prefix=folder))
+  objects = list(filter(lambda obj: obj.key.endswith(".mzML"), objects))
+  objects.reverse()
 
   data_folder = "scripts/data_counts"
   if not os.path.isdir(data_folder):
@@ -61,61 +62,54 @@ def run(folder, top, pfile, is_medic):
   if not os.path.isdir(top_folder):
     os.mkdir(top_folder)
 
-  file_to_results = {}
-  file_to_costs = {}
+  sorted_fastas = None
 
   prefix = "5/" if is_medic else "4/"
-
   for obj in objects:
     key = obj.key
+    if "/" in key:
+      parts = key.split("/")
+      folder = top_folder + "/" + "/".join(parts[:-1])
+      file_key = parts[-1]
+
+      if not os.path.isdir(folder):
+        os.mkdir(folder)
+    else:
+      file_key = key
+      folder = top_folder
+
+    if os.path.isfile(folder + "/" + file_key):
+      continue
+
     s3_key, _, _ = upload.upload(params["bucket"], key, sample_bucket_name)
     token = s3_key.split("/")[1]
     params["key"] = s3_key
     species_to_score = print_species.run(params["bucket"], prefix, token)
-    file_to_results[key] = species_to_score
-    [costs, _] = statistics.statistics(params["log"], token=token, prefix=None, params=params, show=False)
-    file_to_costs[key] = costs
+    if sorted_fastas is None:
+      fastas = list(species_to_score.keys())
+      fastas.sort()
+      sorted_fastas = []
+      for specie in species:
+        for fasta in fastas:
+          if fasta.endswith(specie):
+            sorted_fastas.append(fasta)
+
+    [_, costs] = statistics.statistics(params["log"], token=token, prefix=None, params=params, show=False)
+
+    print(folder + "/" + file_key)
+    with open(folder + "/" + file_key, "w+") as f:
+      f.write("Cost,{0:f}\n".format(costs[-1]))
+      # Fasta scores
+      for fasta in sorted_fastas:
+        f.write(fasta)
+        if fasta in species_to_score:
+          v = species_to_score[fasta]
+        else:
+          v = 0
+        f.write(",{0:d}\n".format(v))
+
     clear.clear(params["bucket"], token, None)
     clear.clear(params["log"], token, None)
-
-  keys = list(file_to_results.keys())
-  keys.sort()
-
-  bucket_file = top_folder + "/" + folder + ".csv"
-
-  f = open(bucket_file, "w+")
-  # Header line
-  for key in keys:
-    f.write(",{0:s}".format(key))
-  f.write("\n")
-
-  # Cost line
-  f.write("Cost")
-  for key in keys:
-    f.write(",{0:f}".format(file_to_costs[key][-1]))
-  f.write("\n")
-
-  fastas = list(file_to_results[keys[0]].keys())
-  fastas.sort()
-
-  sorted_fastas = []
-  for specie in species:
-    for fasta in fastas:
-      if fasta.endswith(specie):
-        sorted_fastas.append(fasta)
-
-  # Fasta scores
-  for fasta in sorted_fastas:
-    f.write(fasta)
-    for key in keys:
-      if key not in file_to_results or fasta not in file_to_results[key]:
-        v = 0
-      else:
-        v = file_to_results[key][fasta]
-      f.write(",{0:d}".format(v))
-    f.write("\n")
-
-  f.close()
 
 
 def main():

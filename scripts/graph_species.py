@@ -41,8 +41,8 @@ def calculate_score(file, specie, threshold):
       unknown_count += 1
     elif top_specie == specie:
       correct_count += 1
-    else:
-      print("top", top_specie, "expected", specie, file)
+#    else:
+#      print("top", top_specie, "expected", specie, file)
 
   return [correct_count, unknown_count, total_count, file_count, cost]
 
@@ -68,25 +68,32 @@ def calculate_scores(threshold):
     "PXD005323": "normalHuman",
     "PXD005709": "normalHuman",
     "PXD009227": "phosphorylationHuman",
+    "PXD001250-Mann_Mouse_Brain_Proteome": "normalMouse",
+    "PXD002801-TMT10": "tmt6Mouse",
+    "PXD003177": "itraq8Mouse",
+    "PXD009220": "itraq8Mouse",
+    "PXD009240": "phosphorylationFruitFly"
   }
 
   folders = list(datasets.keys())
   costs = { "medic_": 0.0, "": 0.0 }
   count = 0
-  for folder in folders:
-    for top in tops:
-      for medic in ["medic_", ""]:
-        token = "{0:s}{1:d}".format(medic, top)
-        file = "data_counts/{0:s}/{1:s}.csv".format(token, folder)
-        if os.path.isfile(file):
-          if token not in scores:
-            scores[token] = [0, 0, 0]
-
-          counts = calculate_score(file, datasets[folder], threshold * top)
-          count += counts[-2]
-          costs[medic] += counts[-1]
-          for i in range(len(counts[:3])):
-            scores[token][i] += counts[i]
+  for top in tops:
+    for medic in ["medic_", ""]:
+      token = "{0:s}{1:d}".format(medic, top)
+      if token not in scores:
+        scores[token] = [0, 0, 0]
+      for folder in folders:
+        if os.path.isdir("data_counts/{0:s}/{1:s}".format(token, folder)):
+          for root, dirs, files in os.walk("data_counts/{0:s}".format(token)):
+            if len(files) > 0:
+              for file in files:
+                csv_file = "{0:s}/{1:s}".format(root, file)
+                counts = calculate_score(csv_file, datasets[folder], threshold * top)
+                count += counts[-2]
+                costs[medic] += counts[-1]
+                for i in range(len(counts[:3])):
+                  scores[token][i] += counts[i]
         else:
           print("Cannot find top", token, "for", folder)
           pass
@@ -181,7 +188,7 @@ def graph_thresholds():
 
 
 def main():
-  graph_thresholds()
+  #graph_thresholds()
 
   threshold = 0.25
   [correct, unknown, wrong] = calculate_scores(threshold)
