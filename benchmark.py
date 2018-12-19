@@ -4,9 +4,11 @@ import clear
 import json
 import os
 import paramiko
+import pathlib
 import re
 import scheduler
 import setup
+import statistics
 import subprocess
 import time
 import upload
@@ -306,24 +308,13 @@ def create_dependency_chain(stats, iterations, params):
 
 
 def run(params, thread_id):
-  if not os.path.isdir("results"):
-    os.mkdir("results")
-  if not os.path.isdir("results/{0:s}".format(params["folder"])):
-    os.mkdir("results/{0:s}".format(params["folder"]))
-
-
-  if False: # os.path.isfile(FAILURE_FILE):
-    params = json.loads(open(FAILURE_FILE).read())
-    params["upload"] = False
-    params["setup"] = False
-  else:
-    params["upload"] = True
+  if "output_folder" in params:
+    pathlib.Path(params["output_folder"]).mkdir(parents=True, exist_ok=True)
 
   if params["setup"]:
     print_run_information()
 
-  if params["upload"]:
-    process_params(params)
+  process_params(params)
 
   if params["model"] == "lambda" and params["setup"]:
     setup.setup(params)
@@ -419,65 +410,12 @@ def calculate_cost(duration, memory_size):
   return int(duration / 100) * millisecond_cost
 
 
-def parse(stats, params):
-  count = 0
-  messages = []
-  s3 = util.s3(params)
-  log_bucket = s3.Bucket(params["log"])
-  data_bucket = s3.Bucket(params["bucket"])
-  for i in range(len(params["pipeline"])):
-    done = False
-    while not done:
-      try:
-        messages = []
-        prefix = "{0:d}/{1:f}-{2:d}".format(i + 1, params["now"], params["nonce"])
-        for obj in log_bucket.objects.filter(Prefix=prefix):
-          o = s3.Object(params["log"], obj.key)
-          messages.append(o.get()["Body"].read().decode("utf-8"))
-          count += 1
-          if count % 1000 == 0:
-            print("Processed", count)
-        done = True
-      except Exception as e:
-        print(log_bucket, data_bucket)
-        print(e)
-        done = False
-
-    step = params["pipeline"][i]
-    stats.append({
-      "name": step["name"],
-      "messages": messages
-    })
-
-
-def parse_logs(params, upload_timestamp, upload_duration, total_duration):
-  print("Parsing logs")
-  stats = []
-  stats.append(load_stats(upload_duration))
-  parse(stats, params)
-
-  stats.append({
-    "name": "total",
-    "duration": total_duration,
-    "messages": [],
-  })
-  return stats
-
-
 def lambda_benchmark(params, thread_id):
+  s3_key, upload_timestamp, upload_duration = upload.upload(params["bucket"], params["input_name"], params["sample_bucket"])
   start_time = time.time()
-  if params["upload"]:
-    s3_key, upload_timestamp, upload_duration =  upload.upload(params["bucket"], params["input_name"], params["sample_bucket"])
-    params["key"] = s3_key
-    params["upload_timestamp"] = upload_timestamp
-    params["upload_duration"] = upload_duration
-  else:
-    print("Restarting failure")
-    upload_timestamp = params["upload_timestamp"]
-    upload_duration = params["upload_duration"]
-
-  with open(FAILURE_FILE, "w+") as f:
-    f.write(json.dumps(params, indent=4, sort_keys=True))
+  params["key"] = s3_key
+  params["upload_timestamp"] = upload_timestamp
+  params["upload_duration"] = upload_duration
 
   s = scheduler.Scheduler("fifo", params)
   queue = s.setup()
@@ -489,7 +427,8 @@ def lambda_benchmark(params, thread_id):
   results = [upload_timestamp, total_duration]
 
   if params["stats"]:
-    stats = parse_logs(params, upload_timestamp, upload_duration, total_duration)
+    token = s3_key.split("/")[1]
+    [stats, _] = statistics.statistics(params["log"], token, None, params)
     results = [stats] + results
   return [False, results]
 
@@ -765,11 +704,11 @@ def ec2_benchmark(params):
 def main():
   parser = argparse.ArgumentParser()
   parser.add_argument('--parameters', type=str, required=True, help="File containing parameters")
-  parser.add_argument('--folder', type=str, help="Folder to store results in")
+  parser.add_argument('--output_folder', type=str, help="Folder to store results in")
   args = parser.parse_args()
   params = json.loads(open(args.parameters).read())
-  if len(args.folder) > 0:
-    params["folder"] = args.folder
+  if len(args.output_folder) > 0:
+    params["output_folder"] = args.output_folder
   [access_key, secret_key] = util.get_credentials(params["credential_profile"])
   params["access_key"] = access_key
   params["secret_key"] = secret_key

@@ -7,18 +7,22 @@ import util
 
 
 def process_objects(s3, bucket_name, objects, params):
-  messages = []
   costs = {-1: 0}
   durations = {-1: [sys.maxsize, 0]}
   memory_parameters = json.loads(open("json/memory.json").read())
+  statistics = []
+
+  for stage in params["pipeline"]:
+    statistics.append({"name": stage["name"], "messages": []})
 
   for objSum in objects:
     obj_format = util.parse_file_name(objSum.key)
     obj = s3.Object(bucket_name, objSum.key)
     body = json.loads(obj.get()["Body"].read().decode("utf-8"))
     duration = body["duration"]
+    stage = obj_format["prefix"] - 1
 
-    for prefix in [-1, obj_format["prefix"]]:
+    for prefix in [-1, stage]:
       if prefix not in costs:
         costs[prefix] = 0
         durations[prefix] = [sys.maxsize, 0]
@@ -33,8 +37,9 @@ def process_objects(s3, bucket_name, objects, params):
         durations[p][0] = min(durations[p][0], start_time)
         durations[p][1] = max(durations[p][1], end_time)
 
-    messages.append({"key": objSum.key, "body": body})
-  return [messages, costs, durations]
+    statistics[stage]["messages"].append(body)
+
+  return [statistics, costs, durations]
 
 
 def statistics(bucket_name, token, prefix, params, show=False):
@@ -50,21 +55,21 @@ def statistics(bucket_name, token, prefix, params, show=False):
   else:
     objects = list(bucket.objects.filter(Prefix=str(prefix) + "/" + token))
 
-  [messages, costs, durations] = process_objects(s3, bucket_name, objects, params)
+  [statistics, costs, durations] = process_objects(s3, bucket_name, objects, params)
 
   print("Section Costs")
   for prefix in costs.keys():
     if prefix != -1:
-      print(prefix, costs[prefix])
+        print(params["pipeline"][prefix]["name"], costs[prefix])
 
   print("Total Cost", costs[-1])
   print("Section Durations")
   for prefix in durations.keys():
     if prefix != -1:
-      print(prefix, durations[prefix][1] - durations[prefix][0], "seconds")
+      print(params["pipeline"][prefix]["name"], durations[prefix][1] - durations[prefix][0], "seconds")
 
   print("Total Duration", durations[-1][1] - durations[-1][0], "secionds")
-  return [costs, messages]
+  return [statistics, costs]
 
 
 def main():
