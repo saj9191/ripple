@@ -3,7 +3,7 @@ import re
 import subprocess
 import util
 
-ITRAQ = re.compile("INFO: iTRAQ: detected")
+ITRAQ = re.compile("INFO: iTRAQ: ([0-9]+)-plex reporter ions detected")
 SILAC = re.compile("INFO: SILAC: ([0-9]+)Da separation detected.")
 PHOSPHORYLATION = re.compile("INFO: Phosphorylation: detected")
 TMT = re.compile("INFO: TMT: ([0-9]+)-plex reporter ions detected")
@@ -39,7 +39,7 @@ def run(file, params, input_format, output_format, offsets):
       map_bucket = "maccoss-tmt-fasta"
   elif itraq:
     if phos:
-      map_bucket = "maccoss-tmt-itraq-fasta"
+      map_bucket = "maccoss-itraq-phosphorylation-fasta"
     else:
       map_bucket = "maccoss-itraq-fasta"
   elif phos:
