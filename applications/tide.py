@@ -43,7 +43,11 @@ def run(file, params, input_format, output_format, offsets):
   ]
 
   command = "cd /tmp; ./crux tide-search {0:s} fasta.index {1:s}".format(file, " ".join(arguments))
-  subprocess.check_output(command, stderr=subprocess.STDOUT, shell=True)
+  try:
+    subprocess.check_output(command, stderr=subprocess.STDOUT, shell=True)
+  except subprocess.CalledProcessError as exc:
+    print("Status : FAIL", exc.returncode, exc.output)
+    raise exc
   input_file = "{0:s}/tide-search.txt".format(output_dir)
   output_format["suffix"] = species
   output_format["ext"] = "txt"
