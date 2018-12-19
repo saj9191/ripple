@@ -62,7 +62,7 @@ def create_parameter_files(zip_directory, function_name, params):
   for i in range(len(params["pipeline"])):
     pparams = params["pipeline"][i]
     if pparams["name"] == function_name:
-      p = {**pparams, **params["functions"][function_name]}
+      p = {**params["functions"][function_name], **pparams}
       for value in ["timeout", "num_bins", "bucket", "storage_class", "log", "scheduler"]:
         if value in params:
           p[value] = params[value]
