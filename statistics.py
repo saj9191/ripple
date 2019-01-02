@@ -5,7 +5,6 @@ import setup
 import sys
 import util
 
-
 def process_objects(s3, bucket_name, objects, params):
   costs = {-1: 0}
   durations = {-1: [sys.maxsize, 0]}
@@ -42,7 +41,14 @@ def process_objects(s3, bucket_name, objects, params):
   return [statistics, costs, durations]
 
 
-def statistics(bucket_name, token, prefix, params, show=False):
+def record(output, f):
+  if f:
+    f.write(output + "\n")
+  else:
+    print(output)
+
+
+def statistics(bucket_name, token, prefix, params, output_file):
   s3 = boto3.resource("s3")
   bucket = s3.Bucket(bucket_name)
   if prefix is None and token is None:
@@ -57,18 +63,23 @@ def statistics(bucket_name, token, prefix, params, show=False):
 
   [statistics, costs, durations] = process_objects(s3, bucket_name, objects, params)
 
-  print("Section Costs")
-  for prefix in costs.keys():
-    if prefix != -1:
-        print(params["pipeline"][prefix]["name"], costs[prefix])
+#  print("Section Costs")
+#  for prefix in costs.keys():
+#    if prefix != -1:
+#      print(params["pipeline"][prefix]["name"] + " " + str(costs[prefix]))
 
-  print("Total Cost", costs[-1])
-  print("Section Durations")
-  for prefix in durations.keys():
-    if prefix != -1:
-      print(params["pipeline"][prefix]["name"], durations[prefix][1] - durations[prefix][0], "seconds")
+  print("Total Cost " + str(costs[-1]))
+#  print("Section Durations")
+ # for prefix in durations.keys():
+ #   if prefix != -1:
+ #     print(params["pipeline"][prefix]["name"] + " " + str(durations[prefix][1] - durations[prefix][0]) + " seconds")
 
-  print("Total Duration", durations[-1][1] - durations[-1][0], "secionds")
+  print("Total Duration " + str(durations[-1][1] - durations[-1][0]) + " seconds")
+
+  if output_file:
+    with open(output_file, "w+") as f:
+      f.write(json.dumps({"stats": statistics}, indent=4, sort_keys=True))
+
   return [statistics, costs]
 
 
@@ -78,10 +89,11 @@ def main():
   parser.add_argument("--token", type=str, default=None, help="Only delete objects with the specified timestamp / nonce pair")
   parser.add_argument("--prefix", type=int, default=None, help="Only delete objects with the specified prefix")
   parser.add_argument("--parameters", type=str, help="JSON file containing application setup")
+  parser.add_argument("--output_file", type=str, help="Output file to record statistics")
   args = parser.parse_args()
   params = json.loads(open(args.parameters).read())
   setup.process_functions(params)
-  statistics(args.bucket_name, args.token, args.prefix, params, show=False)
+  statistics(args.bucket_name, args.token, args.prefix, params, args.output_file)
 
 
 if __name__ == "__main__":
