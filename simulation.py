@@ -1,7 +1,6 @@
 import argparse
 import benchmark
 import boto3
-import os
 from dateutil import parser
 import json
 import numpy as np
@@ -12,6 +11,7 @@ import setup
 import scheduler
 import threading
 import time
+import upload
 import util
 
 
@@ -23,88 +23,36 @@ lock = threading.Lock()
 
 
 class Request(threading.Thread):
-  def __init__(self, thread_id, time, request_queue, params, client, scheduler_queue, task, wait=False):
+  def __init__(self, thread_id, date_time, request_queue, params):
     super(Request, self).__init__()
-    self.time = time
-    self.params = dict(params)
-    self.thread_id = thread_id
-    self.duration = 0
-    self.upload_duration = 0
-    self.failed_attempts = 0
-    self.alive = True
-    self.params["input_bucket"] = self.params["bucket"]
-    self.client = client
-    self.wait = wait
+    self.date_time = date_time
+    self.start_time = time.time()
+    self.params = params
     self.request_queue = request_queue
-    self.scheduler_queue = scheduler_queue
-    self.task = task
+    self.thread_id = thread_id
 
   def run(self):
-    print("Thread", self.thread_id, "Sleeping for", self.time)
-    time.sleep(self.time)
-    if self.params["model"] == "ec2":
-      benchmark.process_params(self.params)
-      benchmark.process_iteration_params(self.params, 1)
-      benchmark.upload_input(self.params)[1]
-      # stats = benchmark.run_ec2_script(self.client, self.params)
-    else:
-      while not self.request_queue.empty():
-        try:
-          item = self.request_queue.get(timeout=0)
-          if self.task == "clear" or self.task == "parse":
-            parts = item.split("-")
-            benchmark.process_params(self.params)
-            benchmark.process_iteration_params(self.params, 1)
-            self.params["now"] = float(parts[0])
-            self.params["nonce"] = int(parts[1])
-            if self.task == "clear":
-              print("Thread {0:d}: Clearing logs".format(self.thread_id))
-              benchmark.clear_buckets(self.params)
-            else:
-              print("Thread {0:d}: Parsing logs".format(self.thread_id))
-              stats = benchmark.parse_logs(self.params, self.params["now"], 0, 0)
-              dir_path = "results/{0:s}/{1:s}/{2:f}-{3:d}".format(self.params["folder"], self.params["input_name"], self.params["now"], self.params["nonce"])
-              os.makedirs(dir_path)
-              with open("{0:s}/stats".format(dir_path), "w+") as f:
-                f.write(json.dumps({"stats": stats}, indent=4, sort_keys=True))
-          else:
-            self.params["input_name"] = item
-            self.params["input_bucket"] = self.params["bucket"]
-            self.params["stats"] = False
-            if self.wait:
-              benchmark.run(self.params, self.thread_id)
-            else:
-              benchmark.process_params(self.params)
-              benchmark.process_iteration_params(self.params, 1)
-              print("Thread {0:d}: Processing file {1:s}".format(self.thread_id, self.params["input_name"]))
-              [upload_timestamp, upload_duration] = benchmark.upload_input(self.params, self.thread_id)
-              payload = scheduler.payload(self.params["bucket"], self.params["key"])
-              self.scheduler_queue.put(scheduler.Item("fifo", upload_timestamp, 0, self.thread_id, payload))
-        except queue.Empty as e:
-          pass
-      # payload = scheduler.payload(self.params["bucket"], self.params["key"])
-      # self.queue.put(scheduler.Item(self.scheduler, util.parse_file_name(self.params["key"])["timestamp"], 0, self.thread_id, payload))
-      # [upload_duration, duration, failed_attempts] = benchmark.run(self.params, self.thread_id)
-      # self.upload_duration = upload_duration
-      # self.duration = duration
-      # self.failed_attempts = failed_attempts
-      # print("Thread {0:d}: Done in {1:f}".format(self.thread_id, duration))
-      # msg = "Thread {0:d}: Upload Duration {1:f}. Duration {2:f}. Failed Attempts {3:f}"
-      # msg = msg.format(self.thread_id, self.upload_duration, self.duration, self.failed_attempts)
-      # print(msg)
-      # stats = benchmark.parse_logs(self.params, self.params["now"] * 1000, self.upload_duration, self.duration)
-
-      # dir_path = "results/{0:s}/{1:f}-{2:d}".format(self.params["folder"], self.params["now"], self.params["nonce"])
-      # os.makedirs(dir_path)
-      # with open("{0:s}/stats".format(dir_path), "w+") as f:
-      #   f.write(json.dumps({"stats": stats}, indent=4, sort_keys=True))
-      # benchmark.clear_buckets(self.params)
-
-      # self.alive = False
+    while not self.request_queue.empty():
+      try:
+        print("Thread", self.thread_id, "Number of requests remaining", self.request_queue.qsize())
+        [file_name, request_date_time] = self.request_queue.get(timeout=0)
+        request_delta = (request_date_time - self.date_time).total_seconds()
+        assert(request_delta >= 0)
+        now = time.time()
+        time_delta = now - self.start_time
+        sleep = max(0, request_delta - time_delta)
+        print("Thread", self.thread_id, "sleeping for", sleep, "seconds")
+        print("Thread", self.thread_id, "start_date_time", self.date_time, "request_date_time", request_date_time, request_delta)
+        print("Thread", self.thread_id, "start_time", self.start_time, "time", now, "time_delta", time_delta)
+        time.sleep(sleep)
+        upload.upload(self.params["bucket"], file_name, self.params["sample_bucket"])
+      except queue.Empty as e:
+        pass
 
 
-def parse_csv(file_name, num_requests):
-  datetimes = {}
+def parse_csv(file_name):
+  dates = []
+  counts = {}
   f = open(file_name)
   lines = f.readlines()[1:]
   for line in lines:
@@ -114,14 +62,26 @@ def parse_csv(file_name, num_requests):
     if len(parts) != 2:
       continue
     date = parser.parse(dt)
+    s = "{0:d}-{1:02d}-{2:02d}".format(date.year, date.month, date.day)
+    if "2017-09-25" <= s and s <= "2017-10-21":
+      dates.append(date)
+    if s not in counts:
+      counts[s] = 0
+    counts[s] += 1
 
-    if parts[0] not in datetimes:
-      datetimes[parts[0]] = []
-    datetimes[parts[0]].append(date.hour * 60 * 60 + date.minute * 60 + date.second)
+  #keys = list(counts.keys())
+  #keys.sort()
+  #for key in keys:
+  #  print(key, counts[key])
+  #return counts
+  return dates
+    #if parts[0] not in datetimes:
+    #  datetimes[parts[0]] = []
+    #datetimes[parts[0]].append(date.hour * 60 * 60 + date.minute * 60 + date.second)
 
-  for date in datetimes:
-    if len(datetimes[date]) == num_requests:
-      return datetimes[date]
+  #for date in datetimes:
+  #  if len(datetimes[date]) == num_requests:
+  #    return datetimes[date]
 
 
 def create_request_distribution(distribution, args):
@@ -220,7 +180,7 @@ def deadline(params):
 #  s.wait(deadline_params["num_output"])
 
 
-def run(args, params):
+def run1(args, params):
   session = boto3.Session(
            aws_access_key_id=params["access_key"],
            aws_secret_access_key=params["secret_key"],
@@ -260,15 +220,8 @@ def run(args, params):
   request_queue = queue.Queue()
   num_requests = len(requests)
 
-  print("Task", task)
-  if task == "clear" or task == "parse":
-    objects = list(util.s3(params).Bucket(params["log"]).objects.filter(Prefix="1/"))
-    print("num objects", len(objects))
-    for obj in objects:
-      request_queue.put(obj.key.split("/")[1])
-  else:
-    for i in range(len(requests)):
-      request_queue.put(file_names[i % len(file_names)])
+  for i in range(len(requests)):
+    request_queue.put(file_names[i % len(file_names)])
 
   num_threads = 300
   for i in range(num_threads):
@@ -296,16 +249,37 @@ def run(args, params):
   #  benchmark.terminate_instance(instance, client, params)
 
 
+def run(dates, params):
+  threads = []
+  request_queue = queue.Queue()
+  s3 = boto3.resource("s3")
+  file_names = list(map(lambda o: o.key, s3.Bucket(params["sample_bucket"]).objects.filter(Prefix="ALS_CSF_Biomarker_Study-1530309740015")))
+
+  for i in range(len(dates)):
+    request_queue.put([file_names[i % len(file_names)], dates[i]])
+
+  num_threads = 50
+  for i in range(num_threads):
+    threads.append(Request(i, dates[0], request_queue, params))
+    threads[-1].start()
+
+  for thread in threads:
+    thread.join()
+
+
 def main():
   parser = argparse.ArgumentParser()
   parser.add_argument("--parameters", type=str, required=True, help="File containing parameters")
+  args = parser.parse_args()
+  params = json.loads(open(args.parameters).read())
+  dates = parse_csv("ChorusAccessLog.csv")
+  run(dates, params)
+  return
   parser.add_argument("--distribution", type=str, help="Distribution to use")
   parser.add_argument("--concurrency", type=int, help="Number of concurrent instances to run")
   parser.add_argument('--folder', type=str, help="Folder to store results in")
   parser.add_argument('--delay', type=int, default=0, help="Default delay for concurrent execution")
   parser.add_argument('--deadline', action="store_true", default=False, help="Simulate deadline")
-  args = parser.parse_args()
-  params = json.loads(open(args.parameters).read())
   [access_key, secret_key] = util.get_credentials(params["credential_profile"])
   params["access_key"] = access_key
   params["secret_key"] = secret_key
