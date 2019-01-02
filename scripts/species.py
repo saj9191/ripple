@@ -33,10 +33,10 @@ species = [
 ]
 
 
-def run(folder, top, pfile, is_medic):
+def run(folder, top, prefix, pfile, typ):
   os.chdir("..")
   params = json.loads(open(pfile).read())
-  params["sample_bucket"] = "tide-source-data"
+#  params["sample_bucket"] = "tide-source-data"
   params["folder"] = "tide"
   [access_key, secret_key] = util.get_credentials(params["credential_profile"])
   params["access_key"] = access_key
@@ -45,9 +45,13 @@ def run(folder, top, pfile, is_medic):
   #setup.setup(params)
 
   s3 = boto3.resource("s3")
-  sample_bucket_name = "tide-source-data"
+  sample_bucket_name = params["sample_bucket"]#"tide-source-data"
   sample_bucket = s3.Bucket(sample_bucket_name)
-  objects = list(sample_bucket.objects.filter(Prefix=folder))
+
+  p = folder
+  if prefix is not None:
+    p += "/" + prefix
+  objects = list(sample_bucket.objects.filter(Prefix=p))
   objects = list(filter(lambda obj: obj.key.endswith(".mzML"), objects))
   objects.reverse()
 
@@ -55,8 +59,10 @@ def run(folder, top, pfile, is_medic):
   if not os.path.isdir(data_folder):
     os.mkdir(data_folder)
 
-  if is_medic:
+  if typ == "medic":
     top_folder = data_folder + "/medic_" + str(top)
+  elif typ == "ppm":
+    top_folder = data_folder + "/ppm_" + str(top)
   else:
     top_folder = data_folder + "/" + str(top)
   if not os.path.isdir(top_folder):
@@ -64,7 +70,7 @@ def run(folder, top, pfile, is_medic):
 
   sorted_fastas = None
 
-  prefix = "5/" if is_medic else "4/"
+  prefix = "4/" if typ == "normal" else "5/"
   for obj in objects:
     key = obj.key
     if "/" in key:
@@ -78,26 +84,27 @@ def run(folder, top, pfile, is_medic):
       file_key = key
       folder = top_folder
 
-    if os.path.isfile(folder + "/" + file_key):
+    path = folder + "/" + file_key
+    if os.path.isfile(path):
       continue
+    open(path, "a").close()
 
     s3_key, _, _ = upload.upload(params["bucket"], key, sample_bucket_name)
     token = s3_key.split("/")[1]
     params["key"] = s3_key
     species_to_score = print_species.run(params["bucket"], prefix, token)
-    if sorted_fastas is None:
-      fastas = list(species_to_score.keys())
-      fastas.sort()
-      sorted_fastas = []
-      for specie in species:
-        for fasta in fastas:
-          if fasta.endswith(specie):
-            sorted_fastas.append(fasta)
+    fastas = list(species_to_score.keys())
+    fastas.sort()
+    sorted_fastas = []
+    for specie in species:
+      for fasta in fastas:
+        if fasta.endswith(specie):
+          sorted_fastas.append(fasta)
 
-    [_, costs] = statistics.statistics(params["log"], token=token, prefix=None, params=params, show=False)
+    [_, costs] = statistics.statistics(params["log"], token, None, params, None)
 
-    print(folder + "/" + file_key)
-    with open(folder + "/" + file_key, "w+") as f:
+    print(path)
+    with open(path, "w+") as f:
       f.write("Cost,{0:f}\n".format(costs[-1]))
       # Fasta scores
       for fasta in sorted_fastas:
@@ -117,8 +124,16 @@ def main():
   parser.add_argument("--folder", type=str, required=True, help="Name of folder file resides in")
   parser.add_argument("--top", type=int, required=True, help="Number of top spectra to use")
   parser.add_argument("--parameters", type=str, required=True, help="Parameter file to use")
+  parser.add_argument("--prefix", type=str, default=None, help="Object prefix to filter on")
   args = parser.parse_args()
-  run(args.folder, args.top, args.parameters, "medic" in args.parameters)
+
+  typ = "normal"
+  if "medic" in args.parameters:
+    typ = "medic"
+  elif "ppm" in args.parameters:
+    typ = "ppm"
+  print("Type", typ)
+  run(args.folder, args.top, args.prefix, args.parameters, typ)
 
 
 if __name__ == "__main__":
