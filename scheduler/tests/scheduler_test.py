@@ -54,14 +54,14 @@ class SchedulerTests(unittest.TestCase):
         "name": "top-mzML",
       }]
     }
-    key = "0/123.400000-13/1/1-1-3-suffix.new"
+    key = "0/123.400000-13/1/1-1-1-suffix.new"
 
     mock = MockScheduler("fifo", params, set(), {}, 1)
-    payload = mock.__payload__(params["bucket"], key)
+    payload = scheduler.payload(params["bucket"], key)
     mock.add(1, None, payload)
     mock.listen()
     self.assertEqual(len(mock.running_tasks), 1)
-    self.assertEqual(mock.running_tasks[0].output_file, "1/123.400000-13/1/1-1-3-suffix.log")
+    self.assertEqual(mock.running_tasks[0].output_file, "1/123.400000-13/1/1-1-1-suffix.log")
 
   def test_finish(self):
     params = {
@@ -76,15 +76,92 @@ class SchedulerTests(unittest.TestCase):
         "name": "top-mzML",
       }]
     }
-    key = "0/123.400000-13/1/1-1-3-suffix.new"
+    key = "0/123.400000-13/1/1-1-1-suffix.new"
     children_payloads = {
-      "1/123.400000-13/1/1-1-3-suffix.log": []
+      "1/123.400000-13/1/1-1-1-suffix.log": []
     }
 
-    existing_objects = set(["1/123.400000-13/1/1-1-3-suffix.log"])
+    existing_objects = set(["1/123.400000-13/1/1-1-1-suffix.log"])
     mock = MockScheduler("fifo", params, existing_objects, children_payloads, 2)
-    payload = mock.__payload__(params["bucket"], key)
+    payload = scheduler.payload(params["bucket"], key)
     mock.add(1, None, payload)
+    mock.listen()
+    self.assertEqual(len(mock.running_tasks), 0)
+
+  def test_step(self):
+    params = {
+      "bucket": "bucket",
+      "log": "log",
+      "functions": {
+        "top-mzML": {
+          "file": "top"
+        }
+      },
+      "pipeline": [{
+        "name": "top-mzML",
+      }, {
+        "name": "top-mzML",
+      }]
+    }
+    key = "0/123.400000-13/1/1-1-1-suffix.new"
+    children_payloads = {
+      "1/123.400000-13/1/1-1-1-suffix.log": [
+        scheduler.payload(params["bucket"], "1/123.400000-13/1/1-1-1-suffix.new")
+      ],
+      "2/123.400000-13/1/1-1-1-suffix.log": [],
+    }
+
+    existing_objects = set(["1/123.400000-13/1/1-1-1-suffix.log", "2/123.400000-13/1/1-1-1-suffix.log"])
+    mock = MockScheduler("fifo", params, existing_objects, children_payloads, 2)
+    payload = scheduler.payload(params["bucket"], key)
+    mock.add(1, None, payload)
+    mock.listen()
+    self.assertEqual(len(mock.running_tasks), 1)
+    self.assertEqual(mock.running_tasks[0].prefix, 1)
+
+  def test_multiple_children(self):
+    params = {
+      "bucket": "bucket",
+      "log": "log",
+      "functions": {
+        "top-mzML": {
+          "file": "top"
+        }
+      },
+      "pipeline": [{
+        "name": "top-mzML",
+      }, {
+        "name": "top-mzML",
+      }]
+    }
+    key = "0/123.400000-13/1/1-1-1-suffix.new"
+    children_payloads = {
+      "1/123.400000-13/1/1-1-1-suffix.log": [
+        scheduler.payload(params["bucket"], "1/123.400000-13/1/1-1-3-suffix.new"),
+        scheduler.payload(params["bucket"], "1/123.400000-13/1/2-1-3-suffix.new"),
+        scheduler.payload(params["bucket"], "1/123.400000-13/1/3-1-3-suffix.new")
+      ],
+      "2/123.400000-13/1/1-1-3-suffix.log": [],
+      "2/123.400000-13/1/2-1-3-suffix.log": [],
+      "2/123.400000-13/1/3-1-3-suffix.log": [],
+    }
+
+    existing_objects = set([
+      "1/123.400000-13/1/1-1-1-suffix.log",
+      "2/123.400000-13/1/1-1-3-suffix.log",
+      "2/123.400000-13/1/2-1-3-suffix.log",
+      "2/123.400000-13/1/3-1-3-suffix.log"
+    ])
+    mock = MockScheduler("fifo", params, existing_objects, children_payloads, 2)
+    payload = scheduler.payload(params["bucket"], key)
+    mock.add(1, None, payload)
+    mock.listen()
+    self.assertEqual(len(mock.running_tasks), 3)
+    for task in mock.running_tasks:
+      self.assertEqual(task.prefix, 1)
+
+    mock.current_iteration = 0
+    mock.max_iterations = 1
     mock.listen()
     self.assertEqual(len(mock.running_tasks), 0)
 

@@ -14,6 +14,21 @@ sys.path.insert(0, parentdir)
 import util
 
 
+def payload(bucket, key):
+  return {
+   "Records": [{
+     "s3": {
+       "bucket": {
+         "name": bucket,
+       },
+       "object": {
+         "key": key,
+       },
+     }
+    }]
+  }
+
+
 class Scheduler:
   def __init__(self, policy, params):
     self.policy = policy
@@ -39,8 +54,8 @@ class Scheduler:
     self.s3 = boto3.resource("s3")
     self.client = util.setup_client("lambda", self.params)
 
-  def add(self, priority, deadline, payload):
-    item = priority_queue.Item(priority, 0, self.next_job_id, deadline, payload, self.params)
+  def add(self, priority, deadline, payload, prefix=0):
+    item = priority_queue.Item(priority, prefix, self.next_job_id, deadline, payload, self.params)
     self.queue.put(item)
 
   def __object_exists__(self, object_key):
@@ -53,14 +68,13 @@ class Scheduler:
     return params["payloads"]
 
   def __check_tasks__(self):
-    print("check_tasks")
     i = 0
     while i < len(self.running_tasks):
       task = self.running_tasks[i]
       if self.__object_exists__(task.output_file):
         payloads = self.__get_children_payloads__(task.output_file)
         for payload in payloads:
-          self.add(task.priority, task.deadline, payload)
+          self.add(task.priority, task.deadline, payload, task.prefix + 1)
         self.running_tasks = self.running_tasks[:i] + self.running_tasks[i+1:]
       else:
         i += 1
@@ -68,30 +82,17 @@ class Scheduler:
   def __invoke__(self, name, payload):
     util.invoke(self.client, name, self.params, payload)
 
-  def __payload__(self, bucket, key):
-    return {
-     "Records": [{
-       "s3": {
-         "bucket": {
-           "name": bucket,
-         },
-         "object": {
-           "key": key,
-         },
-       }
-      }]
-    }
-
-  def __initiate_task__(self):
+  def __initiate_tasks__(self):
     try:
-      item = self.queue.get()
-      prefix = item.prefix
-      name = self.params["pipeline"][prefix]["name"]
-      item.payload["continue"] = True
-      self.__invoke__(name, item.payload)
-      self.running_tasks.append(item)
+      while len(self.running_tasks) < self.max_tasks:
+        item = self.queue.get()
+        prefix = item.prefix
+        name = self.params["pipeline"][prefix]["name"]
+        item.payload["continue"] = True
+        self.__invoke__(name, item.payload)
+        self.running_tasks.append(item)
     except queue.Empty:
-      time.sleep(random.randint(1, 10))
+      time.sleep(random.randint(1, 5))
 
   def __running__(self):
     return self.running
@@ -100,8 +101,7 @@ class Scheduler:
     while self.__running__():
       if len(self.running_tasks) > 0:
         self.__check_tasks__()
-      if len(self.running_tasks) < self.max_tasks:
-        self.__initiate_task__()
+      self.__initiate_tasks__()
 
 
 def run(policy, params):
