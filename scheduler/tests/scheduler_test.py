@@ -15,6 +15,7 @@ class MockScheduler(scheduler.Scheduler):
     self.existing_objects = existing_objects
     self.max_iterations = max_iterations
     self.current_iteration = 0
+    self.num_invokes = 0
 
   def __aws_connections__(self):
     pass
@@ -27,7 +28,7 @@ class MockScheduler(scheduler.Scheduler):
     return self.children_payloads[object_key]
 
   def __invoke__(self, name, payload):
-    pass
+    self.num_invokes += 1
 
   def __running__(self):
     running = self.current_iteration < self.max_iterations
@@ -52,7 +53,8 @@ class SchedulerTests(unittest.TestCase):
       },
       "pipeline": [{
         "name": "top-mzML",
-      }]
+      }],
+      "timeout": 600,
     }
     key = "0/123.400000-13/1/1-1-1-suffix.new"
 
@@ -62,6 +64,8 @@ class SchedulerTests(unittest.TestCase):
     mock.listen()
     self.assertEqual(len(mock.running_tasks), 1)
     self.assertEqual(mock.running_tasks[0].output_file, "1/123.400000-13/1/1-1-1-suffix.log")
+    self.assertEqual(mock.running_tasks[0].prefix, 0)
+    self.assertEqual(mock.num_invokes, 1)
 
   def test_finish(self):
     params = {
@@ -74,7 +78,8 @@ class SchedulerTests(unittest.TestCase):
       },
       "pipeline": [{
         "name": "top-mzML",
-      }]
+      }],
+      "timeout": 600,
     }
     key = "0/123.400000-13/1/1-1-1-suffix.new"
     children_payloads = {
@@ -101,7 +106,8 @@ class SchedulerTests(unittest.TestCase):
         "name": "top-mzML",
       }, {
         "name": "top-mzML",
-      }]
+      }],
+      "timeout": 600,
     }
     key = "0/123.400000-13/1/1-1-1-suffix.new"
     children_payloads = {
@@ -132,7 +138,8 @@ class SchedulerTests(unittest.TestCase):
         "name": "top-mzML",
       }, {
         "name": "top-mzML",
-      }]
+      }],
+      "timeout": 600,
     }
     key = "0/123.400000-13/1/1-1-1-suffix.new"
     children_payloads = {
@@ -164,6 +171,34 @@ class SchedulerTests(unittest.TestCase):
     mock.max_iterations = 1
     mock.listen()
     self.assertEqual(len(mock.running_tasks), 0)
+
+  def test_retrigger(self):
+    params = {
+      "bucket": "bucket",
+      "log": "log",
+      "functions": {
+        "top-mzML": {
+          "file": "top"
+        }
+      },
+      "pipeline": [{
+        "name": "top-mzML",
+      }],
+      "timeout": 0,
+    }
+    key = "0/123.400000-13/1/1-1-1-suffix.new"
+    children_payloads = {
+      "1/123.400000-13/1/1-1-1-suffix.log": []
+    }
+
+    existing_objects = set()
+    mock = MockScheduler("fifo", params, existing_objects, children_payloads, 2)
+    payload = scheduler.payload(params["bucket"], key)
+    mock.add(1, None, payload)
+    mock.listen()
+    self.assertEqual(len(mock.running_tasks), 1)
+    self.assertEqual(mock.running_tasks[0].prefix, 0)
+    self.assertEqual(mock.num_invokes, 2)
 
 
 if __name__ == "__main__":

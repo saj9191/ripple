@@ -77,6 +77,10 @@ class Scheduler:
           self.add(task.priority, task.deadline, payload, task.prefix + 1)
         self.running_tasks = self.running_tasks[:i] + self.running_tasks[i+1:]
       else:
+        if time.time() - task.start_time >= self.params["timeout"]:
+          # Reinvioke
+          name = self.params["pipeline"][task.prefix]["name"]
+          self.__invoke__(name, task.payload)
         i += 1
 
   def __invoke__(self, name, payload):
@@ -90,6 +94,7 @@ class Scheduler:
         name = self.params["pipeline"][prefix]["name"]
         item.payload["continue"] = True
         self.__invoke__(name, item.payload)
+        item.start_time = time.time()
         self.running_tasks.append(item)
     except queue.Empty:
       time.sleep(random.randint(1, 5))

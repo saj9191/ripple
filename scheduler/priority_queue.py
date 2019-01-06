@@ -16,6 +16,7 @@ class Item:
     self.payload = payload
     self.prefix = prefix
     self.priority = priority
+    self.start_time = None
     self.__setup__()
 
   def __setup__(self):
