@@ -176,6 +176,8 @@ def object_exists(s3, bucket_name, key):
 
 def get_auxilary_key(key, name):
   m = parse_file_name(key)
+  if len(m) == 0:
+    return None
   return "aux/{0:f}-{1:d}/{2:s}".format(m["timestamp"], m["nonce"], name)
 
 
@@ -449,8 +451,6 @@ def setup_client(service, params):
   extra_time = 20
   config = Config(read_timeout=params["timeout"] + extra_time)
   client = boto3.client(service,
-                        aws_access_key_id=params["access_key"],
-                        aws_secret_access_key=params["secret_key"],
                         region_name=params["region"],
                         config=config
                         )

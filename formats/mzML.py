@@ -103,14 +103,15 @@ class Iterator(iterator.Iterator):
     header_key = util.get_auxilary_key(key, "header")
     self.__get_index_list_offset__()
 
-    if util.object_exists(self.s3, bucket, header_key):
+    if header_key is not None and util.object_exists(self.s3, bucket, header_key):
       self.header_start_index = 0
       header_obj = self.s3.Object(bucket, header_key)
       self.header_end_index = header_obj.content_length - 1  # One char added to object
     else:
       self.__get_header_offset__()
-      stream = util.read(self.obj, self.header_start_index, self.header_end_index)
-      self.s3.Object(bucket, header_key).put(Body=str.encode(stream))
+      self.header = util.read(self.obj, self.header_start_index, self.header_end_index)
+      if header_key is not None:
+        self.s3.Object(bucket, header_key).put(Body=str.encode(self.header))
 
     self.__get_footer_offset__()
     self.__get_total_count__()
@@ -120,9 +121,12 @@ class Iterator(iterator.Iterator):
     bucket = obj.bucket_name
     key = obj.key
     header_key = util.get_auxilary_key(key, "header")
-    s3 = boto3.resource("s3")
-    header_obj = s3.Object(bucket, header_key)
-    return util.read(header_obj, 0, header_obj.content_length)
+    if header_key is not None:
+      s3 = boto3.resource("s3")
+      header_obj = s3.Object(bucket, header_key)
+      return util.read(header_obj, 0, header_obj.content_length)
+    else:
+      return None
 
   def __spectra_offsets__(self, offsets):
     if len(offsets) != 0 and len(offsets["offsets"]) != 0:
@@ -288,9 +292,12 @@ class Iterator(iterator.Iterator):
     return offsets
 
   @classmethod
-  def from_array(cls, obj, spectra, offsets, f=None):
+  def from_array(cls, obj, spectra, offsets, header=None, f=None):
     metadata = {}
-    header = Iterator.__get_header__(obj)
+    if header is None:
+      header = Iterator.__get_header__(obj)
+
+    header = re.sub(Iterator.SPECTRUM_LIST_COUNT_REGEX, '<spectrumList count="{0:d}"'.format(len(spectra)), header)
     metadata["header_start_index"] = str(0)
     metadata["header_end_index"] = str(len(header))
     metadata["chromatogram_start_index"] = "-1"
