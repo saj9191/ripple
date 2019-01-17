@@ -4,16 +4,10 @@ import util
 
 
 def run(key, params, input_format, output_format, offsets):
-  s3 = boto3.resource("s3")
-  input_format["prefix"] = params["input_prefix"]
-  prefix = util.key_prefix(util.file_name(input_format))
-  objects = util.get_objects(params["bucket"], prefix, params)
+  objects = util.get_objects(params["bucket"], "0/", params)
   assert(len(objects) == 1)
-  species_key = objects[0].key
-  object_key = key.replace("/tmp/", "")
-
-  obj = s3.Object(params["bucket"], species_key)
-  match = util.read(obj, 0, obj.content_length)
+  object_key = objects[0].key
+  match = open(key).read()
 
   payload = {
     "Records": [{

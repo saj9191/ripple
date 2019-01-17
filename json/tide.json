@@ -1,130 +1,115 @@
 {
-	"input_name": "TN_CSF_062617_03.mzML",
+	"input_name": "Coon-HeLa-APD-Data/ASH_20170314_HELA_120MIN.mzML",
 	"model": "lambda",
-	"iterations": 10,
-	"region": "us-west-1",
-	"folder": "tide-files-lambda",
-	"scheduler": false,
+	"iterations": 1,
+	"region": "us-west-2",
+	"folder": "tide",
 	"tag": "tide",
-	"timeout": 300,
-	"num_bins": 25,
-	"bucket": "shjoyner-tide-west-1",
+	"timeout": 600,
+	"num_bins": 50,
+	"bucket": "maccoss-tide",
 	"storage_class": "STANDARD",
-	"credential_profile": "add-credentials-here",
-	"role": "LambdaExecution",
-	"log": "shjoyner-log-west-1",
+	"credential_profile": "maccoss",
+	"role": "service-role/lambdaFullAccessRole",
+	"log": "maccoss-log",
 	"sample_input": true,
-	"sample_bucket": "als",
-	"stats": true,
+	"sample_bucket": "tide-source-data",
+	"stats": false,
 	"setup": true,
+	"dependencies": {
+		"formats": {
+			"percolator": [
+				"formats/tsv.py"
+			],
+			"confidence": [
+				"formats/tsv.py"
+			]
+		}
+	},
 	"functions": {
-		"split-mzML": {
-			"file": "split_file",
-			"format": "mzML",
-			"memory_size": 128,
-	    "split_size": 5000000,
-			"adjust": false
-		},
-		"find-mzML-pivots": {
-			"file": "pivot_file",
-			"format": "mzML",
-			"memory_size": 1024
-		},
-		"combine-pivot-files": {
-			"file": "combine_files",
-			"format": "pivot",
-			"memory_size": 1024
-		},
-		"sort-mzML-chunk": {
-			"file": "sort",
-			"format": "mzML",
-			"memory_size": 1024
-		},
-		"combine-mzML-files": {
-			"file": "combine_files",
-			"format": "mzML",
-			"memory_size": 512
-		},
-		"tide": {
-			"file": "application",
-			"application": "tide",
-			"memory_size": 2048,
-			"database_bucket": "fasta"
-		},
-		"combine-tsv-files": {
-			"file": "combine_files",
-			"format": "tsv",
-			"memory_size": 256
-		},
 		"confidence": {
 			"file": "application",
 			"application": "confidence",
-			"database_bucket": "fasta",
+			"database_bucket": "maccoss-fasta",
 			"memory_size": 512
-		},
-		"percolator": {
-			"file": "application",
-			"application": "percolator",
-			"database_bucket": "fasta",
-			"memory_size": 3008
-		},
-		"top-mzML": {
-			"file": "top",
-			"format": "mzML",
-			"memory_size": 1024
-		},
-		"map-species": {
-			"file": "map",
-			"memory_size": 128
 		},
 		"find-species-match": {
 			"file": "match",
 			"format": "confidence",
-			"memory_size": 128
+			"memory_size": 128,
+	    "identifier": "q-value",
+	    "find": "max sum",
+	    "chunk_size": 100000
+		},
+		"map-species": {
+			"file": "map",
+			"memory_size": 128,
+		  "input_key_value": "key",
+			"bucket_key_value": "species",
+			"ranges": false,
+			"directories": true
+		},
+		"param-medic": {
+			"file": "application",
+			"application": "parammedic",
+			"memory_size": 1024,
+	    "database_bucket": "maccoss-fasta"
+		},
+		"ppm-tide": {
+			"file": "application",
+			"application": "ppm_tide",
+			"memory_size": 3008,
+			"database_bucket": "maccoss-fasta",
+	    "num_threads": 0
+		},
+		"top-mzML": {
+			"file": "top",
+			"format": "mzML",
+			"memory_size": 3008,
+		  "identifier": "tic",
+		  "number": 1000,
+		  "chunk_size": 500000
+		},
+		"combine-tsv-files": {
+			"file": "combine_files",
+			"format": "tsv",
+			"memory_size": 256,
+			"chunk_size": 10000000,
+	    "sort": false
+		},
+		"percolator": {
+			"file": "application",
+			"application": "percolator",
+			"database_bucket": "maccoss-fasta",
+			"memory_size": 3008,
+	    "max_train": 10000,
+	    "output": "peptides"
 		},
 		"handle-specie-match": {
 			"file": "application",
 			"application": "handle_specie_match",
 			"memory_size": 128
-		},
-		"initiate-split": {
-			"file": "initiate",
-			"memory_size": 1024
 		}
 	},
 	"pipeline": [{
-	  "name": "split-mzML",
-	  "ranges": false,
-	  "chunk_size": 10000000,
-	  "output_function": "find-mzML-pivots"
+		"name": "top-mzML"
 	}, {
-	  "name": "find-mzML-pivots",
-	  "chunk_size": 10000000,
-	  "identifier": "mass"
+	  "name": "param-medic"
 	}, {
-	  "name": "combine-pivot-files",
-	  "chunk_size": 1000000,
-	  "sort": false
+		"name": "map-species"
 	}, {
-	  "name": "split-mzML",
-	  "ranges": true,
-	  "chunk_size": 5000000,
-	  "output_function": "sort-mzML-chunk"
+	  "name": "ppm-tide"
 	}, {
-	  "name": "sort-mzML-chunk",
-	  "chunk_size": 10000000,
-	  "identifier": "mass"
+	  "name": "confidence"
 	}, {
-	  "name": "combine-mzML-files",
-	  "chunk_size": 10000000,
-	  "sort": false
+	  "name": "find-species-match"
 	}, {
-	  "name": "tide",
-	  "num_threads": 0,
-		"species": "normalHuman"
+	  "name": "handle-specie-match"
 	}, {
-	  "name": "combine-tsv-files",
-	  "chunk_size": 10000000,
-	  "sort": false
+	  "name": "ppm-tide"
+	}, {
+	  "name": "combine-tsv-files"
+	}, {
+	  "name": "percolator"
 	}]
 }
