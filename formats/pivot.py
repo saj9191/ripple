@@ -25,8 +25,14 @@ class Iterator(iterator.Iterator):
     pivots = sorted(pivots)
     super_pivots = []
     num_bins = params["num_bins"]
-    increment = int((len(pivots) + num_bins - 1) / num_bins)
-    super_pivots = pivots[0::increment]
+    i = 0
+    super_pivots = []
+    increment = len(pivots) / num_bins
+    while i < len(pivots):
+      x = min(round(i), len(pivots) - 1)
+      super_pivots.append(pivots[x])
+      i += increment
+
     if super_pivots[-1] != pivots[-1]:
       super_pivots.append(pivots[-1])
     spivots = list(map(lambda p: str(p), super_pivots))
