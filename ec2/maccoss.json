@@ -1,0 +1,8 @@
+{
+	"key": "shjoyner-emr",
+  "image_id": "ami-51537029",
+	"instance": "t2.medium",
+	"region": "us-west-2",
+	"security": "sg-4ea90530",
+	"subnet": "subnet-03990a59"
+}
