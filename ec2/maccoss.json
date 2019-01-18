@@ -1,8 +1,11 @@
 {
+	"cpu_agg_period": 5,
 	"key": "shjoyner-emr",
-  "image_id": "ami-51537029",
+	"image_id": "ami-51537029",
 	"instance": "t2.medium",
 	"region": "us-west-2",
+	"s3_check_interval": 10,
+	"scale_up_cpu_utilization": 75.0,
 	"security": "sg-4ea90530",
 	"subnet": "subnet-03990a59"
 }

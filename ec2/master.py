@@ -10,12 +10,9 @@ class Task:
 
 class Master:
   def __init__(self, bucket_name, max_nodes, params):
-    self.agg_period = 5
     self.bucket_name = bucket_name
-    self.check_interval = 10
     self.max_nodes = max_nodes
     self.nodes = []
-    self.num_datapoints = 60
     self.params = dict(params)
     self.pending_tasks = []
     self.queue_name = "shjoyner-sqs"
@@ -24,7 +21,7 @@ class Master:
     sqs = boto3.client("sqs", region_name=self.params["region"])
     response = sqs.receive_message(
       QueueUrl=self.queue.url,
-      WaitTimeSeconds=self.check_interval,
+      WaitTimeSeconds=self.params["s3_check_interval"],
     )
     messages = response["Messages"] if "Messages" in response else []
     print(time.time(), "Received", len(messages), "messages")
@@ -33,10 +30,18 @@ class Master:
 
   def __check_nodes_health__(self):
     now = datetime.datetime.utcnow() - datetime.timedelta(seconds=60)
+    cpu_average = 0.0
     for node in self.nodes:
-      self.__node_statistics__(node, now)
+      cpu_average += self.__node_statistics__(node, now)
+
+    cpu_average /= len(self.nodes)
+    assert(0.0 <= cpu_average and cpu_average <= 100.0)
+    print("Average CPU utilization", cpu_average)
+    if cpu_average >= self.params["scale_up_cpu_utilization"]:
+      self.nodes.append(self.__create_instance__("emr-node-{0:f}".format(time.time()), monitor=True))
 
   def __create_instance__(self, tag_name, monitor):
+    print("Creating instance", tag_name)
     ec2 = boto3.resource("ec2")
     instances = ec2.create_instances(
       ImageId=self.params["image_id"],
@@ -66,11 +71,9 @@ class Master:
     instance.wait_until_running()
     return instance
 
-
   def __node_statistics__(self, node, now):
     client = boto3.client("cloudwatch", region_name=self.params["region"])
 
-    print("instance_id", node.instance_id)
     response = client.get_metric_statistics(
       Namespace="AWS/EC2",
       MetricName="CPUUtilization",
@@ -78,15 +81,16 @@ class Master:
         "Name": "InstanceId",
         "Value": node.instance_id,
       }],
-      StartTime=datetime.datetime.utcnow() - datetime.timedelta(seconds=self.agg_period * self.num_datapoints),
-      EndTime=datetime.datetime.utcnow(),
-      Period=self.agg_period,
+      StartTime=now - datetime.timedelta(seconds=self.params["cpu_agg_period"] + 120),  # Additional time in case times rounded
+                                                                                        # if EndTime - StartTime < agg_period, may not return anything
+      EndTime=now,
+      Period=self.params["cpu_agg_period"],
       Statistics=["Average"],
     )
+    datapoints = response["Datapoints"]
 
-    print("Num datapoints", len(response["Datapoints"]))
-    for cpu_stats in response["Datapoints"]:
-      print("Node", node.instance_id, "Average CPU", cpu_stats["Average"])
+    point = datapoints[-1]["Average"] if len(datapoints) > 0 else 0.0
+    return point
 
   def __setup_queue__(self):
     client = boto3.client("sqs", region_name=self.params["region"])
