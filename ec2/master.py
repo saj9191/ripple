@@ -1,4 +1,5 @@
 import boto3
+import json
 import node
 import time
 import util
@@ -27,9 +28,13 @@ class Master:
       WaitTimeSeconds=self.params["s3_check_interval"],
     )
     messages = response["Messages"] if "Messages" in response else []
-    print(time.time(), "Received", len(messages), "messages")
     for message in messages:
-      print(message)
+      body = json.loads(message["Body"])
+      if "Records" in body:
+        for record in body["Records"]:
+          print("Received item", record["s3"]["object"]["key"])
+          self.pending_tasks.append(record["s3"]["object"]["key"])
+      sqs.delete_message(QueueUrl=self.queue.url, ReceiptHandle=message["ReceiptHandle"])
 
   def __check_nodes__(self):
     cpu_average = 0.0
