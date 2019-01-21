@@ -1,6 +1,7 @@
 import boto3
 import json
 import node
+import random
 import time
 import util
 
@@ -11,17 +12,25 @@ class Task:
 
 
 class Master:
-  def __init__(self, bucket_name, max_nodes, params):
+  def __init__(self, bucket_name, max_nodes, s3_application_url, params):
     self.bucket_name = bucket_name
     self.max_nodes = max_nodes
-    self.starting_nodes = []
-    self.running_nodes = []
-    self.terminating_nodes = []
     self.params = dict(params)
     self.pending_tasks = []
     self.queue_name = "shjoyner-sqs"
+    self.running_nodes = []
+    self.starting_nodes = []
+    self.s3_application_url = s3_application_url
+    self.terminating_nodes = []
 
   def __check_for_new_items__(self):
+    if len(self.running_nodes) == 0:
+      return
+    x = 0#random.randint(1, 10)
+    print("Adding", x, "items")
+    for i in range(x):
+      self.pending_tasks.append("10sep2013_yeast_control_1.mzML")
+    return
     sqs = boto3.client("sqs", region_name=self.params["region"])
     response = sqs.receive_message(
       QueueUrl=self.queue.url,
@@ -38,6 +47,7 @@ class Master:
 
   def __check_nodes__(self):
     cpu_average = 0.0
+    memory_average = 0.0
     i = 0
     while i < len(self.starting_nodes):
       n = self.starting_nodes[i]
@@ -52,15 +62,19 @@ class Master:
       for n in self.running_nodes:
         n.reload()
         cpu_average += n.cpu_utilization
+        memory_average += n.memory_utilization
+        print("-", n.node.instance_id, "CPU utilization", n.cpu_utilization)
+        print("-", n.node.instance_id, "Memory utilization", n.memory_utilization)
       cpu_average /= len(self.running_nodes)
 
     assert(0.0 <= cpu_average and cpu_average <= 100.0)
     print("Average CPU utilization", cpu_average)
-    if cpu_average >= self.params["scale_up_cpu_utilization"]:
+    print("Average Memory utilization", memory_average)
+    if cpu_average >= self.params["scale_up_utilization"]:
       self.__create_node__()
 
   def __create_node__(self):
-    self.starting_nodes.append(node.Node(self.params))
+    self.starting_nodes.append(node.Node(self.s3_application_url, self.params))
 
   def __setup_queue__(self):
     client = boto3.client("sqs", region_name=self.params["region"])
@@ -74,10 +88,14 @@ class Master:
       self.queue = sqs.get_queue_by_name(QueueName=self.queue_name)
 
   def __start_tasks__(self):
-    pass
+    if len(self.running_nodes) > 0:
+      sorted(self.running_nodes, key=lambda n: n.cpu_utilization)
+      for n in self.running_nodes:
+        if n.cpu_utilization <= self.params["scale_up_utilization"]:
+          if len(self.pending_tasks) > 0:
+            n.add_task(self.pending_tasks.pop())
 
   def setup(self):
-    self.master_instance = util.create_instance("emr-master-{0:f}".format(time.time()), self.params)
     self.__create_node__()
     self.__setup_queue__()
 
@@ -86,14 +104,11 @@ class Master:
     for n in self.running_nodes + self.starting_nodes:
       n.terminate()
 
-    self.master_instance.terminate()
-    self.master_instance.wait_until_terminated()
-
   def run(self):
-    for i in range(10):
+    for i in range(60):
       self.__check_for_new_items__()
       self.__check_nodes__()
       self.__start_tasks__()
-      time.sleep(30)
+      time.sleep(10)
 
     self.shutdown()

@@ -3,11 +3,11 @@ import json
 import master
 
 
-def setup(application_folder, bucket, max_nodes, params):
+def setup(s3_application_url, bucket, max_nodes, params):
   # The master node is responsible for monitoring the health of data nodes
   # and maintains a queue of pending tasks. Since the goal is to emulate
   # EMR, we will not include the master node in the costs.
-  m = master.Master(bucket, max_nodes, params)
+  m = master.Master(bucket, max_nodes, s3_application_url, params)
   m.setup()
   return m
 
@@ -19,7 +19,7 @@ def run(application_folder, bucket, max_nodes, params):
 
 def main():
   parser = argparse.ArgumentParser()
-  parser.add_argument("--application_folder",
+  parser.add_argument("--s3_application_url",
                       type=str,
                       required=True,
                       help="S3 folder containing all scripts needed for application. Should include main.py."
@@ -29,7 +29,7 @@ def main():
   parser.add_argument("--parameters", type=str, required=True, help="Parameters such as security group for nodes")
   args = parser.parse_args()
   params = json.loads(open(args.parameters).read())
-  run(args.application_folder, args.bucket, args.max_nodes, params)
+  run(args.s3_application_url, args.bucket, args.max_nodes, params)
 
 
 if __name__ == "__main__":
