@@ -3,7 +3,6 @@ import json
 import node
 import random
 import time
-import util
 
 
 class Task:
@@ -26,10 +25,10 @@ class Master:
   def __check_for_new_items__(self):
     if len(self.running_nodes) == 0:
       return
-    x = 0#random.randint(1, 10)
+    x = random.randint(1, 10)
     print("Adding", x, "items")
     for i in range(x):
-      self.pending_tasks.append("10sep2013_yeast_control_1.mzML")
+      self.pending_tasks.append("20140329_Yeast_DDA_60mins_01.mzML")
     return
     sqs = boto3.client("sqs", region_name=self.params["region"])
     response = sqs.receive_message(
@@ -48,6 +47,7 @@ class Master:
   def __check_nodes__(self):
     cpu_average = 0.0
     memory_average = 0.0
+    num_tasks_average = 0.0
     i = 0
     while i < len(self.starting_nodes):
       n = self.starting_nodes[i]
@@ -63,15 +63,21 @@ class Master:
         n.reload()
         cpu_average += n.cpu_utilization
         memory_average += n.memory_utilization
-        print("-", n.node.instance_id, "CPU utilization", n.cpu_utilization)
-        print("-", n.node.instance_id, "Memory utilization", n.memory_utilization)
+        num_tasks_average += n.num_tasks
       cpu_average /= len(self.running_nodes)
+      memory_average /= len(self.running_nodes)
+      num_tasks_average /= len(self.running_nodes)
 
     assert(0.0 <= cpu_average and cpu_average <= 100.0)
     print("Average CPU utilization", cpu_average)
     print("Average Memory utilization", memory_average)
-    if cpu_average >= self.params["scale_up_utilization"]:
-      self.__create_node__()
+    print("Average Number of tasks", num_tasks_average)
+    print("Number of running nodes", len(self.running_nodes))
+    print("Number of starting nodes", len(self.starting_nodes))
+    print("")
+    if len(self.starting_nodes) == 0:
+      if cpu_average >= self.params["scale_up_utilization"] or num_tasks_average == self.params["max_tasks_per_node"]:
+        self.__create_node__()
 
   def __create_node__(self):
     self.starting_nodes.append(node.Node(self.s3_application_url, self.params))
@@ -91,8 +97,9 @@ class Master:
     if len(self.running_nodes) > 0:
       sorted(self.running_nodes, key=lambda n: n.cpu_utilization)
       for n in self.running_nodes:
-        if n.cpu_utilization <= self.params["scale_up_utilization"]:
-          if len(self.pending_tasks) > 0:
+        print("Instance", n.node.instance_id, "has", n.num_tasks, "tasks")
+        if n.num_tasks < self.params["max_tasks_per_node"] and len(self.pending_tasks) > 0:
+          if n.cpu_utilization <= self.params["scale_up_utilization"]:
             n.add_task(self.pending_tasks.pop())
 
   def setup(self):
