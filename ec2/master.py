@@ -101,10 +101,13 @@ class Master:
     if len(self.starting_nodes) == 0:
       if cpu_average >= self.params["scale_up_utilization"] or num_tasks_average == self.params["max_tasks_per_node"]:
         self.__create_node__()
+      elif len(self.pending_tasks) > 0 and len(self.running_nodes) == 0:
+        self.__create_node__()
 
-    if len(self.terminating_nodes) == 0 and len(self.running_nodes) > 1:
-      if cpu_average <= self.params["scale_down_utilization"]:
-        self.__terminate_node__()
+    if len(self.terminating_nodes) == 0:
+      if len(self.running_nodes) > 1 or len(self.pending_tasks) == 0:
+        if cpu_average <= self.params["scale_down_utilization"]:
+          self.__terminate_node__()
 
   def __setup_queue__(self):
     client = boto3.client("sqs", region_name=self.params["region"])
