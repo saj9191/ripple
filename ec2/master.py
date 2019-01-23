@@ -16,6 +16,7 @@ class Master:
     self.starting_nodes = []
     self.s3_application_url = s3_application_url
     self.terminating_nodes = []
+    self.num_handled_tasks = 0
 
   def __check_for_new_items__(self):
     if len(self.running_nodes) == 0:
@@ -124,6 +125,7 @@ class Master:
         if n.num_tasks < self.params["max_tasks_per_node"] and len(self.pending_tasks) > 0:
           if n.cpu_utilization <= self.params["scale_up_utilization"]:
             n.add_task(self.pending_tasks.pop())
+            self.num_handled_tasks += 1
 
   def __terminate_node__(self):
     sorted(self.running_nodes, key=lambda n: n.cpu_utilization)
@@ -149,6 +151,8 @@ class Master:
     while len(self.terminating_nodes) > 0:
       self.__check_termination__()
       time.sleep(10)
+
+    print("Handled", self.num_handled_tasks, "tasks")
 
   def run(self):
     for i in range(60):
