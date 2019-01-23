@@ -56,15 +56,41 @@ class Task(threading.Thread):
 
   def run(self):
     _, err = exec_command(self.client, "cd ~/{0:s}; python3 main.py {1:s}".format(self.folder, self.file))
-    print("Finished task", err)
     self.client.close()
     self.running = False
+
+
+class Setup(threading.Thread):
+  def __init__(self, node):
+    super(Setup, self).__init__()
+    self.node = node
+
+  def run(self):
+    node = util.create_instance("emr-node-{0:f}".format(time.time()), self.node.params)
+    node.reload()
+    boto3.client("ec2").monitor_instances(InstanceIds=[node.instance_id])
+    client = create_client(node.public_ip_address, self.node.params["key"] + ".pem")
+    [access, secret] = get_credentials()
+    exec_command(client, "mkdir ~/.aws")
+    exec_command(client, "touch ~/.aws/credentials")
+    # The monitor script creates a file that tracks the instance id. I didn't delete this before I created the AMI, so if this
+    # is not deleted, it will always use the same instance id.
+    exec_command(client, "rm /var/tmp/aws-mon/instance-id")
+    exec_command(client, 'echo "[default]\naws_access_key_id={0:s}\naws_secret_access_key={1:s}" >> ~/.aws/credentials'.format(access, secret))
+    exec_command(client, 'echo -e "{0:s}\n{1:s}\n\n\n\n\n\nY\ny\n" | s3cmd --configure'.format(access, secret))
+    exec_command(client, 'echo "AWSAccessKeyId={0:s}\nAWSSecretKey={1:s}" >> aws-scripts-mon/awscreds.conf'.format(access, secret))
+    c = '(crontab -l 2>/dev/null; echo "* * * * * ~/aws-scripts-mon/mon-put-instance-data.pl --mem-used-incl-cache-buff --mem-util --disk-space-util --disk-path=/ --from-cron") | crontab -'
+    exec_command(client, c)
+    _, err = exec_command(client, "s3cmd get {0:s} --recursive".format(self.node.s3_application_url))
+    client.close()
+    self.node.node = node
 
 
 class Node:
   def __init__(self, s3_application_url, params):
     self.cpu_utilization = 0.0
     self.folder = s3_application_url.split("/")[-1]
+    self.node = None
     self.num_tasks = 0
     self.params = params
     self.s3_application_url = s3_application_url
@@ -73,23 +99,8 @@ class Node:
     self.__setup__()
 
   def __setup__(self):
-    self.node = util.create_instance("emr-node-{0:f}".format(time.time()), self.params)
-    self.node.reload()
-    boto3.client("ec2").monitor_instances(InstanceIds=[self.node.instance_id])
-    self.client = create_client(self.node.public_ip_address, self.params["key"] + ".pem")
-    [access, secret] = get_credentials()
-    exec_command(self.client, "mkdir ~/.aws")
-    exec_command(self.client, "touch ~/.aws/credentials")
-    # The monitor script creates a file that tracks the instance id. I didn't delete this before I created the AMI, so if this
-    # is not deleted, it will always use the same instance id.
-    exec_command(self.client, "rm /var/tmp/aws-mon/instance-id")
-    exec_command(self.client, 'echo "[default]\naws_access_key_id={0:s}\naws_secret_access_key={1:s}" >> ~/.aws/credentials'.format(access, secret))
-    exec_command(self.client, 'echo -e "{0:s}\n{1:s}\n\n\n\n\n\nY\ny\n" | s3cmd --configure'.format(access, secret))
-    exec_command(self.client, 'echo "AWSAccessKeyId={0:s}\nAWSSecretKey={1:s}" >> aws-scripts-mon/awscreds.conf'.format(access, secret))
-    c = '(crontab -l 2>/dev/null; echo "* * * * * ~/aws-scripts-mon/mon-put-instance-data.pl --mem-used-incl-cache-buff --mem-util --disk-space-util --disk-path=/ --from-cron") | crontab -'
-    exec_command(self.client, c)
-    _, err = exec_command(self.client, "s3cmd get {0:s} --recursive".format(self.s3_application_url))
-    self.client.close()
+    self.setup = Setup(self)
+    self.setup.start()
 
   def add_task(self, file):
     print("Node", self.node.instance_id, "handling task", file)
@@ -115,20 +126,12 @@ class Node:
     return datapoints
 
   def reload(self):
-    end_time = datetime.datetime.utcnow() - datetime.timedelta(seconds=60)
-    # Additional time in case time is rounded. If end_time - start_time < agg_period, may not return anything
-    start_time = end_time - datetime.timedelta(seconds=self.params["agg_period"] + 5*600)
-    client = boto3.client("cloudwatch", region_name=self.params["region"])
-    cpu_datapoints = self.__get_metric__(client, "AWS/EC2", "CPUUtilization", start_time, end_time, self.params["agg_period"])
-    print("Instance", self.node.instance_id, "Num CPU datapoints", len(cpu_datapoints))
-    memory_datapoints = self.__get_metric__(client, "System/Linux", "MemoryUtilization", start_time, end_time, 60)
-    print("Instance", self.node.instance_id, "Num Mem datapoints", len(memory_datapoints))
-    assert(self.state == "STARTING" or len(cpu_datapoints) > 0)
-    if len(memory_datapoints) > 0 and len(cpu_datapoints) > 0:
-      self.state = "RUNNING"
+    if self.node is None:
+      return
+    elif self.setup is not None:
+      self.setup.join()
+      self.setup = None
 
-    self.cpu_utilization = cpu_datapoints[-1]["Average"] if len(cpu_datapoints) > 0 else 0.0
-    self.memory_utilization = memory_datapoints[-1]["Average"] if len(memory_datapoints) > 0 else 0.0
     i = 0
     while i < len(self.tasks):
       if not self.tasks[i].running:
@@ -138,5 +141,24 @@ class Node:
         i += 1
     self.num_tasks = len(self.tasks)
 
+    if self.state in ["TERMINATING", "TERMINATED"]:
+      if self.state == "TERMINATING" and self.num_tasks == 0:
+        self.node.terminate()
+        self.state = "TERMINATED"
+      return
+
+    end_time = datetime.datetime.utcnow() - datetime.timedelta(seconds=60)
+    # Additional time in case time is rounded. If end_time - start_time < agg_period, may not return anything
+    start_time = end_time - datetime.timedelta(seconds=self.params["agg_period"] + 5*600)
+    client = boto3.client("cloudwatch", region_name=self.params["region"])
+    cpu_datapoints = self.__get_metric__(client, "AWS/EC2", "CPUUtilization", start_time, end_time, self.params["agg_period"])
+    memory_datapoints = self.__get_metric__(client, "System/Linux", "MemoryUtilization", start_time, end_time, 60)
+    assert(self.state == "STARTING" or len(cpu_datapoints) > 0)
+    if len(memory_datapoints) > 0 and len(cpu_datapoints) > 0:
+      self.state = "RUNNING"
+
+    self.cpu_utilization = cpu_datapoints[-1]["Average"] if len(cpu_datapoints) > 0 else 0.0
+    self.memory_utilization = memory_datapoints[-1]["Average"] if len(memory_datapoints) > 0 else 0.0
+
   def terminate(self):
-    self.node.terminate()
+    self.state = "TERMINATING"
