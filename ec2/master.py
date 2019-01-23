@@ -1,8 +1,17 @@
 import boto3
 import json
 import node
-import random
+import threading
 import time
+
+
+class Run(threading.Thread):
+  def __init__(self, master):
+    super(Run, self).__init__()
+    self.master = master
+
+  def run(self):
+    self.master.run()
 
 
 class Master:
@@ -12,6 +21,7 @@ class Master:
     self.params = dict(params)
     self.pending_tasks = []
     self.queue_name = "shjoyner-sqs"
+    self.running = True
     self.running_nodes = []
     self.starting_nodes = []
     self.s3_application_url = s3_application_url
@@ -21,11 +31,6 @@ class Master:
   def __check_for_new_items__(self):
     if len(self.running_nodes) == 0:
       return
-    x = random.randint(1, 10)
-    print("Adding", x, "items")
-    for i in range(x):
-      self.pending_tasks.append("20140329_Yeast_DDA_60mins_01.mzML")
-    return
     sqs = boto3.client("sqs", region_name=self.params["region"])
     response = sqs.receive_message(
       QueueUrl=self.queue.url,
@@ -138,11 +143,7 @@ class Master:
     print("Num terminated", len(self.terminating_nodes))
     print("Num running", len(self.running_nodes))
 
-  def setup(self):
-    self.__create_node__()
-    self.__setup_queue__()
-
-  def shutdown(self):
+  def __shutdown__(self):
     print("Shutting down...")
     for n in self.running_nodes + self.starting_nodes:
       self.terminating_nodes.append(n)
@@ -158,10 +159,23 @@ class Master:
     print("Handled", self.num_handled_tasks, "tasks")
 
   def run(self):
-    for i in range(60):
+    while self.running:
       self.__check_for_new_items__()
       self.__check_nodes__()
       self.__start_tasks__()
-      time.sleep(10)
+      time.sleep(self.params["s3_check_interval"])
 
-    self.shutdown()
+    self.__shutdown__()
+
+  def setup(self):
+    self.__create_node__()
+    self.__setup_queue__()
+
+  def shutdown(self):
+    self.running = False
+
+  def start(self, asynch):
+    if asynch:
+      Run(self)
+    else:
+      self.run()
