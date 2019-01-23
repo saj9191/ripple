@@ -4,7 +4,6 @@ import os
 import paramiko
 import threading
 import time
-import util
 
 
 def create_client(node_ip, pem):
@@ -19,6 +18,34 @@ def create_client(node_ip, pem):
     except paramiko.ssh_exception.NoValidConnectionsError:
       time.sleep(1)
   return ssh_client
+
+
+def create_instance(tag_name, params):
+  print("Creating instance", tag_name)
+  ec2 = boto3.resource("ec2")
+  instances = ec2.create_instances(
+    ImageId=params["image_id"],
+    InstanceType=params["instance"],
+    KeyName=params["key"],
+    MinCount=1,
+    MaxCount=1,
+    NetworkInterfaces=[{
+      "SubnetId": params["subnet"],
+      "DeviceIndex": 0,
+      "Groups": [params["security"]]
+    }],
+    TagSpecifications=[{
+      "ResourceType": "instance",
+      "Tags": [{
+        "Key": "Name",
+        "Value": tag_name,
+      }]
+    }]
+  )
+  assert(len(instances) == 1)
+  instance = instances[0]
+  instance.wait_until_running()
+  return instance
 
 
 def exec_command(ssh_client, command):
@@ -42,14 +69,15 @@ def get_credentials():
 
 
 class Task(threading.Thread):
-  def __init__(self, node_ip, key, folder, file):
+  def __init__(self, results_folder, node_ip, key, folder, file):
     super(Task, self).__init__()
     print("Thread handling file", file)
     self.file = file
     self.folder = folder
     self.node_ip = node_ip
-    self.__setup__(key + ".pem")
+    self.results_folder = results_folder
     self.running = True
+    self.__setup__(key + ".pem")
 
   def __setup__(self, pem):
     self.client = create_client(self.node_ip, pem)
@@ -58,7 +86,7 @@ class Task(threading.Thread):
     start_time = time.time()
     _, err = exec_command(self.client, "cd ~/{0:s}; python3 main.py {1:s}".format(self.folder, self.file))
     end_time = time.time()
-    open("simulations/round1/{0:f}-{1:f}".format(start_time, end_time), "a+")
+    open("{0:s}/{1:f}-{2:f}".format(self.results_folder, start_time, end_time), "a+")
     self.client.close()
     self.running = False
 
@@ -69,7 +97,7 @@ class Setup(threading.Thread):
     self.node = node
 
   def run(self):
-    node = util.create_instance("emr-node-{0:f}".format(time.time()), self.node.params)
+    node = create_instance("emr-node-{0:f}".format(time.time()), self.node.params)
     node.reload()
     boto3.client("ec2").monitor_instances(InstanceIds=[node.instance_id])
     client = create_client(node.public_ip_address, self.node.params["key"] + ".pem")
@@ -82,20 +110,19 @@ class Setup(threading.Thread):
     exec_command(client, 'echo "[default]\naws_access_key_id={0:s}\naws_secret_access_key={1:s}" >> ~/.aws/credentials'.format(access, secret))
     exec_command(client, 'echo -e "{0:s}\n{1:s}\n\n\n\n\n\nY\ny\n" | s3cmd --configure'.format(access, secret))
     exec_command(client, 'echo "AWSAccessKeyId={0:s}\nAWSSecretKey={1:s}" >> aws-scripts-mon/awscreds.conf'.format(access, secret))
-    c = '(crontab -l 2>/dev/null; echo "* * * * * ~/aws-scripts-mon/mon-put-instance-data.pl --mem-used-incl-cache-buff --mem-util --disk-space-util --disk-path=/ --from-cron") | crontab -'
-    exec_command(client, c)
     _, err = exec_command(client, "s3cmd get {0:s} --recursive".format(self.node.s3_application_url))
     client.close()
     self.node.node = node
 
 
 class Node:
-  def __init__(self, s3_application_url, params):
+  def __init__(self, s3_application_url, results_folder, params):
     self.cpu_utilization = 0.0
     self.folder = s3_application_url.split("/")[-1]
     self.node = None
     self.num_tasks = 0
     self.params = params
+    self.results_folder = results_folder
     self.s3_application_url = s3_application_url
     self.state = "STARTING"
     self.tasks = []
@@ -107,7 +134,7 @@ class Node:
 
   def add_task(self, file):
     print("Node", self.node.instance_id, "handling task", file)
-    self.tasks.append(Task(self.node.public_ip_address, self.params["key"], self.folder, file))
+    self.tasks.append(Task(self.results_folder, self.node.public_ip_address, self.params["key"], self.folder, file))
     self.tasks[-1].start()
     self.num_tasks = len(self.tasks)
     print("Node", self.node.instance_id, "has ", len(self.tasks), "tasks")
@@ -155,13 +182,11 @@ class Node:
     start_time = end_time - datetime.timedelta(seconds=self.params["agg_period"] + 5*600)
     client = boto3.client("cloudwatch", region_name=self.params["region"])
     cpu_datapoints = self.__get_metric__(client, "AWS/EC2", "CPUUtilization", start_time, end_time, self.params["agg_period"])
-    memory_datapoints = self.__get_metric__(client, "System/Linux", "MemoryUtilization", start_time, end_time, 60)
     assert(self.state == "STARTING" or len(cpu_datapoints) > 0)
-    if len(memory_datapoints) > 0 and len(cpu_datapoints) > 0:
+    if len(cpu_datapoints) > 0:
       self.state = "RUNNING"
 
     self.cpu_utilization = cpu_datapoints[-1]["Average"] if len(cpu_datapoints) > 0 else 0.0
-    self.memory_utilization = memory_datapoints[-1]["Average"] if len(memory_datapoints) > 0 else 0.0
 
   def terminate(self):
     self.state = "TERMINATING"

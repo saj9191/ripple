@@ -1,7 +1,5 @@
 import argparse
-import benchmark
 import boto3
-from dateutil import parser
 import json
 import numpy as np
 import queue
@@ -15,11 +13,27 @@ import upload
 import util
 
 
-DATE_INDEX = 6
-BINS = 60 * 60
+class Distribution:
+  def __init__(self, params):
+    random.seed(0)
+    self.params = params
+
+  def generate(self):
+    raise Exception("Not implemented")
 
 
-lock = threading.Lock()
+class Uniform(Distribution):
+  def __init__(self, params):
+    Distribution.__init__(self, params)
+
+  def generate(self):
+    requests = []
+    num_intervals = int(self.params["duration"] / self.params["interval"])
+    for i in range(num_intervals):
+      for j in range(self.params["num_interval_requests"]):
+        requests.append(i * self.params["interval"] + self.params["start_offset"])
+
+    return requests
 
 
 class Request(threading.Thread):
@@ -36,18 +50,111 @@ class Request(threading.Thread):
       try:
         print("Thread", self.thread_id, "Number of requests remaining", self.request_queue.qsize())
         [file_name, request_date_time] = self.request_queue.get(timeout=0)
-        request_delta = (request_date_time - self.date_time).total_seconds()
+        request_delta = request_date_time - self.date_time
         assert(request_delta >= 0)
         now = time.time()
         time_delta = now - self.start_time
         sleep = max(0, request_delta - time_delta)
-        print("Thread", self.thread_id, "sleeping for", sleep, "seconds")
-        print("Thread", self.thread_id, "start_date_time", self.date_time, "request_date_time", request_date_time, request_delta)
-        print("Thread", self.thread_id, "start_time", self.start_time, "time", now, "time_delta", time_delta)
+        # print("Thread", self.thread_id, "sleeping for", sleep, "seconds")
+        # print("Thread", self.thread_id, "start_date_time", self.date_time, "request_date_time", request_date_time, request_delta)
+        # print("Thread", self.thread_id, "start_time", self.start_time, "time", now, "time_delta", time_delta)
         time.sleep(sleep)
-        upload.upload(self.params["bucket"], file_name, self.params["sample_bucket"])
+        upload.upload(self.params["bucket"], file_name, self.params["input_bucket"])
       except queue.Empty as e:
         pass
+
+
+def create_requests(params):
+  if params["distribution"] == "uniform":
+    distribution = Uniform(params)
+  else:
+    raise Exception("Not implemented")
+
+  requests = distribution.generate()
+  return requests
+
+
+def run(params):
+  s3 = boto3.resource("s3")
+  file_names = list(map(lambda o: o.key, s3.Bucket(params["input_bucket"]).objects.filter(Prefix=params["input_prefix"])))
+  num_files = len(file_names)
+  requests = create_requests(params)
+
+  threads = []
+  request_queue = queue.Queue()
+
+  for i in range(len(requests)):
+    request_queue.put([file_names[i % num_files], requests[i]])
+
+  for i in range(params["num_threads"]):
+    threads.append(Request(i, 0, request_queue, params))
+    threads[-1].start()
+
+  for thread in threads:
+    thread.join()
+
+
+def main():
+  parser = argparse.ArgumentParser()
+  parser.add_argument("--parameters", type=str, required=True, help="File containing simulation distribution parameters")
+  args = parser.parse_args()
+  params = json.loads(open(args.parameters).read())
+  run(params)
+
+
+if __name__ == "__main__":
+  main()
+
+
+
+
+
+
+
+
+
+def old():
+  random.seed(0)
+  max_concurrency = 200
+  if distribution in ["uniform", "zipfian"]:
+    interval = 60  # Request every 60 seconds
+    #  num_intervals = 10
+  else:
+    interval = 7 * 60
+    #  num_intervals = int((time_range + interval) / interval)
+
+  if distribution == "uniform":
+    num_requests = 1
+    for i in range(0, time_range + 1, interval):
+      requests += [i] * num_requests
+  elif distribution == "zipfian":
+    # https://stackoverflowcom/questions/43601074/zipf-distribution-how-do-i-measure-zipf-distribution-using-python-numpy.
+    x = np.arange(1, 61)
+    a = 2.
+    y = x**(-a) / special.zetac(a) * max_concurrency
+    y = list(map(lambda i: int(i), list(y)))
+    random.shuffle(y)
+    print(y)
+    for i in range(len(y)):
+      requests += [i * interval] * y[i]
+  elif distribution == "bursty":
+    interval = 1200  # Every 20 minutes
+    for i in range(interval, time_range + interval, interval):
+      requests += [i] * 10
+      #requests += [i] * 100#max_concurrency
+  elif distribution == "concurrent":
+    for i in range(args.concurrency):
+      requests.append(args.delay * i)
+
+
+
+DATE_INDEX = 6
+BINS = 60 * 60
+
+
+lock = threading.Lock()
+
+
 
 
 def parse_csv(file_name):
@@ -82,44 +189,6 @@ def parse_csv(file_name):
   #for date in datetimes:
   #  if len(datetimes[date]) == num_requests:
   #    return datetimes[date]
-
-
-def create_request_distribution(distribution, args):
-  random.seed(0)
-  max_concurrency = 200
-  time_range = 60 * 60  # 1 hour
-  requests = []
-  if distribution in ["uniform", "zipfian"]:
-    interval = 60  # Request every 60 seconds
-    #  num_intervals = 10
-  else:
-    interval = 7 * 60
-    #  num_intervals = int((time_range + interval) / interval)
-
-  if distribution == "uniform":
-    num_requests = 1
-    for i in range(0, time_range + 1, interval):
-      requests += [i] * num_requests
-  elif distribution == "zipfian":
-    # https://stackoverflowcom/questions/43601074/zipf-distribution-how-do-i-measure-zipf-distribution-using-python-numpy.
-    x = np.arange(1, 61)
-    a = 2.
-    y = x**(-a) / special.zetac(a) * max_concurrency
-    y = list(map(lambda i: int(i), list(y)))
-    random.shuffle(y)
-    print(y)
-    for i in range(len(y)):
-      requests += [i * interval] * y[i]
-  elif distribution == "bursty":
-    interval = 1200  # Every 20 minutes
-    for i in range(interval, time_range + interval, interval):
-      requests += [i] * 10
-      #requests += [i] * 100#max_concurrency
-  elif distribution == "concurrent":
-    for i in range(args.concurrency):
-      requests.append(args.delay * i)
-
-  return requests
 
 
 class Second(threading.Thread):
@@ -249,50 +318,3 @@ def run1(args, params):
   #  benchmark.terminate_instance(instance, client, params)
 
 
-def run(dates, params):
-  threads = []
-  request_queue = queue.Queue()
-  s3 = boto3.resource("s3")
-  file_names = list(map(lambda o: o.key, s3.Bucket(params["sample_bucket"]).objects.filter(Prefix="ALS_CSF_Biomarker_Study-1530309740015")))
-
-  for i in range(len(dates)):
-    request_queue.put([file_names[i % len(file_names)], dates[i]])
-
-  num_threads = 50
-  for i in range(num_threads):
-    threads.append(Request(i, dates[0], request_queue, params))
-    threads[-1].start()
-
-  for thread in threads:
-    thread.join()
-
-
-def main():
-  parser = argparse.ArgumentParser()
-  parser.add_argument("--parameters", type=str, required=True, help="File containing parameters")
-  args = parser.parse_args()
-  params = json.loads(open(args.parameters).read())
-  dates = parse_csv("ChorusAccessLog.csv")
-  run(dates, params)
-  return
-  parser.add_argument("--distribution", type=str, help="Distribution to use")
-  parser.add_argument("--concurrency", type=int, help="Number of concurrent instances to run")
-  parser.add_argument('--folder', type=str, help="Folder to store results in")
-  parser.add_argument('--delay', type=int, default=0, help="Default delay for concurrent execution")
-  parser.add_argument('--deadline', action="store_true", default=False, help="Simulate deadline")
-  [access_key, secret_key] = util.get_credentials(params["credential_profile"])
-  params["access_key"] = access_key
-  params["secret_key"] = secret_key
-  params["setup"] = False
-  params["iterations"] = 1
-  if len(args.folder) > 0:
-    params["folder"] = args.folder
-
-  if args.deadline:
-    deadline(params)
-  else:
-    run(args, params)
-
-
-if __name__ == "__main__":
-  main()
