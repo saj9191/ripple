@@ -55,7 +55,10 @@ class Task(threading.Thread):
     self.client = create_client(self.node_ip, pem)
 
   def run(self):
+    start_time = time.time()
     _, err = exec_command(self.client, "cd ~/{0:s}; python3 main.py {1:s}".format(self.folder, self.file))
+    end_time = time.time()
+    open("simulations/round1/{0:f}-{1:f}".format(start_time, end_time), "a+")
     self.client.close()
     self.running = False
 
