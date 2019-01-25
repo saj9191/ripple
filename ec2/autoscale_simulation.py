@@ -3,6 +3,7 @@ import inspect
 import json
 import master
 import os
+import shutil
 import sys
 
 currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
@@ -20,11 +21,13 @@ def main():
   params = json.loads(open(args.parameters).read())
   if not os.path.isdir(args.result_folder):
     os.mkdir(args.result_folder)
+    os.mkdir(args.result_folder + "/tasks")
+    os.mkdir(args.result_folder + "/nodes")
+  shutil.copyfile(args.parameters, args.result_folder + "/" + args.parameters.split("/")[-1])
   m = master.Master(args.s3_application_url, args.result_folder, params)
   m.setup()
   m.start(asynch=True)
   simulation.run(params)
-
   m.shutdown()
 
 

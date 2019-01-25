@@ -77,6 +77,7 @@ def create_requests(params):
 def run(params):
   s3 = boto3.resource("s3")
   file_names = list(map(lambda o: o.key, s3.Bucket(params["input_bucket"]).objects.filter(Prefix=params["input_prefix"])))
+  file_names = list(filter(lambda k: not k.endswith("/"), file_names))
   num_files = len(file_names)
   requests = create_requests(params)
 
