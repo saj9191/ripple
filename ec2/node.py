@@ -1,6 +1,7 @@
 import boto3
 import os
 import paramiko
+import random
 import re
 import threading
 import time
@@ -31,7 +32,7 @@ def create_instance(tag_name, params):
     BlockDeviceMappings=[{
       "DeviceName": "/dev/xvda",
       "Ebs": {
-        "VolumeSize": 24
+        "VolumeSize": params["volume_size"]
       }
     }],
     ImageId=params["image_id"],
@@ -59,7 +60,13 @@ def create_instance(tag_name, params):
 
 
 def exec_command(ssh_client, command):
-  (stdin, stdout, stderr) = ssh_client.exec_command(command)
+  done = False
+  while not done:
+    try:
+      (stdin, stdout, stderr) = ssh_client.exec_command(command)
+      done = True
+    except TimeoutError as e:
+      pass
   code = stdout.channel.recv_exit_status()
   output = stdout.read().decode("utf-8")
   err = stderr.read().decode("utf-8")
@@ -81,14 +88,15 @@ def get_credentials():
 class Task(threading.Thread):
   def __init__(self, results_folder, node_ip, key, folder, pending_queue):
     super(Task, self).__init__()
+    self.cpu = 170
+    self.error = None
     self.file = pending_queue.get()
     self.folder = folder
+    self.memory = 2*1024*1024*1024
     self.node_ip = node_ip
     self.pending_queue = pending_queue
     self.results_folder = results_folder
     self.running = True
-    self.memory = 5*1024*1024*1024
-    self.cpu_share = 170
     self.__setup__(key + ".pem")
 
   def __setup__(self, pem):
@@ -96,16 +104,17 @@ class Task(threading.Thread):
 
   def run(self):
     start_time = time.time()
-    c = "sudo docker run -m {0:d} --cpu-shares {1:d} app python3 main.py {2:s}".format(self.memory, self.cpu_share, self.file.key)
-    print(c)
+    name = random.randint(1, 100*1000)
+    c = "sudo docker run --name {0:d} -m {1:d} --cpu-shares {2:d} app python3 main.py {3:s}".format(name, self.memory, self.cpu, self.file.key)
     code, output, err = exec_command(self.client, c)
     self.code = code
     end_time = time.time()
     if code != 0:
       if code != 125:
-        print("Sad", code)
-        print("output", output)
-        print(err)
+        print("CODE:", code)
+        print("OUTPUT:", output)
+        print("ERROR:", err)
+        self.error = err
       self.pending_queue.put(self.file)
     else:
       with open("{0:s}/tasks/{1:f}-{2:f}".format(self.results_folder, start_time, end_time), "w+") as f:
@@ -113,6 +122,8 @@ class Task(threading.Thread):
         f.write("EXECUTION START TIME: {0:f}\n".format(start_time))
         f.write("EXECUTION END TIME: {0:f}\n".format(end_time))
         f.write("KEY NAME: {0:s}\n".format(self.file.key))
+    code, _, _ = exec_command(self.client, "sudo docker rm {0:d}".format(name))
+    assert(code == 0)
     self.client.close()
     self.running = False
 
@@ -131,7 +142,7 @@ class Setup(threading.Thread):
     exec_command(client, 'echo "[default]\naws_access_key_id={0:s}\naws_secret_access_key={1:s}" >> ~/.aws/credentials'.format(access, secret))
     exec_command(client, 'echo "[default]\naws_access_key_id={0:s}\naws_secret_access_key={1:s}" >> ~/Docker/app/credentials'.format(access, secret))
     exec_command(client, 'echo -e "{0:s}\n{1:s}\n\n\n\n\n\nY\ny\n" | s3cmd --configure'.format(access, secret))
-    exec_command(client, "cd ~/Docker/app; s3cmd get {0:s}/ . --recursive".format(self.node.s3_application_url))
+    code, stdout, err = exec_command(client, "cd ~/Docker/app; s3cmd get {0:s}/ . --recursive --force".format(self.node.s3_application_url))
     code, _, _ = exec_command(client, "cd ~/Docker; sudo docker build --tag=app .")
     assert(code == 0)
     _, stdout, _ = exec_command(client, "grep -c ^processor /proc/cpuinfo")
@@ -143,8 +154,8 @@ class Setup(threading.Thread):
 class Node:
   def __init__(self, node_id, s3_application_url, pending_queue, results_folder, params):
     self.cpu_utilization = 0.0
+    self.error = None
     self.folder = s3_application_url.split("/")[-1]
-    self.max_tasks = params["max_tasks_per_node"]
     self.memory_utilization = 0.0
     self.num_cpus = 0
     self.node = None
@@ -164,7 +175,7 @@ class Node:
     self.setup.start()
 
   def add_tasks(self):
-    while len(self.tasks) < self.max_tasks and self.pending_queue.qsize() > 0:
+    while self.pending_queue.qsize() > 0:
       print(self.node.instance_id, "Adding task")
       self.tasks.append(Task(self.results_folder, self.node.public_ip_address, self.params["key"], self.folder, self.pending_queue))
       self.tasks[-1].start()
@@ -204,22 +215,16 @@ class Node:
       self.start_time = time.time()
 
     i = 0
-    max_tasks = 0
     while i < len(self.tasks):
       if not self.tasks[i].running:
-        if self.tasks[i].code == 0:
-          max_tasks += 1
+        if self.tasks[i].error is not None:
+          self.error = self.tasks[i].error
         self.tasks[i].join()
         self.tasks = self.tasks[:i] + self.tasks[i + 1:]
       else:
-        max_tasks += 1
         i += 1
 
-    if self.max_tasks == max_tasks:
-      max_tasks += 1
-    self.max_tasks = min(max_tasks, self.params["max_tasks_per_node"])
     self.num_tasks = len(self.tasks)
-
     if self.state in ["TERMINATING", "TERMINATED"]:
       if self.state == "TERMINATING" and self.num_tasks == 0:
         self.__terminate__()

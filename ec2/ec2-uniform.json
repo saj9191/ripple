@@ -21,5 +21,6 @@
 	"scale_down_utilization": 40.0,
 	"security": "sg-4ea90530",
 	"start_offset": 40,
-	"subnet": "subnet-03990a59"
+	"subnet": "subnet-03990a59",
+	"volume_size": 24
 }

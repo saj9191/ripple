@@ -55,9 +55,6 @@ class Request(threading.Thread):
         now = time.time()
         time_delta = now - self.start_time
         sleep = max(0, request_delta - time_delta)
-        # print("Thread", self.thread_id, "sleeping for", sleep, "seconds")
-        # print("Thread", self.thread_id, "start_date_time", self.date_time, "request_date_time", request_date_time, request_delta)
-        # print("Thread", self.thread_id, "start_time", self.start_time, "time", now, "time_delta", time_delta)
         time.sleep(sleep)
         upload.upload(self.params["bucket"], file_name, self.params["input_bucket"])
       except queue.Empty as e:
@@ -74,7 +71,7 @@ def create_requests(params):
   return requests
 
 
-def run(params):
+def run(params, m):
   s3 = boto3.resource("s3")
   file_names = list(map(lambda o: o.key, s3.Bucket(params["input_bucket"]).objects.filter(Prefix=params["input_prefix"])))
   file_names = list(filter(lambda k: not k.endswith("/"), file_names))
@@ -90,6 +87,11 @@ def run(params):
   for i in range(params["num_threads"]):
     threads.append(Request(i, 0, request_queue, params))
     threads[-1].start()
+
+  while request_queue.qsize() > 0:
+    if m.error is not None:
+      raise Exception("Error")
+    time.sleep(10)
 
   for thread in threads:
     thread.join()

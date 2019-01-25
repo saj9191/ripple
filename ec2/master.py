@@ -23,6 +23,7 @@ class Run(threading.Thread):
 
 class Master:
   def __init__(self, s3_application_url, results_folder, params):
+    self.error = None
     self.params = dict(params)
     self.pending_tasks = queue.Queue()
     self.results_folder = results_folder
@@ -89,6 +90,8 @@ class Master:
     if len(self.running_nodes) > 0:
       for n in self.running_nodes:
         n.reload()
+        if n.error is not None:
+          self.error = n.error
         cpu_average += n.cpu_utilization
         mem_average += n.memory_utilization
         num_tasks_average += n.num_tasks
