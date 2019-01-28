@@ -2,7 +2,7 @@
 	"agg_period": 5,
 	"bucket": "maccoss-emr",
   "distribution": "uniform",
-	"duration": 3600,
+	"duration": 120,
 	"key": "maccoss",
 	"image_id": "ami-0d7e7f41938bda67e",
 	"input_bucket": "tide-source-data",
@@ -10,8 +10,7 @@
 	"instance": "t2.xlarge",
 	"interval": 60,
 	"max_nodes": 10,
-	"max_tasks_per_node": 5,
-	"num_interval_requests": 1,
+	"num_interval_requests": 5,
 	"num_threads": 5,
 	"queue_name": "shjoyner-sqs",
 	"region": "us-west-2",
@@ -22,5 +21,5 @@
 	"security": "sg-4ea90530",
 	"start_offset": 40,
 	"subnet": "subnet-03990a59",
-	"volume_size": 24
+	"volume_size": 26
 }

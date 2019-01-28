@@ -1,4 +1,5 @@
 import argparse
+import boto3
 import inspect
 import json
 import master
@@ -19,6 +20,11 @@ def main():
   parser.add_argument("--result_folder", type=str, required=True, help="Folder to put results in")
   args = parser.parse_args()
   params = json.loads(open(args.parameters).read())
+  s3 = boto3.resource("s3")
+
+  for bucket in ["maccoss-ec2", "maccoss-emr"]:
+    s3.Bucket(bucket).objects.filter(Prefix="0/").delete()
+
   if not os.path.isdir(args.result_folder):
     os.mkdir(args.result_folder)
     os.mkdir(args.result_folder + "/tasks")

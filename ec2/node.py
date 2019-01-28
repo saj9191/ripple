@@ -90,7 +90,7 @@ class Task(threading.Thread):
     super(Task, self).__init__()
     self.cpu = 170
     self.error = None
-    self.file = pending_queue.get()
+    self.file = pending_queue.popleft()
     self.folder = folder
     self.memory = 2*1024*1024*1024
     self.node_ip = node_ip
@@ -110,20 +110,30 @@ class Task(threading.Thread):
     self.code = code
     end_time = time.time()
     if code != 0:
-      if code != 125:
+      if code not in [1, 125]:
         print("CODE:", code)
         print("OUTPUT:", output)
         print("ERROR:", err)
         self.error = err
-      self.pending_queue.put(self.file)
+      self.pending_queue.appendleft(self.file)
     else:
+      s3 = boto3.resource("s3")
+      bucket = s3.Bucket("maccoss-ec2")
+      objs = list(bucket.objects.filter(Prefix="/".join(self.file.key.split("/")[:2])))
+      if len(objs) != 1:
+        print("Cannot find output for", self.file.key, len(objs))
+      assert(len(objs) == 1)
+      print("Finished task", self.file.key)
       with open("{0:s}/tasks/{1:f}-{2:f}".format(self.results_folder, start_time, end_time), "w+") as f:
         f.write("S3 CREATED TIME: {0:f}\n".format(self.file.created_at))
         f.write("EXECUTION START TIME: {0:f}\n".format(start_time))
         f.write("EXECUTION END TIME: {0:f}\n".format(end_time))
         f.write("KEY NAME: {0:s}\n".format(self.file.key))
-    code, _, _ = exec_command(self.client, "sudo docker rm {0:d}".format(name))
-    assert(code == 0)
+    stop_code, _, _ = exec_command(self.client, "sudo docker rm {0:d}".format(name))
+    if code == 1:
+      assert(code != 0)
+    else:
+      assert(code == 0)
     self.client.close()
     self.running = False
 
@@ -136,7 +146,6 @@ class Setup(threading.Thread):
   def run(self):
     node = create_instance("emr-node-{0:f}".format(time.time()), self.node.params)
     node.reload()
-#    boto3.client("ec2").monitor_instances(InstanceIds=[node.instance_id])
     client = create_client(node.public_ip_address, self.node.params["key"] + ".pem")
     [access, secret] = get_credentials()
     exec_command(client, 'echo "[default]\naws_access_key_id={0:s}\naws_secret_access_key={1:s}" >> ~/.aws/credentials'.format(access, secret))
@@ -175,8 +184,7 @@ class Node:
     self.setup.start()
 
   def add_tasks(self):
-    while self.pending_queue.qsize() > 0:
-      print(self.node.instance_id, "Adding task")
+    if len(self.pending_queue) > 0:
       self.tasks.append(Task(self.results_folder, self.node.public_ip_address, self.params["key"], self.folder, self.pending_queue))
       self.tasks[-1].start()
     self.num_tasks = len(self.tasks)
@@ -211,13 +219,17 @@ class Node:
       self.setup.join()
       self.setup = None
       self.client = create_client(self.node.public_ip_address, self.params["key"] + ".pem")
-      self.state = "RUNNING"
+      if self.state == "STARTING":
+        self.state = "RUNNING"
+      elif self.state == "TERMINATING":
+        self.node.terminate()
       self.start_time = time.time()
 
     i = 0
     while i < len(self.tasks):
       if not self.tasks[i].running:
         if self.tasks[i].error is not None:
+          print(self.node.instance_id, "ERROR", self.tasks[i].error)
           self.error = self.tasks[i].error
         self.tasks[i].join()
         self.tasks = self.tasks[:i] + self.tasks[i + 1:]
@@ -226,7 +238,8 @@ class Node:
 
     self.num_tasks = len(self.tasks)
     if self.state in ["TERMINATING", "TERMINATED"]:
-      if self.state == "TERMINATING" and self.num_tasks == 0:
+      print(self.node.instance_id, "Terminating: Tasks left", self.num_tasks)
+      if self.state == "TERMINATING" and self.node is not None and self.num_tasks == 0:
         self.__terminate__()
       return
 

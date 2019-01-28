@@ -1,7 +1,7 @@
 import boto3
+import collections
 import json
 import node
-import queue
 import threading
 import time
 
@@ -24,8 +24,9 @@ class Run(threading.Thread):
 class Master:
   def __init__(self, s3_application_url, results_folder, params):
     self.error = None
+    self.num_tasks_average = 0.0
     self.params = dict(params)
-    self.pending_tasks = queue.Queue()
+    self.pending_tasks = collections.deque()
     self.results_folder = results_folder
     self.running = True
     self.running_nodes = []
@@ -51,11 +52,12 @@ class Master:
         for record in body["Records"]:
           key = record["s3"]["object"]["key"]
           timestamp = float(message["Attributes"]["SentTimestamp"]) / 1000.0
-          print("Received item", key)
-          self.pending_tasks.put(Task(key, timestamp))
+          print("Adding task", key)
+          self.pending_tasks.append(Task(key, timestamp))
       sqs.delete_message(QueueUrl=self.queue.url, ReceiptHandle=message["ReceiptHandle"])
 
   def __check_nodes__(self):
+    print("Number of Pending Tasks", len(self.pending_tasks))
     i = 0
     while i < len(self.starting_nodes):
       n = self.starting_nodes[i]
@@ -69,13 +71,13 @@ class Master:
 
     self.__check_termination__()
     [cpu_average, num_tasks_average] = self.__compute_statistics__()
+    self.num_tasks_average = num_tasks_average
     self.__scale_nodes__(cpu_average, num_tasks_average)
 
   def __check_termination__(self):
     i = 0
     while i < len(self.terminating_nodes):
       n = self.terminating_nodes[i]
-      n.reload()
       if n.state == "TERMINATED":
         self.terminating_nodes = self.terminating_nodes[:i] + self.terminating_nodes[i+1:]
       else:
@@ -87,22 +89,27 @@ class Master:
     mem_average = 0.0
     num_tasks_average = 0.0
 
-    if len(self.running_nodes) > 0:
-      for n in self.running_nodes:
+    nodes = self.running_nodes + self.terminating_nodes
+    num_nodes = len(nodes)
+
+    if len(nodes) > 0:
+      for n in nodes:
         n.reload()
         if n.error is not None:
           self.error = n.error
         cpu_average += n.cpu_utilization
         mem_average += n.memory_utilization
         num_tasks_average += n.num_tasks
-      cpu_average /= len(self.running_nodes)
-      num_tasks_average /= len(self.running_nodes)
+      cpu_average /= num_nodes
+      mem_average /= num_nodes
+      num_tasks_average /= num_nodes
 
-    print("Average CPU utilization", cpu_average)
-    print("Average memory utilization", mem_average)
-    print("Average Number of tasks", num_tasks_average)
-    print("Number of running nodes", len(self.running_nodes))
-    print("Number of starting nodes", len(self.starting_nodes))
+    print("Average CPU Utilization", cpu_average)
+    print("Average Memory Utilization", mem_average)
+    print("Average Number of Tasks", num_tasks_average)
+    print("Number of Running Nodes", len(self.running_nodes))
+    print("Number of Starting Nodes", len(self.starting_nodes))
+    print("Number of Terminating Nodes", len(self.terminating_nodes))
     print("")
     return [cpu_average, num_tasks_average]
 
@@ -114,11 +121,11 @@ class Master:
     if len(self.starting_nodes) == 0 and len(self.running_nodes) < self.params["max_nodes"]:
       if cpu_average >= self.params["scale_up_utilization"]:
         self.__create_node__()
-      elif self.pending_tasks.qsize() > 0 and len(self.running_nodes) == 0:
+      elif len(self.pending_tasks) > 0 and len(self.running_nodes) == 0:
         self.__create_node__()
 
     if len(self.terminating_nodes) == 0:
-      if len(self.running_nodes) > 1 or (self.pending_tasks.qsize() == 0 and len(self.running_nodes) > 0):
+      if len(self.running_nodes) > 1 or (len(self.pending_tasks) == 0 and len(self.running_nodes) > 0):
         if cpu_average <= self.params["scale_down_utilization"]:
           if len(self.running_nodes) > 1 or self.running_nodes[0].num_tasks == 0:
             self.termination_count += 1
@@ -136,21 +143,20 @@ class Master:
       self.queue = sqs.create_queue(QueueName=self.queue_name, Attributes={"DelaySeconds": "5"})
     else:
       self.queue = sqs.get_queue_by_name(QueueName=self.params["queue_name"])
+    # Remove stale SQS messages
+    client.purge_queue(QueueUrl=self.queue.url)
 
   def __start_tasks__(self):
     if len(self.running_nodes) > 0:
       self.running_nodes = sorted(self.running_nodes, key=lambda n: n.cpu_utilization)
       for n in self.running_nodes:
-        print("Adding", n.node.instance_id, n.cpu_utilization)
         n.add_tasks()
 
   def __terminate_node__(self):
     self.running_nodes = sorted(self.running_nodes, key=lambda n: n.cpu_utilization)
-    self.terminating_nodes.append(self.running_nodes.pop())
+    self.terminating_nodes.append(self.running_nodes.pop(0))
     self.terminating_nodes[-1].terminate()
     assert(self.terminating_nodes[-1].state == "TERMINATING")
-    print("Num terminated", len(self.terminating_nodes))
-    print("Num running", len(self.running_nodes))
 
   def __shutdown__(self):
     print("Shutting down...")
@@ -162,11 +168,11 @@ class Master:
     self.running_nodes = []
     self.starting_nodes = []
     while len(self.terminating_nodes) > 0:
-      self.__check_termination__()
+      self.__check_nodes__()
       time.sleep(10)
 
   def run(self):
-    while self.running:
+    while len(self.pending_tasks) > 0 or self.num_tasks_average > 0.0 or self.running:
       self.__check_for_new_items__()
       self.__check_nodes__()
       self.__start_tasks__()
