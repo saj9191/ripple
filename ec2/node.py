@@ -59,18 +59,39 @@ def create_instance(tag_name, params):
   return instance
 
 
-def exec_command(ssh_client, command):
-  done = False
-  while not done:
-    try:
-      (stdin, stdout, stderr) = ssh_client.exec_command(command)
-      done = True
-    except TimeoutError as e:
-      pass
-  code = stdout.channel.recv_exit_status()
-  output = stdout.read().decode("utf-8")
-  err = stderr.read().decode("utf-8")
-  return [code, output, err]
+class Client:
+  def __init__(self, ip, pem):
+    done = False
+    i = 0
+    while not done and i < 3:
+      try:
+        self.client = create_client(ip, pem)
+        done = True
+      except TimeoutError as e:
+        i += 1
+        time.sleep(1)
+    if not done:
+      raise Exception("Cannot connect to node", ip)
+
+  def exec_command(self, command):
+    done = False
+    i = 0
+    while not done and i < 3:
+      try:
+        (stdin, stdout, stderr) = self.client.exec_command(command)
+        done = True
+      except TimeoutError as e:
+        i += 1
+        time.sleep(1)
+    if not done:
+      raise Exception("Cannot execute command", command)
+    code = stdout.channel.recv_exit_status()
+    output = stdout.read().decode("utf-8")
+    err = stderr.read().decode("utf-8")
+    return [code, output, err]
+
+  def close(self):
+    self.client.close()
 
 
 def get_credentials():
@@ -100,13 +121,13 @@ class Task(threading.Thread):
     self.__setup__(key + ".pem")
 
   def __setup__(self, pem):
-    self.client = create_client(self.node_ip, pem)
+    self.client = Client(self.node_ip, pem)
 
   def run(self):
     start_time = time.time()
     name = random.randint(1, 100*1000)
     c = "sudo docker run --name {0:d} -m {1:d} --cpu-shares {2:d} app python3 main.py {3:s}".format(name, self.memory, self.cpu, self.file.key)
-    code, output, err = exec_command(self.client, c)
+    code, output, err = self.client.exec_command(c)
     self.code = code
     end_time = time.time()
     if code != 0:
@@ -122,18 +143,19 @@ class Task(threading.Thread):
       objs = list(bucket.objects.filter(Prefix="/".join(self.file.key.split("/")[:2])))
       if len(objs) != 1:
         print("Cannot find output for", self.file.key, len(objs))
-      assert(len(objs) == 1)
+        self.error = "Cannot find output for " + self.file.key
+        self.running = False
+        return
       print("Finished task", self.file.key)
       with open("{0:s}/tasks/{1:f}-{2:f}".format(self.results_folder, start_time, end_time), "w+") as f:
         f.write("S3 CREATED TIME: {0:f}\n".format(self.file.created_at))
+        f.write("RECEIVED TIME {0:f}\n".format(self.file.received_at))
         f.write("EXECUTION START TIME: {0:f}\n".format(start_time))
         f.write("EXECUTION END TIME: {0:f}\n".format(end_time))
         f.write("KEY NAME: {0:s}\n".format(self.file.key))
-    stop_code, _, _ = exec_command(self.client, "sudo docker rm {0:d}".format(name))
-    if code == 1:
-      assert(code != 0)
-    else:
-      assert(code == 0)
+    stop_code, _, _ = self.client.exec_command("sudo docker rm {0:d}".format(name))
+    if stop_code != 0 and self.error is not None:
+      self.error = "Unexpected top code: " + str(stop_code)
     self.client.close()
     self.running = False
 
@@ -146,15 +168,18 @@ class Setup(threading.Thread):
   def run(self):
     node = create_instance("emr-node-{0:f}".format(time.time()), self.node.params)
     node.reload()
-    client = create_client(node.public_ip_address, self.node.params["key"] + ".pem")
+    client = Client(node.public_ip_address, self.node.params["key"] + ".pem")
     [access, secret] = get_credentials()
-    exec_command(client, 'echo "[default]\naws_access_key_id={0:s}\naws_secret_access_key={1:s}" >> ~/.aws/credentials'.format(access, secret))
-    exec_command(client, 'echo "[default]\naws_access_key_id={0:s}\naws_secret_access_key={1:s}" >> ~/Docker/app/credentials'.format(access, secret))
-    exec_command(client, 'echo -e "{0:s}\n{1:s}\n\n\n\n\n\nY\ny\n" | s3cmd --configure'.format(access, secret))
-    code, stdout, err = exec_command(client, "cd ~/Docker/app; s3cmd get {0:s}/ . --recursive --force".format(self.node.s3_application_url))
-    code, _, _ = exec_command(client, "cd ~/Docker; sudo docker build --tag=app .")
+    client.exec_command('echo "[default]\naws_access_key_id={0:s}\naws_secret_access_key={1:s}" >> ~/.aws/credentials'.format(access, secret))
+    client.exec_command('echo "[default]\naws_access_key_id={0:s}\naws_secret_access_key={1:s}" >> ~/Docker/app/credentials'.format(access, secret))
+    client.exec_command('echo -e "{0:s}\n{1:s}\n\n\n\n\n\nY\ny\n" | s3cmd --configure'.format(access, secret))
+    code, stdout, err = client.exec_command("cd ~/Docker/app; s3cmd get {0:s}/ . --recursive --force".format(self.node.s3_application_url))
+    code, output, err = client.exec_command("cd ~/Docker; sudo docker build --tag=app .")
+    if code != 0:
+      print(output)
+      print(err)
     assert(code == 0)
-    _, stdout, _ = exec_command(client, "grep -c ^processor /proc/cpuinfo")
+    _, stdout, _ = client.exec_command("grep -c ^processor /proc/cpuinfo")
     self.node.num_cpus = int(stdout.strip())
     client.close()
     self.node.node = node
@@ -191,7 +216,7 @@ class Node:
 
   def __get_metrics__(self):
     metrics = [0.0, 0.0]
-    code, output, err = exec_command(self.client, 'sudo docker stats --format "table {{.CPUPerc}}\t{{.MemPerc}}" --no-stream')
+    code, output, err = self.client.exec_command('sudo docker stats --format "table {{.CPUPerc}}\t{{.MemPerc}}" --no-stream')
     lines = list(filter(lambda line: len(line) > 0, output.split("\n")[1:]))
     for line in lines:
       m = STATS_REGEX.search(line)
@@ -218,7 +243,7 @@ class Node:
     elif self.setup is not None:
       self.setup.join()
       self.setup = None
-      self.client = create_client(self.node.public_ip_address, self.params["key"] + ".pem")
+      self.client = Client(self.node.public_ip_address, self.params["key"] + ".pem")
       if self.state == "STARTING":
         self.state = "RUNNING"
       elif self.state == "TERMINATING":
@@ -241,12 +266,12 @@ class Node:
       print(self.node.instance_id, "Terminating: Tasks left", self.num_tasks)
       if self.state == "TERMINATING" and self.node is not None and self.num_tasks == 0:
         self.__terminate__()
-      return
 
-    [cpu, mem] = self.__get_metrics__()
-    self.cpu_utilization = cpu
-    self.memory_utilization = mem
-    print(self.node.instance_id, "CPU Utilization", self.cpu_utilization, "Memory", self.memory_utilization)
+    if self.state != "TERMINATED":
+      [cpu, mem] = self.__get_metrics__()
+      self.cpu_utilization = cpu
+      self.memory_utilization = mem
+      print(self.node.instance_id, "CPU Utilization", self.cpu_utilization, "Memory", self.memory_utilization)
 
   def terminate(self):
     self.terminate_time = time.time()

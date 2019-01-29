@@ -10,6 +10,7 @@ class Task:
   def __init__(self, key, timestamp):
     self.key = key
     self.created_at = timestamp
+    self.received_at = time.time()
 
 
 class Run(threading.Thread):
@@ -42,6 +43,7 @@ class Master:
     sqs = boto3.client("sqs", region_name=self.params["region"])
     response = sqs.receive_message(
       AttributeNames=["SentTimestamp"],
+      MaxNumberOfMessages=10,
       QueueUrl=self.queue.url,
       WaitTimeSeconds=self.params["s3_check_interval"],
     )
@@ -127,11 +129,14 @@ class Master:
     if len(self.terminating_nodes) == 0:
       if len(self.running_nodes) > 1 or (len(self.pending_tasks) == 0 and len(self.running_nodes) > 0):
         if cpu_average <= self.params["scale_down_utilization"]:
-          if len(self.running_nodes) > 1 or self.running_nodes[0].num_tasks == 0:
+          self.running_nodes = sorted(self.running_nodes, key=lambda n: n.cpu_utilization)
+          if len(self.running_nodes) > 1:  # or self.running_nodes[0].num_tasks == 0:
             self.termination_count += 1
             if self.termination_count == self.params["termination_count"]:
               self.__terminate_node__()
               self.termination_count = 0
+        else:
+          self.termination_count = 0
 
   def __setup_queue__(self):
     client = boto3.client("sqs", region_name=self.params["region"])
@@ -153,7 +158,6 @@ class Master:
         n.add_tasks()
 
   def __terminate_node__(self):
-    self.running_nodes = sorted(self.running_nodes, key=lambda n: n.cpu_utilization)
     self.terminating_nodes.append(self.running_nodes.pop(0))
     self.terminating_nodes[-1].terminate()
     assert(self.terminating_nodes[-1].state == "TERMINATING")
