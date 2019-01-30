@@ -2,6 +2,7 @@ import inspect
 import os
 import queue
 import sys
+import time
 currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
 parentdir = os.path.dirname(currentdir)
 sys.path.insert(0, parentdir)
@@ -16,7 +17,7 @@ class Item:
     self.payload = payload
     self.prefix = prefix
     self.priority = priority
-    self.start_time = None
+    self.start_time = time.time()
     self.__setup__()
 
   def __setup__(self):
