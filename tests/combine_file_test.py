@@ -60,14 +60,14 @@ class CombineFunction(unittest.TestCase):
 
     self.assertEqual(len(bucket2.objects.objects), 4)
     combined_obj = bucket2.objects.objects[-1]
-    self.assertEqual(combined_obj.key, "1/123.400000-13/1/2-1-2-suffix.new")
+    self.assertEqual(combined_obj.key, "1/123.400000-13/1-1/2-1-2-suffix.new")
     self.assertEqual(combined_obj.content, "M N O\bP Q R\n")
 
     event = tutils.create_event(bucket2.name, object5.key, [bucket1, bucket2, log], params)
     combine_files.handler(event, context)
     self.assertEqual(len(bucket2.objects.objects), 5)
     combined_obj = bucket2.objects.objects[-1]
-    self.assertEqual(combined_obj.key, "1/123.400000-13/1/1-1-2-suffix.new")
+    self.assertEqual(combined_obj.key, "1/123.400000-13/1-1/1-1-2-suffix.new")
     self.assertEqual(combined_obj.content, "A B C\nD E F\nG H I\nJ K L\n")
 
 

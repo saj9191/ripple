@@ -1,3 +1,6 @@
+from typing import Any, List, Dict
+
+
 def equal_lists(list1, list2):
   s1 = set(list1)
   s2 = set(list2)
@@ -13,7 +16,7 @@ class S3:
   def Bucket(self, bucket_name):
     return self.buckets[bucket_name]
 
-  def Object(self, bucket_name, key):
+  def Object(self, bucket_name: str, key: str):
     objs = list(self.buckets[bucket_name].objects.filter(Prefix=key))
     if len(objs) == 0:
       obj = Object(key, bucket_name=bucket_name)
@@ -47,7 +50,7 @@ class Objects:
 
 
 class Object:
-  def __init__(self, key, content="", last_modified=0, bucket_name="bucket", metadata={}):
+  def __init__(self, key: str, content: str="", last_modified: int=0, bucket_name="bucket", metadata: Dict[str, str]={}):
     self.bucket_name = bucket_name
     self.key = key
     self.content = content
@@ -55,14 +58,16 @@ class Object:
     self.last_modified = last_modified
     self.content_length = len(content)
 
-  def get(self, Range):
+  def get(self, Range: str=""):
+    if len(Range) == 0:
+      return {"Body": Content(self.content)}
     parts = Range.split("=")[1].split("-")
     start = int(parts[0])
     end = min(int(parts[1]), self.content_length - 1)
     return {"Body": Content(self.content[start:end + 1])}
 
-  def put(self, Body="", Metadata={}, StorageClass=""):
-    self.metadata = {}
+  def put(self, Body: str="", Metadata: Dict[str, str]={}, StorageClass: str=""):
+    self.metadata = Metadata
     if type(Body) == str or type(Body) == bytes:
       self.content = Body
     else:
@@ -73,7 +78,7 @@ class Object:
 
 
 class Content:
-  def __init__(self, content):
+  def __init__(self, content: str):
     self.content = content
 
   def read(self):
@@ -81,7 +86,7 @@ class Content:
 
 
 class Context:
-  def __init__(self, milliseconds_left):
+  def __init__(self, milliseconds_left: int):
     self.milliseconds_left = milliseconds_left
 
   def get_remaining_time_in_millis(self):
@@ -92,7 +97,7 @@ class Client:
   def __init__(self):
     self.invokes = []
 
-  def invoke(self, FunctionName, InvocationType, Payload):
+  def invoke(self, FunctionName: str, InvocationType: str, Payload: Dict[str, Any]):
     self.invokes.append({
       "name": FunctionName,
       "type": InvocationType,
@@ -106,7 +111,7 @@ class Client:
     }
 
 
-def create_event(bucket_name, key, buckets, params):
+def create_event(bucket_name: str, key: str, buckets: List[Bucket], params: Dict[str, Any]):
   def load():
     return params
 
