@@ -61,17 +61,22 @@ def create_instance(tag_name, params):
 
 class Client:
   def __init__(self, ip, pem):
+    self.ip = ip
+    self.pem = pem
+    self.__create__()
+
+  def __create__(self):
     done = False
     i = 0
     while not done and i < 3:
       try:
-        self.client = create_client(ip, pem)
+        self.client = create_client(self.ip, self.pem)
         done = True
       except TimeoutError as e:
         i += 1
         time.sleep(1)
     if not done:
-      raise Exception("Cannot connect to node", ip)
+      raise Exception("Cannot connect to node", self.ip)
 
   def exec_command(self, command):
     done = False
@@ -80,8 +85,9 @@ class Client:
       try:
         (stdin, stdout, stderr) = self.client.exec_command(command)
         done = True
-      except TimeoutError as e:
+      except Exception as e:
         i += 1
+        self.__create__()
         time.sleep(1)
     if not done:
       raise Exception("Cannot execute command", command)
