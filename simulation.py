@@ -97,12 +97,16 @@ def run(params, m):
     thread.join()
 
 
+class DummyMaster:
+  def __init__(self):
+    self.error = None
+
 def main():
   parser = argparse.ArgumentParser()
   parser.add_argument("--parameters", type=str, required=True, help="File containing simulation distribution parameters")
   args = parser.parse_args()
   params = json.loads(open(args.parameters).read())
-  run(params)
+  run(params, DummyMaster())
 
 
 if __name__ == "__main__":
