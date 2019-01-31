@@ -24,6 +24,10 @@ FILE_FORMAT = [{
 }, {
   "name": "bin",
   "type": "int",
+  "folder": False,
+}, {
+  "name": "num_bins",
+  "type": "int",
   "folder": True,
 }, {
   "name": "file_id",

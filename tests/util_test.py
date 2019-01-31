@@ -11,12 +11,12 @@ parentdir = os.path.dirname(currentdir)
 sys.path.insert(0, parentdir)
 import util
 
-object1 = Object("0/123.400000-13/1/1-1-0-suffix.txt")
-object2 = Object("1/123.400000-13/1/1-1-0-suffix.txt")
-object3 = Object("0/123.400000-13/1/2-1-1-suffix.txt")
-object4 = Object("1/123.400000-13/1/2-1-1-suffix.txt")
-object5 = Object("0/123.400000-13/1/3-1-1-suffix.log")
-object6 = Object("1/123.400000-13/1/3-1-1-suffix.log")
+object1 = Object("0/123.400000-13/1-1/1-1-0-suffix.txt")
+object2 = Object("1/123.400000-13/1-1/1-1-0-suffix.txt")
+object3 = Object("0/123.400000-13/1-1/2-1-1-suffix.txt")
+object4 = Object("1/123.400000-13/1-1/2-1-1-suffix.txt")
+object5 = Object("0/123.400000-13/1-1/3-1-1-suffix.log")
+object6 = Object("1/123.400000-13/1-1/3-1-1-suffix.log")
 bucket1 = Bucket("bucket1", [object1, object2, object3, object4])
 bucket2 = Bucket("bucket2", [object5, object6])
 log = Bucket("log", [object5, object6])
@@ -37,6 +37,7 @@ class FileNameMethods(unittest.TestCase):
       "timestamp": 123.4,
       "nonce": 42,
       "bin": 12,
+      "num_bins": 13,
       "file_id": 3,
       "execute": False,
       "num_files": 4,
@@ -44,7 +45,7 @@ class FileNameMethods(unittest.TestCase):
       "ext": "txt"
     }
     self.assertDictEqual(m, util.parse_file_name(util.file_name(m)))
-    self.assertEqual("0/123.400000-13/1/1-0-0-suffix.txt", util.file_name(util.parse_file_name("0/123.400000-13/1/1-0-0-suffix.txt")))
+    self.assertEqual("0/123.400000-13/1-4/1-0-0-suffix.txt", util.file_name(util.parse_file_name("0/123.400000-13/1-4/1-0-0-suffix.txt")))
 
 
 class ObjectsMethods(unittest.TestCase):
@@ -61,7 +62,7 @@ class ObjectsMethods(unittest.TestCase):
 
 class ExecutionMethods(unittest.TestCase):
   def test_run(self):
-    event = tutils.create_event("bucket1", "0/123.4-13/1/1-1-0-suffix.txt", [bucket1, log], params)
+    event = tutils.create_event("bucket1", "0/123.4-13/1-1/1-1-0-suffix.txt", [bucket1, log], params)
     context = tutils.create_context(params)
 
     # Call on object that doesn't have a log entry
@@ -72,7 +73,7 @@ class ExecutionMethods(unittest.TestCase):
     # Call on object that does have a log entry
     func = MagicMock()
     event["Records"][0]["s3"]["bucket"]["name"] = "bucket2"
-    event["Records"][0]["s3"]["object"]["key"] = "0/123.4-13/1/3-1-1-suffix.txt"
+    event["Records"][0]["s3"]["object"]["key"] = "0/123.4-13/1-1/3-1-1-suffix.txt"
     util.handle(event, context, func)
     self.assertFalse(func.called)
 
