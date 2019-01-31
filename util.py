@@ -147,6 +147,8 @@ def read(obj, start_byte, end_byte):
 
 
 def write(bucket, key, body, metadata, params):
+  global WRITE_COUNT
+  global WRITE_BYTE_COUNT
   done = False
   while not done:
     try:
@@ -155,6 +157,9 @@ def write(bucket, key, body, metadata, params):
     except botocore.exceptions.ClientError as e:
       print("ERROR: RATE LIMIT")
       time.sleep(random.randint(1, 10))
+
+  WRITE_COUNT += 1
+  WRITE_BYTE_COUNT += len(params["s3"].Object(bucket, key).get()["Body"].read())
 
   params["payloads"].append({
     "Records": [{
