@@ -36,8 +36,11 @@ def calculate_score(file, specie, threshold):
 
   if top_score < threshold:
     unknown_count += 1
+    print("Unknown", file, "Top score", top_score)
   elif top_specie == specie:
     correct_count += 1
+  else:
+    print("Incorrect", file, "Expected", specie, "Actual", top_specie)
 
   return [correct_count, unknown_count, 1, 1, cost]
 
@@ -64,7 +67,7 @@ def calculate_scores(threshold):
     "PXD002079": "phosphorylationHuman",
     "PXD002098-Mann_SILAC_Human_Cell_Lines": "silacLys6Arg6Human",
     "PXD002801-TMT10": "tmt6Mouse",
-    #"PXD003177": "itraq8Mouse",
+  #  "PXD003177": "itraq8Mouse",
     "PXD005323": "normalHuman",
     "PXD005709": "normalHuman",
     "PXD009220": "itraq8Mouse",
@@ -99,8 +102,6 @@ def calculate_scores(threshold):
         else:
           print("Cannot find top", token, "for", folder)
           pass
-      print("Total Count", total_count)
-      print("")
 
   print("")
   correct = {}
@@ -302,10 +303,6 @@ def check_data():
           print("Sad", 1000, key_count, total_keys, key, score)
         elif score not in base_2000_results[key]:
           print("Sad", 2000, key_count, total_keys, key, score)
-        elif base_500_results[key][score] > base_1000_results[key][score] or base_1000_results[key][score] > base_2000_results[key][score]:
-          print("WTF", key_count, total_keys, key, score, 500, base_500_results[key][score], 1000, base_1000_results[key][score], 2000, base_2000_results[key][score])
-        #assert(base_500_results[key][score] <= base_1000_results[key][score])
-        #assert(base_1000_results[key][score] <= base_2000_results[key][score])
     key_count += 1
 
   print("Num base files", len(files))
@@ -342,11 +339,11 @@ def check_data():
 
 
 def main():
-  check_data()
+#  check_data()
   #graph_thresholds()
 
   threshold = 0.25
-  #[correct, unknown, wrong] = calculate_scores(threshold)
+  [correct, unknown, wrong] = calculate_scores(threshold)
   #graph(correct, unknown, wrong, threshold)
 
 
