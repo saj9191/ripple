@@ -80,7 +80,7 @@ def statistics(bucket_name, token, prefix, params, output_file):
     with open(output_file, "w+") as f:
       f.write(json.dumps({"stats": statistics}, indent=4, sort_keys=True))
 
-  return [statistics, costs]
+  return [statistics, costs, durations]
 
 
 def main():
