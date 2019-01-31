@@ -14,6 +14,7 @@ jupyter
 *.ropeproject
 json/private*
 json/ec2*
+nature_results/ChorusAccessLog.csv
 scripts/crux-output*
 scripts/*.index
 scripts/*.csv
