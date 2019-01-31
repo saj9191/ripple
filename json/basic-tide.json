@@ -1,0 +1,107 @@
+{
+	"input_name": "Coon-HeLa-APD-Data/ASH_20170314_HELA_120MIN.mzML",
+	"model": "lambda",
+	"iterations": 1,
+	"region": "us-west-2",
+	"folder": "tide",
+	"tag": "tide",
+	"timeout": 600,
+	"num_bins": 50,
+	"bucket": "maccoss-tide",
+	"storage_class": "STANDARD",
+	"credential_profile": "maccoss",
+	"role": "service-role/lambdaFullAccessRole",
+	"log": "maccoss-log",
+	"sample_input": true,
+	"sample_bucket": "tide-source-data",
+	"stats": false,
+	"setup": true,
+	"dependencies": {
+		"formats": {
+			"percolator": [
+				"formats/tsv.py"
+			],
+			"confidence": [
+				"formats/tsv.py"
+			]
+		}
+	},
+	"functions": {
+		"confidence": {
+			"file": "application",
+			"application": "confidence",
+			"database_bucket": "maccoss-fasta",
+			"memory_size": 512
+		},
+		"find-species-match": {
+			"file": "match",
+			"format": "confidence",
+			"memory_size": 128,
+	    "identifier": "q-value",
+	    "find": "max sum",
+	    "chunk_size": 100000
+		},
+		"map-species": {
+			"file": "map",
+			"memory_size": 128,
+		  "input_key_value": "key",
+			"bucket_key_value": "species",
+			"ranges": false,
+			"directories": true
+		},
+		"tide": {
+			"file": "application",
+			"application": "tide",
+			"memory_size": 3008,
+			"database_bucket": "maccoss-fasta",
+	    "num_threads": 0
+		},
+		"top-mzML": {
+			"file": "top",
+			"format": "mzML",
+			"memory_size": 3008,
+		  "identifier": "tic",
+		  "number": 1000,
+		  "chunk_size": 500000
+		},
+		"combine-tsv-files": {
+			"file": "combine_files",
+			"format": "tsv",
+			"memory_size": 256,
+			"chunk_size": 10000000,
+	    "sort": false
+		},
+		"percolator": {
+			"file": "application",
+			"application": "percolator",
+			"database_bucket": "maccoss-fasta",
+			"memory_size": 3008,
+	    "max_train": 10000,
+	    "output": "peptides"
+		},
+		"handle-specie-match": {
+			"file": "application",
+			"application": "handle_specie_match",
+			"memory_size": 128
+		}
+	},
+	"pipeline": [{
+		"name": "top-mzML"
+	}, {
+		"name": "map-species"
+	}, {
+	  "name": "tide"
+	}, {
+	  "name": "confidence"
+	}, {
+	  "name": "find-species-match"
+	}, {
+	  "name": "handle-specie-match"
+	}, {
+	  "name": "tide"
+	}, {
+	  "name": "combine-tsv-files"
+	}, {
+	  "name": "percolator"
+	}]
+}
