@@ -15,6 +15,7 @@ def create_s3_key_name(key):
     "prefix": "0",
     "timestamp": now,
     "nonce": nonce,
+    "num_bins": 1,
     "bin": 1,
     "file_id": 1,
     "suffix": "tide",
