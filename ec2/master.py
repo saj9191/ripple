@@ -34,7 +34,8 @@ class Master:
     self.starting_nodes = []
     self.s3_application_url = s3_application_url
     self.terminating_nodes = []
-    self.termination_count = 0
+    self.scale_up_start_time = None
+    self.scale_down_start_time = None
     self.total_node_count = 0
 
   def __check_for_new_items__(self):
@@ -122,21 +123,26 @@ class Master:
   def __scale_nodes__(self, cpu_average, num_tasks_average):
     if len(self.starting_nodes) == 0 and len(self.running_nodes) < self.params["max_nodes"]:
       if cpu_average >= self.params["scale_up_utilization"]:
-        self.__create_node__()
-      elif len(self.pending_tasks) > 0 and len(self.running_nodes) == 0:
-        self.__create_node__()
+        if self.scale_up_start_time is None:
+          self.scale_up_start_time = time.time()
+        if time.time() - self.scale_up_start_time > self.params["scale_time"]:
+          self.__create_node__()
+          self.scale_up_start_time = time.time()
+      else:
+        self.scale_up_start_time = None
 
     if len(self.terminating_nodes) == 0:
       if len(self.running_nodes) > 1 or (len(self.pending_tasks) == 0 and len(self.running_nodes) > 0):
         if cpu_average <= self.params["scale_down_utilization"]:
           self.running_nodes = sorted(self.running_nodes, key=lambda n: n.cpu_utilization)
-          if len(self.running_nodes) > 1:  # or self.running_nodes[0].num_tasks == 0:
-            self.termination_count += 1
-            if self.termination_count == self.params["termination_count"]:
+          if len(self.running_nodes) > 1:
+            if self.scale_down_start_time is None:
+              self.scale_down_start_time = time.time()
+            if time.time() - self.scale_down_start_time > self.params["scale_time"]:
               self.__terminate_node__()
-              self.termination_count = 0
+              self.scale_down_start_time = time.time()
         else:
-          self.termination_count = 0
+          self.scale_down_start_time = None
 
   def __setup_queue__(self):
     client = boto3.client("sqs", region_name=self.params["region"])

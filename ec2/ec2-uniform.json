@@ -15,11 +15,11 @@
 	"queue_name": "shjoyner-sqs",
 	"region": "us-west-2",
 	"s3_check_interval": 10,
-	"scale_up_utilization": 60.0,
 	"scale_down_utilization": 40.0,
+	"scale_up_utilization": 60.0,
+	"scale_time": 600,
 	"security": "sg-4ea90530",
 	"start_offset": 40,
 	"subnet": "subnet-0856ecef46b386550",
-	"termination_count": 3,
 	"volume_size": 26
 }
