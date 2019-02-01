@@ -33,8 +33,14 @@ class OffsetBounds:
     return "[{0:d},{1:d}]".format(self.start_index, self.end_index)
 
 
+class Options:
+  def __init__(self, has_header: bool):
+    self.has_header = has_header
+
+
 class Iterator(Generic[T]):
   adjust_chunk_size: ClassVar[int] = 300
+  options: ClassVar[Options]
   read_chunk_size: ClassVar[int] = 1000*1000
   delimiter: Delimiter
   identifiers: T
@@ -78,9 +84,17 @@ class Iterator(Generic[T]):
     self.offsets = [self.next_index]
 
   @classmethod
-  def combine(cls: Any, objs: List[Any], f: BinaryIO):
-    for obj in objs:
-      obj.download_fileobj(f)
+  def combine(cls: Any, objs: List[Any], f: BinaryIO) -> Dict[str, str]:
+    metadata = {}
+
+    for i in range(len(objs)):
+      obj = objs[i]
+      if cls.options.has_header and i > 0:
+        f.write(util.read(0, obj.content_length).split(cls.delimiter.token)[1:])
+      else:
+        obj.download_fileobj(f)
+
+    return metadata
 
   @classmethod
   def from_array(cls: Any, items: List[str], f: BinaryIO) -> Dict[str, str]:
@@ -104,12 +118,12 @@ class Iterator(Generic[T]):
     return items
 
   @classmethod
-  def get_identifier_value(cls: Any, item: str, identifier: T):
+  def get_identifier_value(cls: Any, item: str, identifier: T) -> str:
     raise Exception("Not Implemented")
 
   def get(self, start_byte: int, end_byte: int) -> List[str]:
     content: str = util.read(self.obj, start_byte, end_byte)
-    return to_array(content)
+    return self.to_array(content)
 
   def get_item_count(self) -> int:
     raise Exception("Not Implemented")
@@ -134,8 +148,10 @@ class Iterator(Generic[T]):
     else:
       index: int = stream.rindex(self.delimiter.token) if self.delimiter.token in stream else -1
       if index != -1:
-        if self.delimiter.token != DelimiterPosition.start:
+        if self.delimiter.token == DelimiterPosition.inbetween:
           index += 1
+        elif self.delimiter.token == DelimiterPosition.start:
+          index -= 1
         next_end_index -= (len(stream) - index)
         next_start_index -= len(self.remainder)
         self.remainder = stream[index:]
@@ -146,8 +162,9 @@ class Iterator(Generic[T]):
         stream = ""
 
     self.next_index = min(next_end_index + len(self.remainder) + 1, self.end_index)
+    offset_bounds: Optional[OffsetBounds]
     if len(stream) == 0:
-      offset_bounds: Optional[OffsetBounds] = None
+      offset_bounds = None
     else:
-      offset_bounds: Optional[OffsetBounds] = OffsetBounds(next_start_index, next_end_index)
+      offset_bounds = OffsetBounds(next_start_index, next_end_index)
     return (self.to_array(stream), offset_bounds, more)

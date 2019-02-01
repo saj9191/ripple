@@ -2,7 +2,9 @@ import inspect
 import os
 import sys
 import unittest
+from iterator import OffsetBounds
 from tutils import Object
+from typing import Any, Optional
 
 currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
 parentdir = os.path.dirname(currentdir)
@@ -10,56 +12,40 @@ sys.path.insert(0, parentdir + "/formats")
 import fasta
 
 
+class TestIterator(fasta.Iterator):
+  def __init__(self, obj: Any, offset_bounds: Optional[OffsetBounds], adjust_chunk_size: int, read_chunk_size: int):
+    self.adjust_chunk_size = adjust_chunk_size
+    self.read_chunk_size = read_chunk_size
+    fasta.Iterator.__init__(self, obj, offset_bounds)
+
+
 class IteratorMethods(unittest.TestCase):
-  def test_next_offsets(self):
-    obj = Object("test.fasta", ">A\tB\tC\n>a\tb\tc\n>1\t2\t3\n")
-
-    # Read everything in one pass
-    it = fasta.Iterator(obj, 30)
-    [offsets, more] = it.nextOffsets()
-    self.assertFalse(more)
-    self.assertEqual(offsets["offsets"][0], 0)
-    self.assertEqual(offsets["offsets"][1], 20)
-
-    # Requires multiple passes
-    it = fasta.Iterator(obj, 8)
-    [offsets, more] = it.nextOffsets()
-    self.assertTrue(more)
-    self.assertEqual(offsets["offsets"][0], 0)
-    self.assertEqual(offsets["offsets"][1], 6)
-
-    [offsets, more] = it.nextOffsets()
-    self.assertTrue(more)
-    self.assertEqual(offsets["offsets"][0], 7)
-    self.assertEqual(offsets["offsets"][1], 13)
-
-    [offsets, more] = it.nextOffsets()
-    self.assertFalse(more)
-    self.assertEqual(offsets["offsets"][0], 14)
-    self.assertEqual(offsets["offsets"][1], 20)
-
   def test_next(self):
     obj = Object("test.fasta", ">A\tB\tC\n>a\tb\tc\n>1\t2\t3\n")
 
-    # Requires multiple passes
-    it = fasta.Iterator(obj, 8)
-    [o, more] = it.next()
-    self.assertTrue(more)
-    self.assertEqual(o, [">A\tB\tC\n"])
-
-    [o, more] = it.next()
-    self.assertTrue(more)
-    self.assertEqual(o, [">a\tb\tc\n"])
-
-    [o, more] = it.next()
-    self.assertFalse(more)
-    self.assertEqual(o, [">1\t2\t3\n"])
-
     # Read everything in one pass
-    it = fasta.Iterator(obj, 30)
-    [o, more] = it.next()
+    it = TestIterator(obj, None, 30, 30)
+    [items, offset_bounds, more] = it.next()
+    self.assertEqual(items, [">A\tB\tC\n", ">a\tb\tc\n", ">1\t2\t3\n"])
+    self.assertEqual(offset_bounds, OffsetBounds(0, 20))
     self.assertFalse(more)
-    self.assertEqual(o, [">A\tB\tC\n", ">a\tb\tc\n", ">1\t2\t3\n"])
+
+    # Requires multiple passes
+    it = TestIterator(obj, None, 8, 8)
+    [items, offset_bounds, more] = it.next()
+    self.assertEqual(items, [">A\tB\tC\n"])
+    self.assertEqual(offset_bounds, OffsetBounds(0, 6))
+    self.assertTrue(more)
+
+    [items, offset_bounds, more] = it.next()
+    self.assertEqual(items, [">a\tb\tc\n"])
+    self.assertEqual(offset_bounds, OffsetBounds(7, 13))
+    self.assertTrue(more)
+
+    [items, offset_bounds, more] = it.next()
+    self.assertEqual(items, [">1\t2\t3\n"])
+    self.assertEqual(offset_bounds, OffsetBounds(14, 20))
+    self.assertFalse(more)
 
 
 if __name__ == "__main__":

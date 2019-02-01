@@ -1,6 +1,7 @@
 import importlib
 import os
 import util
+from typing import Any, Dict, List
 
 
 def combine(bucket_name, key, input_format, output_format, offsets, params):
@@ -33,10 +34,13 @@ def combine(bucket_name, key, input_format, output_format, offsets, params):
     temp_name = "/tmp/{0:s}".format(file_name)
     # Make this deterministic and combine in the same order
     keys.sort()
-    metadata = iterator.combine(bucket_name, keys, temp_name, params)
-    f = open(temp_name, "rb")
-    util.write(params["bucket"], file_name, f, metadata, params)
-    f.close()
+    objects: List[Any] = list(map(lambda key: params["s3"].Object(bucket_name, key), keys))
+    metadata: Dict[str, str] = {}
+    with open(temp_name, "wb+") as f:
+      metadata = iterator.combine(objects, f)
+
+    with open(temp_name, "rb") as f:
+      util.write(params["bucket"], file_name, f, metadata, params)
     os.remove(temp_name)
 
 
