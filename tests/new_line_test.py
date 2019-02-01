@@ -2,7 +2,9 @@ import inspect
 import os
 import sys
 import unittest
-from tutils import S3, Bucket, Object
+from iterator import OffsetBounds
+from tutils import Bucket, Object
+from typing import Any, Optional
 
 currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
 parentdir = os.path.dirname(currentdir)
@@ -10,113 +12,84 @@ sys.path.insert(0, parentdir + "/formats")
 import new_line
 
 
+class TestIterator(new_line.Iterator):
+  def __init__(self, obj: Any, offset_bounds: Optional[OffsetBounds], adjust_chunk_size: int, read_chunk_size: int):
+    self.adjust_chunk_size = adjust_chunk_size
+    self.read_chunk_size = read_chunk_size
+    new_line.Iterator.__init__(self, obj, offset_bounds)
+
+
 class IteratorMethods(unittest.TestCase):
-  def test_next_offsets(self):
-    obj = Object("test.new_line", "A B C\na b c\n1 2 3\n")
-
-    # Read everything in one pass
-    it = new_line.Iterator(obj, 20)
-    [offsets, more] = it.nextOffsets()
-    self.assertFalse(more)
-    self.assertEqual(offsets["offsets"][0], 0)
-    self.assertEqual(offsets["offsets"][1], 17)
-
-    # Requires multiple passes
-    it = new_line.Iterator(obj, 10)
-    [offsets, more] = it.nextOffsets()
-    self.assertTrue(more)
-    self.assertEqual(offsets["offsets"][0], 0)
-    self.assertEqual(offsets["offsets"][1], 5)
-
-    [offsets, more] = it.nextOffsets()
-    self.assertFalse(more)
-    self.assertEqual(offsets["offsets"][0], 6)
-    self.assertEqual(offsets["offsets"][1], 17)
-
-    # Specify offsets
-    it = new_line.Iterator(obj, 10, {"offsets": [6, 11]})
-    [offsets, more] = it.nextOffsets()
-    self.assertFalse(more)
-    self.assertEqual(offsets["offsets"][0], 6)
-    self.assertEqual(offsets["offsets"][1], 11)
-
   def test_adjust(self):
     obj = Object("test.new_line", "A B C\na b c\n1 2 3\nD E F\nd e f\n")
-    offsets = {
-      "offsets": [8, 13],
-      "adjust": True
-    }
-
-    it = new_line.Iterator(obj, 10, offsets)
-    [o, more] = it.next()
+    it = TestIterator(obj, OffsetBounds(8, 13), 10, 10)
+    [items, offset_bounds, more] = it.next()
+    self.assertEqual(items, ["a b c"])
+    self.assertEqual(offset_bounds, OffsetBounds(6, 11))
     self.assertFalse(more)
-    self.assertEqual(o, ["a b c"])
 
     # No adjustment needed
-    offsets = {
-      "offsets": [6, 11],
-      "adjust": True
-    }
-    it = new_line.Iterator(obj, 10, offsets)
-    [o, more] = it.next()
+    it = TestIterator(obj, OffsetBounds(6, 11), 10, 10)
+    [items, offset_bounds, more] = it.next()
+    self.assertEqual(items, ["a b c"])
+    self.assertEqual(offset_bounds, OffsetBounds(6, 11))
     self.assertFalse(more)
-    self.assertEqual(o, ["a b c"])
 
     # Beginning of content
-    offsets = {
-      "offsets": [0, 7],
-      "adjust": True
-    }
-    it = new_line.Iterator(obj, 10, offsets)
-    [o, more] = it.next()
+    it = TestIterator(obj, OffsetBounds(0, 7), 10, 10)
+    [items, offset_bounds, more] = it.next()
     self.assertFalse(more)
-    self.assertEqual(o, ["A B C"])
+    self.assertEqual(items, ["A B C"])
 
     # Beginning of content
-    offsets = {
-      "offsets": [26, obj.content_length - 1],
-      "adjust": True
-    }
-    it = new_line.Iterator(obj, 10, offsets)
-    [o, more] = it.next()
+    it = TestIterator(obj, OffsetBounds(26, obj.content_length - 1), 10, 10)
+    [items, offset_bounds, more] = it.next()
     self.assertFalse(more)
-    self.assertEqual(o, ["d e f", ""])
+    self.assertEqual(items, ["d e f"])
 
   def test_next(self):
     obj = Object("test.new_line", "A B C\na b c\n1 2 3\n")
 
     # Requires multiple passes
-    it = new_line.Iterator(obj, 10)
-    [o, more] = it.next()
+    it = TestIterator(obj, None, 11, 11)
+    [items, offset_bounds, more] = it.next()
     self.assertTrue(more)
-    self.assertEqual(o, ["A B C", ""])
+    self.assertEqual(OffsetBounds(0, 11), offset_bounds)
+    self.assertEqual(items, ["A B C", "a b c"])
 
-    [o, more] = it.next()
+    [items, offset_bounds, more] = it.next()
     self.assertFalse(more)
-    self.assertEqual(o, ["a b c", "1 2 3", ""])
-
-    # Read everything in one pass
-    it = new_line.Iterator(obj, 20)
-    [o, more] = it.next()
-    self.assertFalse(more)
-    self.assertEqual(o, ["A B C", "a b c", "1 2 3", ""])
+    self.assertEqual(items, ["1 2 3"])
 
   def test_overflow(self):
     obj = Object("test.new_line", "A B C D E F G H\na b c d e f g h\n1 2 3 4 5 6 7 8 9\n")
 
     # Requires multiple passes
-    it = new_line.Iterator(obj, 10)
-    [o, more] = it.next()
+    it = TestIterator(obj, None, 10, 10)
+    [items, offset_bounds, more] = it.next()
+    self.assertEqual(items, [])
+    self.assertEqual(offset_bounds, None)
     self.assertTrue(more)
-    self.assertEqual(o, ["A B C D E F G H", ""])
 
-    [o, more] = it.next()
+    [items, offset_bounds, more] = it.next()
+    self.assertEqual(items, ["A B C D E F G H"])
+    self.assertEqual(offset_bounds, OffsetBounds(0, 15))
     self.assertTrue(more)
-    self.assertEqual(o, ["a b c d e f g h", ""])
-                         #", "1 2 3", ""])
-    [o, more] = it.next()
+
+    [items, offset_bounds, more] = it.next()
+    self.assertEqual(items, ["a b c d e f g h"])
+    self.assertEqual(offset_bounds, OffsetBounds(16, 31))
+    self.assertTrue(more)
+
+    [items, offset_bounds, more] = it.next()
+    self.assertEqual(items, [])
+    self.assertEqual(offset_bounds, None)
+    self.assertTrue(more)
+
+    [items, offset_bounds, more] = it.next()
+    self.assertEqual(items, ["1 2 3 4 5 6 7 8 9"])
+    self.assertEqual(offset_bounds, OffsetBounds(32, 49))
     self.assertFalse(more)
-    self.assertEqual(o, ["1 2 3 4 5 6 7 8 9", ""])
 
   def test_combine(self):
     object1 = Object("test1.new_line", "A B C\na b c\n1 2 3\n")
@@ -124,18 +97,11 @@ class IteratorMethods(unittest.TestCase):
     object3 = Object("test3.new_line", "G H I\ng h i\n7 8 9\n")
     object4 = Object("test4.new_line", "J K L\nj k l\n10 11 12\n")
     objects = [object1, object2, object3, object4]
-    bucket1 = Bucket("bucket1", objects)
-    s3 = S3([bucket1])
-    params = {
-      "s3": s3,
-      "chunk_size": 10,
-      "identifier": "",
-      "sort": False,
-    }
 
-    keys = list(map(lambda o: o.key, objects))
     temp_name = "/tmp/ripple_test"
-    new_line.Iterator.combine("bucket1", keys, temp_name, params)
+    with open(temp_name, "wb+") as f:
+      new_line.Iterator.combine(objects, f)
+
     with open(temp_name) as f:
       self.assertEqual(f.read(), object1.content + object2.content + object3.content + object4.content)
     os.remove(temp_name)

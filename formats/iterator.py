@@ -1,190 +1,153 @@
 import boto3
+from enum import Enum
 import heapq
 import util
+from typing import Any, BinaryIO, ClassVar, Dict, Generic, List, Optional, Tuple, TypeVar
 
 
-class Element():
-  def __init__(self, values, more, iterator):
-    self.values = values
-    self.more = more
-    self.iterator = iterator
-
-  def __lt__(self, other):
-    return self.values[0][0] < other.values[0][0]
+T = TypeVar("T")
 
 
-class Iterator:
-  def __init__(self, cls, obj, chunk_size):
-    self.chunk_size = chunk_size
-    self.obj = obj
+class DelimiterPosition(Enum):
+  start = 1
+  inbetween = 2
+  end = 3
+
+
+class Delimiter:
+  def __init__(self, token: str, position: DelimiterPosition):
+    self.token = token
+    self.position = position
+
+
+class OffsetBounds:
+  def __init__(self, start_index: int, end_index: int):
+    assert(start_index < end_index)
+    self.start_index = start_index
+    self.end_index = end_index
+
+  def __eq__(self, other):
+    return self.start_index == other.start_index and self.end_index == other.end_index
+
+  def __repr__(self):
+    return "[{0:d},{1:d}]".format(self.start_index, self.end_index)
+
+
+class Iterator(Generic[T]):
+  adjust_chunk_size: ClassVar[int] = 300
+  read_chunk_size: ClassVar[int] = 1000*1000
+  delimiter: Delimiter
+  identifiers: T
+
+  def __init__(self, cls: Any, obj: Any, offset_bounds: Optional[OffsetBounds]):
     self.cls = cls
-    self.seen_count = 0
-    self.total_count = None
-    self.remainder = ""
-    self.current_offset = 0
-    self.content_length = obj.content_length
-    self.indicator_at_beginning = False
-    self.offsets = []
+    self.item_count = None
+    self.obj = obj
+    self.offset_bounds = offset_bounds
+    self.offsets: List[int] = []
+    self.remainder: str = ""
+    self.__setup__()
 
-  def __setup__(self, offsets):
-    if len(offsets) != 0 and len(offsets["offsets"]) != 0:
-      self.current_offset = offsets["offsets"][0]
-      self.content_length = offsets["offsets"][1] + 1
-      if util.is_set(offsets, "adjust"):
-        if self.current_offset != 0:
-          # Don't include identifier
-          self.current_offset -= self.__adjust__(self.current_offset, self.identifier)
-          if not self.indicator_at_beginning:
-            self.current_offset += len(self.identifier)
-        if self.content_length != self.obj.content_length:
-          self.content_length -= self.__adjust__(self.content_length, self.identifier)
-          if self.indicator_at_beginning:
-            self.content_length += len(self.identifier)
-    self.offsets = [self.current_offset]
+  def __adjust__(self, end_index: int, delimiter: Delimiter):
+    content: str = util.read(self.obj, max(end_index - self.adjust_chunk_size, 0), end_index)
+    last_byte: int = len(content) - 1
+    offset_index: int = last_byte - content.rindex(delimiter.token)
+    assert(offset_index >= 0)
+    return offset_index
 
-  def __adjust__(self, index, identifier, chunk_size=300):
-    content = util.read(self.obj, max(index - chunk_size, 0), index)
-    last_byte = len(content) - 1
-    offset = last_byte - content.rindex(identifier)
-    return offset
+  def __setup__(self):
+    if self.offset_bounds:
+      self.start_index = self.offset_bounds.start_index
+      self.end_index = self.offset_bounds.end_index
+      if self.start_index != 0:
+        self.start_index -= self.__adjust__(self.start_index, self.delimiter)
+        if self.delimiter.position != DelimiterPosition.start:
+          # Don't include delimiter
+          self.start_index += len(self.delimiter.token)
+      if self.end_index != self.obj.content_length:
+        self.end_index -= self.__adjust__(self.end_index, self.delimiter)
+        if self.delimiter.position == DelimiterPosition.start:
+          self.end_index += len(self.delimiter.identifier)
+    else:
+      self.start_index = 0
+      self.end_index = self.obj.content_length - 1
 
-  # This is for the sort function
-  def __lt__(self, other):
-    return True
+    assert(self.start_index <= self.end_index)
+    self.next_index = self.start_index
+    self.content_length = self.end_index - self.start_index
+    self.offsets = [self.next_index]
 
-  def createContent(self, content):
+  @classmethod
+  def combine(cls: Any, objs: List[Any], f: BinaryIO):
+    for obj in objs:
+      obj.download_fileobj(f)
+
+  @classmethod
+  def from_array(cls: Any, items: List[str], f: BinaryIO) -> Dict[str, str]:
+    metadata: Dict[str, str] = {}
+    if cls.delimiter.position == DelimiterPosition.inbetween:
+      content = cls.delimiter.token.join(items)
+    else:
+      content = "".join(items)
+
+    f.write(content)
+    return metadata
+
+  @classmethod
+  def to_array(cls: Any, content: str) -> List[str]:
+    items = content.split(cls.delimiter.token)
+    items = list(filter(lambda item: len(item) > 0, items))
+    if cls.delimiter.position == DelimiterPosition.start:
+      items = list(map(lambda item: cls.delimiter.token + item, items))
+    elif cls.delimiter.position == DelimiterPosition.start:
+      items = list(map(lambda item: item + cls.delimiter.token, items))
+    return items
+
+  @classmethod
+  def get_identifier_value(cls: Any, item: str, identifier: T):
     raise Exception("Not Implemented")
 
-  def from_array(obj, items, offsets):
+  def get(self, start_byte: int, end_byte: int) -> List[str]:
+    content: str = util.read(self.obj, start_byte, end_byte)
+    return to_array(content)
+
+  def get_item_count(self) -> int:
     raise Exception("Not Implemented")
 
-  def getCount(self):
-    raise Exception("Not Implemented")
+  def get_start_index(self) -> int:
+    return self.start_index
 
-  @classmethod
-  def write(cls, f, values, first):
-    [content, metadata] = cls.from_array(None, values, None)
-    if first:
-      f.write(content.strip())
-    else:
-      f.write(cls.IDENTIFIER)
-      f.write(content.strip())
+  def get_end_index(self) -> int:
+    return self.end_index
 
-  @classmethod
-  def sorted_combine(cls, s3, bucket_name, keys, temp_name, params):
-    iterators = []
-    values = []
-    for key in keys:
-      obj = s3.Object(bucket_name, key)
-      iterator = cls(obj, {}, params["chunk_size"])
-      [s, more] = iterator.next(params["identifier"])
-      if len(s) > 0:
-        heapq.heappush(iterators, Element(s, more, iterator))
-
-    last = None
-    with open(temp_name, "w+") as f:
-      first = True
-      while util.is_set(params, "sort") and len(iterators) > 0:
-        element = heapq.heappop(iterators)
-        next_value = element.values.pop(0)
-        assert(last is None or last <= next_value[0])
-        last = next_value[0]
-        values.append(next_value[1])
-        if len(element.values) > 0:
-          heapq.heappush(iterators, element)
-        elif element.more:
-          [s, more] = element.iterator.next(params["identifier"])
-          element.values = s
-          element.more = more
-          heapq.heappush(iterators, element)
-
-        cls.write(f, values, first)
-        first = False
-        values = []
-
-      if len(values) > 0:
-        cls.write(f, values, first)
-
-  @classmethod
-  def nonsorted_combine(cls, s3, bucket_name, keys, temp_name, params):
-    bucket = s3.Bucket(bucket_name)
-    with open(temp_name, "ab+") as f:
-      for i in range(len(keys)):
-        key = keys[i]
-        bucket.download_fileobj(key, f)
-
-  @classmethod
-  def combine(cls, bucket_name, keys, temp_name, params):
-    if "s3" in params:
-      s3 = params["s3"]
-    else:
-      s3 = boto3.resource("s3")
-    if util.is_set(params, "sort"):
-      cls.sorted_combine(s3, bucket_name, keys, temp_name, params)
-    else:
-      cls.nonsorted_combine(s3, bucket_name, keys, temp_name, params)
-
-  def next(self, identifier=""):
-    [o, more] = self.nextOffsets()
-    if len(o["offsets"]) == 0:
-      return [[], False]
-    return [self.cls.get(self.obj, o["offsets"][0], o["offsets"][-1], identifier), more]
-
-  def nextOffsets(self):
-    if self.content_length == 0:
-      return ({"offsets": []}, False)
-    # Plus one is so we get end byte of value
-    while len(self.offsets) <= 1 and self.current_offset < self.content_length:
-      self.updateOffsets()
-
-    if len(self.offsets) == 0 and self.current_offset >= self.content_length:
-      return ({"offsets": []}, False)
-
-    start = self.offsets[0]
-    if len(self.offsets) == 1:
-      end = self.content_length
-      self.offsets = []
-    else:
-      end = self.offsets[1]
-      if self.offsets[1] + 1 >= self.content_length:
-        self.offsets = []
-      else:
-        self.offsets = self.offsets[1:]
-        self.offsets[0] = end + 1
-
-    o = {"offsets": [start, end]}
-    return (o, self.more())
-
-  def updateOffsets(self):
-    start_byte = self.current_offset
-    end_byte = min(start_byte + self.chunk_size, self.content_length)
-    stream = util.read(self.obj, start_byte, end_byte)
+  def next(self) -> Tuple[List[str], Optional[OffsetBounds], bool]:
+    next_start_index: int = self.next_index
+    next_end_index: int = min(next_start_index + self.read_chunk_size, self.end_index)
+    more: bool = True
+    stream: str = util.read(self.obj, next_start_index, next_end_index)
     stream = self.remainder + stream
-    if end_byte == self.content_length:
-      self.offsets.append(self.content_length - 1)
-      self.current_offset = self.content_length
+
+    if next_end_index == self.end_index:
+      next_start_index -= len(self.remainder)
+      self.remainder = ""
+      more = False
     else:
-      index = stream.rindex(self.identifier) if self.identifier in stream else -1
+      index: int = stream.rindex(self.delimiter.token) if self.delimiter.token in stream else -1
       if index != -1:
-        start_byte -= len(self.remainder)
-        offset = start_byte + index
-        if self.indicator_at_beginning:
-          offset -= 1
-        self.offsets.append(offset)
-        start_byte += index + 1
-        self.current_offset = end_byte + 1
-
-        if not self.indicator_at_beginning:
+        if self.delimiter.token != DelimiterPosition.start:
           index += 1
-
-        stream = stream[index:]
+        next_end_index -= (len(stream) - index)
+        next_start_index -= len(self.remainder)
+        self.remainder = stream[index:]
+        stream = stream[:index]
       else:
-        start_byte = end_byte + 1
-        self.current_offset = start_byte
-    self.remainder = stream
+        self.remainder = stream
+        next_end_index -= len(self.remainder)
+        stream = ""
 
-  def more(self):
-    return len(self.offsets) > 0 or self.current_offset < self.content_length
-
-  def endByte(self):
-    return self.current_offset
+    self.next_index = min(next_end_index + len(self.remainder) + 1, self.end_index)
+    if len(stream) == 0:
+      offset_bounds: Optional[OffsetBounds] = None
+    else:
+      offset_bounds: Optional[OffsetBounds] = OffsetBounds(next_start_index, next_end_index)
+    return (self.to_array(stream), offset_bounds, more)

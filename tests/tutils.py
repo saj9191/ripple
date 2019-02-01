@@ -1,4 +1,4 @@
-from typing import Any, List, Dict
+from typing import Any, BinaryIO, List, Dict
 
 
 def equal_lists(list1, list2):
@@ -58,6 +58,9 @@ class Object:
     self.last_modified = last_modified
     self.content_length = len(content)
 
+  def download_fileobj(self, f: BinaryIO):
+    f.write(str.encode(self.content))
+
   def get(self, Range: str=""):
     if len(Range) == 0:
       return {"Body": Content(self.content)}
@@ -66,15 +69,15 @@ class Object:
     end = min(int(parts[1]), self.content_length - 1)
     return {"Body": Content(self.content[start:end + 1])}
 
+  def load(self):
+    raise Exception("")
+
   def put(self, Body: str="", Metadata: Dict[str, str]={}, StorageClass: str=""):
     self.metadata = Metadata
     if type(Body) == str or type(Body) == bytes:
       self.content = Body
     else:
       self.content = Body.read().decode("utf-8")
-
-  def load(self):
-    raise Exception("")
 
 
 class Content:
