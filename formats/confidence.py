@@ -18,8 +18,8 @@ class Iterator(tsv.Iterator[Identifiers]):
     tsv.Iterator.__init__(self, obj, offset_bounds)
 
   @classmethod
-  def get_identifier_value(cls: Any, item: str, identifier: Identifiers) -> str:
-    return cls.to_tsv_array(item)[identifier]
+  def get_identifier_value(cls: Any, item: str, identifier: Identifiers) -> float:
+    return float(cls.to_tsv_array(item)[identifier])
 
   def sum(self, identifier: Identifiers) -> int:
     [count, total] = self.fraction(identifier)

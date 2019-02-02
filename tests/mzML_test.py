@@ -2,6 +2,8 @@ import inspect
 import os
 import sys
 import unittest
+import xml.etree.ElementTree as ET
+from iterator import OffsetBounds
 from tutils import S3, Bucket, Object
 
 currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
@@ -85,11 +87,11 @@ s3 = S3([bucket])
 class IteratorMethods(unittest.TestCase):
   def test_metadata(self):
     obj = Object("0/123.4-13/1/1-1-1-test.mzML", INPUT)
-    it = mzML.Iterator(obj, 200, s3=s3)
+    it = mzML.Iterator(obj)
     self.assertEqual(it.header_start_index, 0)
     self.assertEqual(it.header_end_index, 122)
     self.assertEqual(it.spectra_start_index, 123)
-    self.assertEqual(it.spectra_end_index, 619)
+    self.assertEqual(it.spectra_end_index, 618)
     self.assertEqual(it.chromatogram_start_index, -1)
     self.assertEqual(it.chromatogram_end_index, -1)
     self.assertEqual(it.index_list_offset, 659)
@@ -97,11 +99,11 @@ class IteratorMethods(unittest.TestCase):
     self.assertEqual(it.footer_end_index, len(obj.content))
 
     obj = Object("0/123.4-13/1/1-1-1-ctest.mzML", CHROMATOGRAM_INPUT)
-    it = mzML.Iterator(obj, 200, s3=s3)
+    it = mzML.Iterator(obj)
     self.assertEqual(it.header_start_index, 0)
     self.assertEqual(it.header_end_index, 122)
     self.assertEqual(it.spectra_start_index, 123)
-    self.assertEqual(it.spectra_end_index, 619)
+    self.assertEqual(it.spectra_end_index, 618)
     self.assertEqual(it.chromatogram_start_index, 641)
     self.assertEqual(it.chromatogram_end_index, 847)
     self.assertEqual(it.index_list_offset, 890)
@@ -110,16 +112,17 @@ class IteratorMethods(unittest.TestCase):
 
   def test_next_offsets(self):
     obj = Object("0/123.4-13/1/1-1-1-test.mzML", INPUT)
-    it = mzML.Iterator(obj, 200, s3=s3)
-    [offsets, more] = it.nextOffsets()
+    it = mzML.Iterator(obj)
+    [spectra, offset_bounds, more] = it.next()
     self.assertFalse(more)
-    self.assertEqual(offsets["offsets"][0], 123)
-    self.assertEqual(offsets["offsets"][1], 618)
+    self.assertEqual(offset_bounds.start_index, 123)
+    self.assertEqual(offset_bounds.end_index, 618)
 
   def test_next(self):
     obj = Object("0/123.4-13/1/1-1-1-test.mzML", INPUT)
-    it = mzML.Iterator(obj, 200, s3=s3)
-    [spectra, more] = it.next()
+    it = mzML.Iterator(obj)
+    [spectra, offset_bounds, more] = it.next()
+    spectra = list(map(lambda spectrum: ET.fromstring(spectrum), spectra))
     self.assertFalse(more)
     self.assertEqual(len(spectra), 3)
     self.assertEqual(spectra[0].get("id"), "controllerType=0 controllerNumber=1 scan=1")
@@ -130,28 +133,26 @@ class IteratorMethods(unittest.TestCase):
     obj = Object("0/123.4-13/1/1-1-1-test.mzML", INPUT)
 
     # Multiple spectra start in range
-    offsets = {"offsets": [120, 440]}
-    it = mzML.Iterator(obj, 200, offsets, s3=s3)
-    [o, more] = it.nextOffsets()
+    it = mzML.Iterator(obj, OffsetBounds(120, 440))
+    [spectra, offset_bounds, more] = it.next()
     self.assertFalse(more)
-    self.assertEqual(o["offsets"][0], 123)
-    self.assertEqual(o["offsets"][1], 618)
+    self.assertEqual(offset_bounds.start_index, 123)
+    self.assertEqual(offset_bounds.end_index, 618)
+    self.assertEqual(len(spectra), 3)
 
     # One spectra starts in range
-    offsets = {"offsets": [120, 250]}
-    it = mzML.Iterator(obj, 200, offsets, s3=s3)
-    [o, more] = it.nextOffsets()
+    it = mzML.Iterator(obj, OffsetBounds(120, 250))
+    [spectra, offset_bounds, more] = it.next()
     self.assertFalse(more)
-    self.assertEqual(o["offsets"][0], 123)
-    self.assertEqual(o["offsets"][1], 266)
+    self.assertEqual(offset_bounds.start_index, 123)
+    self.assertEqual(offset_bounds.end_index, 267)
 
     # No spectra start in range
-    offsets = {"offsets": [126, 240]}
-    it = mzML.Iterator(obj, 200, offsets, s3=s3)
-    [o, more] = it.nextOffsets()
+    it = mzML.Iterator(obj, OffsetBounds(126, 240))
+    [spectra, offset_bounds, more] = it.next()
     self.assertFalse(more)
-    self.assertEqual(o["offsets"][0], 123)
-    self.assertEqual(o["offsets"][1], 266)
+    self.assertEqual(offset_bounds.start_index, 123)
+    self.assertEqual(offset_bounds.end_index, 267)
 
   def test_combine(self):
     metadata = {
@@ -173,17 +174,20 @@ class IteratorMethods(unittest.TestCase):
       "chunk_size": 100,
       "s3": s3,
     }
-    metadata = mzML.Iterator.combine(obj1.bucket_name, [obj1.key, obj2.key], "/tmp/test_combine", params)
+    temp_file = "/tmp/test_combine"
+    metadata: Dict[str, str] = {}
+    with open(temp_file, "w+") as f:
+      metadata = mzML.Iterator.combine([obj1, obj2], f)
     self.assertEqual(metadata["count"], "6")
     self.assertEqual(metadata["header_start_index"], "0")
     self.assertEqual(metadata["header_end_index"], "122")
     self.assertEqual(metadata["spectra_start_index"], "123")
-    self.assertEqual(metadata["spectra_end_index"], "1107")
+    self.assertEqual(metadata["spectra_end_index"], "1077")
     self.assertEqual(metadata["chromatogram_start_index"], "-1")
     self.assertEqual(metadata["chromatogram_end_index"], "-1")
-    self.assertEqual(metadata["index_list_offset"], "1136")
-    self.assertEqual(metadata["footer_start_index"], "1107")
-    self.assertEqual(metadata["footer_end_index"], "1966")
+    self.assertEqual(metadata["index_list_offset"], "1106")
+    self.assertEqual(metadata["footer_start_index"], "1092")
+    self.assertEqual(metadata["footer_end_index"], "1976")
 
 
 if __name__ == "__main__":

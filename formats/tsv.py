@@ -20,5 +20,5 @@ class Iterator(Generic[T], new_line.Iterator[T]):
     return tsv_items
 
   @classmethod
-  def get_identifier_value(cls: Any, item: str, identifier: T) -> str:
+  def get_identifier_value(cls: Any, item: str, identifier: T) -> float:
     raise Exception("Not Implemented")

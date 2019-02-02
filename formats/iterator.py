@@ -2,7 +2,7 @@ import boto3
 from enum import Enum
 import heapq
 import util
-from typing import Any, BinaryIO, ClassVar, Dict, Generic, List, Optional, Tuple, TypeVar
+from typing import Any, TextIO, ClassVar, Dict, Generic, List, Optional, Tuple, TypeVar
 
 
 T = TypeVar("T")
@@ -15,8 +15,9 @@ class DelimiterPosition(Enum):
 
 
 class Delimiter:
-  def __init__(self, token: str, position: DelimiterPosition):
-    self.token = token
+  def __init__(self, item_token: str, offset_token: str, position: DelimiterPosition):
+    self.item_token = item_token
+    self.offset_token = offset_token
     self.position = position
 
 
@@ -40,6 +41,7 @@ class Options:
 
 class Iterator(Generic[T]):
   adjust_chunk_size: ClassVar[int] = 300
+  next_index: int = -1
   options: ClassVar[Options]
   read_chunk_size: ClassVar[int] = 1000*1000
   delimiter: Delimiter
@@ -54,10 +56,10 @@ class Iterator(Generic[T]):
     self.remainder: str = ""
     self.__setup__()
 
-  def __adjust__(self, end_index: int, delimiter: Delimiter):
+  def __adjust__(self, end_index: int, token: str) -> int:
     content: str = util.read(self.obj, max(end_index - self.adjust_chunk_size, 0), end_index)
     last_byte: int = len(content) - 1
-    offset_index: int = last_byte - content.rindex(delimiter.token)
+    offset_index: int = last_byte - content.rindex(token)
     assert(offset_index >= 0)
     return offset_index
 
@@ -66,12 +68,12 @@ class Iterator(Generic[T]):
       self.start_index = self.offset_bounds.start_index
       self.end_index = self.offset_bounds.end_index
       if self.start_index != 0:
-        self.start_index -= self.__adjust__(self.start_index, self.delimiter)
+        self.start_index -= self.__adjust__(self.start_index, self.delimiter.offset_token)
         if self.delimiter.position != DelimiterPosition.start:
           # Don't include delimiter
-          self.start_index += len(self.delimiter.token)
+          self.start_index += len(self.delimiter.offset_token)
       if self.end_index != self.obj.content_length:
-        self.end_index -= self.__adjust__(self.end_index, self.delimiter)
+        self.end_index -= self.__adjust__(self.end_index, self.delimiter.offset_token)
         if self.delimiter.position == DelimiterPosition.start:
           self.end_index += len(self.delimiter.identifier)
     else:
@@ -79,28 +81,27 @@ class Iterator(Generic[T]):
       self.end_index = self.obj.content_length - 1
 
     assert(self.start_index <= self.end_index)
-    self.next_index = self.start_index
     self.content_length = self.end_index - self.start_index
     self.offsets = [self.next_index]
 
   @classmethod
-  def combine(cls: Any, objs: List[Any], f: BinaryIO) -> Dict[str, str]:
-    metadata = {}
+  def combine(cls: Any, objs: List[Any], f: TextIO) -> Dict[str, str]:
+    metadata: Dict[str, str] = {}
 
     for i in range(len(objs)):
       obj = objs[i]
       if cls.options.has_header and i > 0:
-        f.write(util.read(0, obj.content_length).split(cls.delimiter.token)[1:])
+        f.write(util.read(0, obj.content_length).split(cls.delimiter.item_token)[1:])
       else:
         obj.download_fileobj(f)
 
     return metadata
 
   @classmethod
-  def from_array(cls: Any, items: List[str], f: BinaryIO) -> Dict[str, str]:
+  def from_array(cls: Any, items: List[str], f: TextIO, extra: Dict[str, Any]) -> Dict[str, str]:
     metadata: Dict[str, str] = {}
     if cls.delimiter.position == DelimiterPosition.inbetween:
-      content = cls.delimiter.token.join(items)
+      content = cls.delimiter.item_token.join(items)
     else:
       content = "".join(items)
 
@@ -109,16 +110,16 @@ class Iterator(Generic[T]):
 
   @classmethod
   def to_array(cls: Any, content: str) -> List[str]:
-    items = content.split(cls.delimiter.token)
-    items = list(filter(lambda item: len(item) > 0, items))
+    items = content.split(cls.delimiter.item_token)
+    items = list(filter(lambda item: len(item.strip()) > 0, items))
     if cls.delimiter.position == DelimiterPosition.start:
-      items = list(map(lambda item: cls.delimiter.token + item, items))
-    elif cls.delimiter.position == DelimiterPosition.start:
-      items = list(map(lambda item: item + cls.delimiter.token, items))
+      items = list(map(lambda item: cls.delimiter.item_token + item, items))
+    elif cls.delimiter.position == DelimiterPosition.end:
+      items = list(map(lambda item: item + cls.delimiter.item_token, items))
     return items
 
   @classmethod
-  def get_identifier_value(cls: Any, item: str, identifier: T) -> str:
+  def get_identifier_value(cls: Any, item: str, identifier: T) -> float:
     raise Exception("Not Implemented")
 
   def get(self, start_byte: int, end_byte: int) -> List[str]:
@@ -135,23 +136,23 @@ class Iterator(Generic[T]):
     return self.end_index
 
   def next(self) -> Tuple[List[str], Optional[OffsetBounds], bool]:
+    if self.next_index == -1:
+      self.next_index = self.get_start_index()
     next_start_index: int = self.next_index
-    next_end_index: int = min(next_start_index + self.read_chunk_size, self.end_index)
+    next_end_index: int = min(next_start_index + self.read_chunk_size, self.get_end_index())
     more: bool = True
     stream: str = util.read(self.obj, next_start_index, next_end_index)
     stream = self.remainder + stream
 
-    if next_end_index == self.end_index:
+    if next_end_index == self.get_end_index():
       next_start_index -= len(self.remainder)
       self.remainder = ""
       more = False
     else:
-      index: int = stream.rindex(self.delimiter.token) if self.delimiter.token in stream else -1
+      index: int = stream.rindex(self.delimiter.offset_token) if self.delimiter.offset_token in stream else -1
       if index != -1:
-        if self.delimiter.token == DelimiterPosition.inbetween:
+        if self.delimiter.position == DelimiterPosition.inbetween:
           index += 1
-        elif self.delimiter.token == DelimiterPosition.start:
-          index -= 1
         next_end_index -= (len(stream) - index)
         next_start_index -= len(self.remainder)
         self.remainder = stream[index:]
@@ -161,10 +162,15 @@ class Iterator(Generic[T]):
         next_end_index -= len(self.remainder)
         stream = ""
 
-    self.next_index = min(next_end_index + len(self.remainder) + 1, self.end_index)
+    self.next_index = min(next_end_index + len(self.remainder) + 1, self.get_end_index())
     offset_bounds: Optional[OffsetBounds]
     if len(stream) == 0:
       offset_bounds = None
     else:
       offset_bounds = OffsetBounds(next_start_index, next_end_index)
+
+    [stream, offset_bounds] = self.transform(stream, offset_bounds)
     return (self.to_array(stream), offset_bounds, more)
+
+  def transform(self, stream: str, offset_bounds: Optional[OffsetBounds]) -> Tuple[str, Optional[OffsetBounds]]:
+    return (stream, offset_bounds)

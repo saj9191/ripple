@@ -6,7 +6,7 @@ from typing import Any, ClassVar, Optional
 
 
 class Iterator(iterator.Iterator[None]):
-  delimiter: Delimiter = Delimiter(">", DelimiterPosition.start)
+  delimiter: Delimiter = Delimiter(item_token=">", offset_token=">", position=DelimiterPosition.start)
   options: ClassVar[Options] = Options(has_header = False)
   identifiers = None
 

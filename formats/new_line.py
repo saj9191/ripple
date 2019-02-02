@@ -9,7 +9,7 @@ T = TypeVar("T")
 
 
 class Iterator(Generic[T], iterator.Iterator[T]):
-  delimiter: Delimiter = Delimiter("\n", DelimiterPosition.inbetween)
+  delimiter: Delimiter = Delimiter(item_token="\n", offset_token="\n", position=DelimiterPosition.inbetween)
   options: ClassVar[Options] = Options(has_header = False)
 
   def __init__(self, obj: Any, offset_bounds: Optional[OffsetBounds] = None):
