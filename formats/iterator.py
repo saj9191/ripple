@@ -2,7 +2,7 @@ import boto3
 from enum import Enum
 import heapq
 import util
-from typing import Any, TextIO, ClassVar, Dict, Generic, List, Optional, Tuple, TypeVar
+from typing import Any, ClassVar, Dict, Generic, Iterable, List, Optional, Tuple, TextIO, TypeVar
 
 
 T = TypeVar("T")
@@ -109,20 +109,19 @@ class Iterator(Generic[T]):
     return metadata
 
   @classmethod
-  def to_array(cls: Any, content: str) -> List[str]:
-    items = content.split(cls.delimiter.item_token)
-    items = list(filter(lambda item: len(item.strip()) > 0, items))
+  def to_array(cls: Any, content: str) -> Iterable[Any]:
+    items: Iterable[str] = filter(lambda item: len(item.strip()) > 0, content.split(cls.delimiter.item_token))
     if cls.delimiter.position == DelimiterPosition.start:
-      items = list(map(lambda item: cls.delimiter.item_token + item, items))
+      items = map(lambda item: cls.delimiter.item_token + item, items)
     elif cls.delimiter.position == DelimiterPosition.end:
-      items = list(map(lambda item: item + cls.delimiter.item_token, items))
+      items = map(lambda item: item + cls.delimiter.item_token, items)
     return items
 
   @classmethod
   def get_identifier_value(cls: Any, item: str, identifier: T) -> float:
     raise Exception("Not Implemented")
 
-  def get(self, start_byte: int, end_byte: int) -> List[str]:
+  def get(self, start_byte: int, end_byte: int) -> Iterable[Any]:
     content: str = util.read(self.obj, start_byte, end_byte)
     return self.to_array(content)
 
@@ -135,7 +134,7 @@ class Iterator(Generic[T]):
   def get_end_index(self) -> int:
     return self.end_index
 
-  def next(self) -> Tuple[List[str], Optional[OffsetBounds], bool]:
+  def next(self) -> Tuple[Iterable[str], Optional[OffsetBounds], bool]:
     if self.next_index == -1:
       self.next_index = self.get_start_index()
     next_start_index: int = self.next_index
@@ -161,7 +160,6 @@ class Iterator(Generic[T]):
         self.remainder = stream
         next_end_index -= len(self.remainder)
         stream = ""
-
     self.next_index = min(next_end_index + len(self.remainder) + 1, self.get_end_index())
     offset_bounds: Optional[OffsetBounds]
     if len(stream) == 0:

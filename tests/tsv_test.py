@@ -26,19 +26,19 @@ class IteratorMethods(unittest.TestCase):
     # Requires multiple passes
     it = TestIterator(obj, None, 11, 11)
     [items, offset_bounds, more] = it.next()
-    self.assertEqual(items, ["A\tB\tC", "a\tb\tc"])
+    self.assertEqual(list(items), ["A\tB\tC", "a\tb\tc"])
     self.assertEqual(offset_bounds, OffsetBounds(0, 11))
     self.assertTrue(more)
 
     [items, offset_bounds, more] = it.next()
-    self.assertEqual(items, ["1\t2\t3"])
+    self.assertEqual(list(items), ["1\t2\t3"])
     self.assertEqual(offset_bounds, OffsetBounds(12, 17))
     self.assertFalse(more)
 
     # Read everything in one pass
     it = TestIterator(obj, None, 20, 20)
     [items, offset_bounds, more] = it.next()
-    self.assertEqual(items, ["A\tB\tC", "a\tb\tc", "1\t2\t3"])
+    self.assertEqual(list(items), ["A\tB\tC", "a\tb\tc", "1\t2\t3"])
     self.assertEqual(offset_bounds, OffsetBounds(0, 17))
     self.assertFalse(more)
 

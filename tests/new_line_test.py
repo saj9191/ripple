@@ -3,7 +3,7 @@ import os
 import sys
 import unittest
 from iterator import OffsetBounds
-from tutils import Bucket, Object
+from tutils import Object
 from typing import Any, Optional
 
 currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
@@ -24,14 +24,14 @@ class IteratorMethods(unittest.TestCase):
     obj = Object("test.new_line", "A B C\na b c\n1 2 3\nD E F\nd e f\n")
     it = TestIterator(obj, OffsetBounds(8, 13), 10, 10)
     [items, offset_bounds, more] = it.next()
-    self.assertEqual(items, ["a b c"])
+    self.assertEqual(list(items), ["a b c"])
     self.assertEqual(offset_bounds, OffsetBounds(6, 11))
     self.assertFalse(more)
 
     # No adjustment needed
     it = TestIterator(obj, OffsetBounds(6, 11), 10, 10)
     [items, offset_bounds, more] = it.next()
-    self.assertEqual(items, ["a b c"])
+    self.assertEqual(list(items), ["a b c"])
     self.assertEqual(offset_bounds, OffsetBounds(6, 11))
     self.assertFalse(more)
 
@@ -39,13 +39,13 @@ class IteratorMethods(unittest.TestCase):
     it = TestIterator(obj, OffsetBounds(0, 7), 10, 10)
     [items, offset_bounds, more] = it.next()
     self.assertFalse(more)
-    self.assertEqual(items, ["A B C"])
+    self.assertEqual(list(items), ["A B C"])
 
     # Beginning of content
     it = TestIterator(obj, OffsetBounds(26, obj.content_length - 1), 10, 10)
     [items, offset_bounds, more] = it.next()
     self.assertFalse(more)
-    self.assertEqual(items, ["d e f"])
+    self.assertEqual(list(items), ["d e f"])
 
   def test_next(self):
     obj = Object("test.new_line", "A B C\na b c\n1 2 3\n")
@@ -55,11 +55,11 @@ class IteratorMethods(unittest.TestCase):
     [items, offset_bounds, more] = it.next()
     self.assertTrue(more)
     self.assertEqual(OffsetBounds(0, 11), offset_bounds)
-    self.assertEqual(items, ["A B C", "a b c"])
+    self.assertEqual(list(items), ["A B C", "a b c"])
 
     [items, offset_bounds, more] = it.next()
     self.assertFalse(more)
-    self.assertEqual(items, ["1 2 3"])
+    self.assertEqual(list(items), ["1 2 3"])
 
   def test_overflow(self):
     obj = Object("test.new_line", "A B C D E F G H\na b c d e f g h\n1 2 3 4 5 6 7 8 9\n")
@@ -67,27 +67,27 @@ class IteratorMethods(unittest.TestCase):
     # Requires multiple passes
     it = TestIterator(obj, None, 10, 10)
     [items, offset_bounds, more] = it.next()
-    self.assertEqual(items, [])
+    self.assertEqual(list(items), [])
     self.assertEqual(offset_bounds, None)
     self.assertTrue(more)
 
     [items, offset_bounds, more] = it.next()
-    self.assertEqual(items, ["A B C D E F G H"])
+    self.assertEqual(list(items), ["A B C D E F G H"])
     self.assertEqual(offset_bounds, OffsetBounds(0, 15))
     self.assertTrue(more)
 
     [items, offset_bounds, more] = it.next()
-    self.assertEqual(items, ["a b c d e f g h"])
+    self.assertEqual(list(items), ["a b c d e f g h"])
     self.assertEqual(offset_bounds, OffsetBounds(16, 31))
     self.assertTrue(more)
 
     [items, offset_bounds, more] = it.next()
-    self.assertEqual(items, [])
+    self.assertEqual(list(items), [])
     self.assertEqual(offset_bounds, None)
     self.assertTrue(more)
 
     [items, offset_bounds, more] = it.next()
-    self.assertEqual(items, ["1 2 3 4 5 6 7 8 9"])
+    self.assertEqual(list(items), ["1 2 3 4 5 6 7 8 9"])
     self.assertEqual(offset_bounds, OffsetBounds(32, 49))
     self.assertFalse(more)
 

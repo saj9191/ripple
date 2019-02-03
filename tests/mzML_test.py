@@ -110,19 +110,11 @@ class IteratorMethods(unittest.TestCase):
     self.assertEqual(it.footer_start_index, 619)
     self.assertEqual(it.footer_end_index, len(obj.content))
 
-  def test_next_offsets(self):
-    obj = Object("0/123.4-13/1/1-1-1-test.mzML", INPUT)
-    it = mzML.Iterator(obj)
-    [spectra, offset_bounds, more] = it.next()
-    self.assertFalse(more)
-    self.assertEqual(offset_bounds.start_index, 123)
-    self.assertEqual(offset_bounds.end_index, 618)
-
   def test_next(self):
     obj = Object("0/123.4-13/1/1-1-1-test.mzML", INPUT)
     it = mzML.Iterator(obj)
     [spectra, offset_bounds, more] = it.next()
-    spectra = list(map(lambda spectrum: ET.fromstring(spectrum), spectra))
+    spectra = list(spectra)
     self.assertFalse(more)
     self.assertEqual(len(spectra), 3)
     self.assertEqual(spectra[0].get("id"), "controllerType=0 controllerNumber=1 scan=1")
@@ -138,21 +130,21 @@ class IteratorMethods(unittest.TestCase):
     self.assertFalse(more)
     self.assertEqual(offset_bounds.start_index, 123)
     self.assertEqual(offset_bounds.end_index, 618)
-    self.assertEqual(len(spectra), 3)
+    self.assertEqual(len(list(spectra)), 3)
 
     # One spectra starts in range
     it = mzML.Iterator(obj, OffsetBounds(120, 250))
     [spectra, offset_bounds, more] = it.next()
     self.assertFalse(more)
     self.assertEqual(offset_bounds.start_index, 123)
-    self.assertEqual(offset_bounds.end_index, 267)
+    self.assertEqual(offset_bounds.end_index, 266)
 
     # No spectra start in range
     it = mzML.Iterator(obj, OffsetBounds(126, 240))
     [spectra, offset_bounds, more] = it.next()
     self.assertFalse(more)
     self.assertEqual(offset_bounds.start_index, 123)
-    self.assertEqual(offset_bounds.end_index, 267)
+    self.assertEqual(offset_bounds.end_index, 266)
 
   def test_combine(self):
     metadata = {
@@ -182,12 +174,12 @@ class IteratorMethods(unittest.TestCase):
     self.assertEqual(metadata["header_start_index"], "0")
     self.assertEqual(metadata["header_end_index"], "122")
     self.assertEqual(metadata["spectra_start_index"], "123")
-    self.assertEqual(metadata["spectra_end_index"], "1077")
+    self.assertEqual(metadata["spectra_end_index"], "1121")
     self.assertEqual(metadata["chromatogram_start_index"], "-1")
     self.assertEqual(metadata["chromatogram_end_index"], "-1")
-    self.assertEqual(metadata["index_list_offset"], "1106")
-    self.assertEqual(metadata["footer_start_index"], "1092")
-    self.assertEqual(metadata["footer_end_index"], "1976")
+    self.assertEqual(metadata["index_list_offset"], "1150")
+    self.assertEqual(metadata["footer_start_index"], "1136")
+    self.assertEqual(metadata["footer_end_index"], "2020")
 
 
 if __name__ == "__main__":

@@ -6,7 +6,7 @@ import util
 import xml.etree.ElementTree as ET
 from enum import Enum
 from iterator import Delimiter, DelimiterPosition, OffsetBounds, Options
-from typing import Any, TextIO, ClassVar, Dict, List, Pattern, Optional, Tuple
+from typing import Any, ClassVar, Dict, Iterable, List, Optional, Pattern, TextIO, Tuple
 
 
 class Identifiers(Enum):
@@ -32,7 +32,7 @@ class Iterator(iterator.Iterator[Identifiers]):
   offset_regex: ClassVar[Pattern[str]] = re.compile("<offset[^>]*scan=[^>]*>(\d+)</offset>")
   offset_end_index: int
   offset_start_index: int
-  options: ClassVar[Options] = Options(has_header = True)
+  options: ClassVar[Options] = Options(has_header=True)
   spectrum_list_close_tag: ClassVar[str] = "</spectrumList>"
   spectrum_list_count_regex: ClassVar[Pattern[str]] = re.compile('<spectrumList [\s\S]*count="(\d+)"')
   num_spectra: int = -1
@@ -185,6 +185,7 @@ class Iterator(iterator.Iterator[Identifiers]):
           remainder = stream
         start_byte = end_byte + 1
         end_byte = min(self.footer_end_index, start_byte + self.chunk_size)
+    self.offset_end_index -= 1
 
   def __spectra_offsets__(self):
     if self.offset_bounds:
@@ -246,11 +247,10 @@ class Iterator(iterator.Iterator[Identifiers]):
       while more:
         [spectra, _, more] = iterator.next()
         spectra_content: str = ""
-        for i in range(len(spectra)):
-          xml = ET.fromstring(spectra[i])
+        for xml in spectra:
           xml.set("index", str(index))
           offsets.append((xml.get("id"), offset))
-          spectrum = ET.tostring(xml).decode() + "\n"
+          spectrum = ET.tostring(xml).decode()
           offset += len(spectrum)
           spectra_content += spectrum
           index += 1
@@ -312,6 +312,12 @@ class Iterator(iterator.Iterator[Identifiers]):
   def get_end_index(self) -> int:
     return self.offset_end_index
 
+  @classmethod
+  def to_array(cls: Any, content: str) -> Iterable[Any]:
+    content = "<data>" + content + "</data>"
+    root = ET.fromstring(content)
+    return root.iter("spectrum")
+
   def transform(self, stream: str, offset_bounds: Optional[OffsetBounds]) -> Tuple[str, Optional[OffsetBounds]]:
     start_index: int
     end_index: int
@@ -325,7 +331,7 @@ class Iterator(iterator.Iterator[Identifiers]):
       next_offsets: List[int] = list(map(lambda r: int(r.group(1)), self.offset_regex.finditer(stream)))
       offset_bounds.start_index = offsets[0]
       if len(next_offsets) > 0:
-        offset_bounds.end_index = next_offsets[0]
+        offset_bounds.end_index = next_offsets[0] - 1
       else:
         offset_bounds.end_index = self.spectra_end_index
       start_index = offset_bounds.start_index
