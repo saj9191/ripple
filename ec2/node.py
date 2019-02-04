@@ -1,76 +1,34 @@
 import boto3
+import collections
 import os
 import paramiko
 import random
 import re
 import threading
 import time
+import util
+from enum import Enum
+from typing import Any, Dict, List, Optional, Tuple
 
 STATS_REGEX = re.compile("([0-9\.]+)%\s+([0-9\.]+)%")
 
 
-def create_client(node_ip, pem):
-  ssh_client = paramiko.SSHClient()
-  key = paramiko.RSAKey.from_private_key_file(pem)
-  ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-  connected = False
-  while not connected:
-    try:
-      ssh_client.connect(node_ip, username="ubuntu", pkey=key)
-      connected = True
-    except paramiko.ssh_exception.NoValidConnectionsError:
-      time.sleep(1)
-    except paramiko.ssh_exception.SSHException:
-      time.sleep(1)
-  return ssh_client
-
-
-def create_instance(tag_name, params):
-  print("Creating instance", tag_name)
-  ec2 = boto3.resource("ec2")
-  instances = ec2.create_instances(
-    BlockDeviceMappings=[{
-      "DeviceName": "/dev/xvda",
-      "Ebs": {
-        "VolumeSize": params["volume_size"]
-      }
-    }],
-    ImageId=params["image_id"],
-    InstanceType=params["instance"],
-    KeyName=params["key"],
-    MinCount=1,
-    MaxCount=1,
-    NetworkInterfaces=[{
-      "SubnetId": params["subnet"],
-      "DeviceIndex": 0,
-      "Groups": [params["security"]]
-    }],
-    TagSpecifications=[{
-      "ResourceType": "instance",
-      "Tags": [{
-        "Key": "Name",
-        "Value": tag_name,
-      }]
-    }]
-  )
-  assert(len(instances) == 1)
-  instance = instances[0]
-  instance.wait_until_running()
-  return instance
-
-
 class Client:
-  def __init__(self, ip, pem):
+  client: paramiko.SSHClient
+  ip: str
+  pem: str
+
+  def __init__(self, ip: str, pem: str):
     self.ip = ip
     self.pem = pem
     self.__create__()
 
   def __create__(self):
-    done = False
-    i = 0
+    done: bool = False
+    i: int = 0
     while not done and i < 3:
       try:
-        self.client = create_client(self.ip, self.pem)
+        self.client = self.__create_client__(self.ip, self.pem)
         done = True
       except TimeoutError as e:
         i += 1
@@ -78,7 +36,22 @@ class Client:
     if not done:
       raise Exception("Cannot connect to node", self.ip)
 
-  def exec_command(self, command):
+  def __create_client__(self, node_ip: str, pem: str):
+    ssh_client = paramiko.SSHClient()
+    key = paramiko.RSAKey.from_private_key_file(pem)
+    ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    connected: bool = False
+    while not connected:
+      try:
+        ssh_client.connect(node_ip, username="ubuntu", pkey=key)
+        connected = True
+      except paramiko.ssh_exception.NoValidConnectionsError:
+        time.sleep(1)
+      except paramiko.ssh_exception.SSHException:
+        time.sleep(1)
+    return ssh_client
+
+  def exec_command(self, command: str) -> Tuple[int, str, str]:
     done = False
     i = 0
     while not done and i < 3:
@@ -94,30 +67,34 @@ class Client:
     code = stdout.channel.recv_exit_status()
     output = stdout.read().decode("utf-8")
     err = stderr.read().decode("utf-8")
-    return [code, output, err]
+    return (code, output, err)
 
   def close(self):
     self.client.close()
 
 
-def get_credentials():
-  home = os.path.expanduser("~")
-  f = open("{0:s}/.aws/credentials".format(home))
-  lines = f.readlines()
-  header = "[default]"
-  for i in range(len(lines)):
-    if lines[i].strip() == header:
-      access_key = lines[i + 1].split("=")[1].strip()
-      secret_key = lines[i + 2].split("=")[1].strip()
-      return [access_key, secret_key]
+class ErrorCodes(Enum):
+  process = 1  # Usually happens if process runs out of space
+  docker_container = 125  # Usually happens if there is not enough space on machine
 
 
 class Task(threading.Thread):
-  def __init__(self, results_folder, node_ip, key, folder, pending_queue):
+  client: Client
+  cpu: int
+  error: Optional[str]
+  folder: str
+  memory: int
+  node_ip: str
+  pending_queue: collections.deque
+  results_folder: str
+  running: bool
+  task: util.Task
+
+  def __init__(self, results_folder: str, node_ip: str, key: str, folder: str, pending_queue: collections.deque):
     super(Task, self).__init__()
     self.cpu = 170
     self.error = None
-    self.file = pending_queue.popleft()
+    self.task = pending_queue.popleft()
     self.folder = folder
     self.memory = 2*1024*1024*1024
     self.node_ip = node_ip
@@ -126,18 +103,17 @@ class Task(threading.Thread):
     self.running = True
     self.__setup__(key + ".pem")
 
-  def __setup__(self, pem):
+  def __setup__(self, pem: str):
     self.client = Client(self.node_ip, pem)
 
   def run(self):
-    start_time = time.time()
-    name = random.randint(1, 100*1000)
-    c = "sudo docker run --name {0:d} -m {1:d} --cpu-shares {2:d} app python3 main.py {3:s}".format(name, self.memory, self.cpu, self.file.key)
+    start_time: float = time.time()
+    nonce: int = random.randint(1, 100*1000)
+    c = "sudo docker run --name {0:d} -m {1:d} --cpu-shares {2:d} app python3 main.py {3:s}".format(nonce, self.memory, self.cpu, self.file.key)
     code, output, err = self.client.exec_command(c)
-    self.code = code
-    end_time = time.time()
+    end_time: float = time.time()
     if code != 0:
-      if code not in [1, 125]:
+      if code not in [ErrorCodes.process, ErrorCodes.docker_container]:
         print("CODE:", code)
         print("OUTPUT:", output)
         print("ERROR:", err)
@@ -167,15 +143,62 @@ class Task(threading.Thread):
 
 
 class Setup(threading.Thread):
-  def __init__(self, node):
+  node: Node
+
+  def __init__(self, node: Node):
     super(Setup, self).__init__()
     self.node = node
 
+  def __create_instance__(self, tag_name: str, params: Dict[str, Any]):
+    print("Creating instance", tag_name)
+    ec2 = boto3.resource("ec2")
+    instances = ec2.create_instances(
+      BlockDeviceMappings=[{
+        "DeviceName": "/dev/xvda",
+        "Ebs": {
+          "VolumeSize": params["volume_size"]
+        }
+      }],
+      ImageId=params["image_id"],
+      InstanceType=params["instance"],
+      KeyName=params["key"],
+      MinCount=1,
+      MaxCount=1,
+      NetworkInterfaces=[{
+        "SubnetId": params["subnet"],
+        "DeviceIndex": 0,
+        "Groups": [params["security"]]
+      }],
+      TagSpecifications=[{
+        "ResourceType": "instance",
+        "Tags": [{
+          "Key": "Name",
+          "Value": tag_name,
+        }]
+      }]
+    )
+    assert(len(instances) == 1)
+    instance = instances[0]
+    instance.wait_until_running()
+    return instance
+
+  def __get_credentials__(self) -> Tuple[str, str]:
+    home = os.path.expanduser("~")
+    f = open("{0:s}/.aws/credentials".format(home))
+    lines = f.readlines()
+    header = "[default]"
+    for i in range(len(lines)):
+      if lines[i].strip() == header:
+        access_key = lines[i + 1].split("=")[1].strip()
+        secret_key = lines[i + 2].split("=")[1].strip()
+        break
+    return (access_key, secret_key)
+
   def run(self):
-    node = create_instance("emr-node-{0:f}".format(time.time()), self.node.params)
+    node = self.__create_instance__("emr-node-{0:f}".format(time.time()), self.node.params)
     node.reload()
     client = Client(node.public_ip_address, self.node.params["key"] + ".pem")
-    [access, secret] = get_credentials()
+    access, secret = self.__get_credentials__()
     client.exec_command('echo "[default]\naws_access_key_id={0:s}\naws_secret_access_key={1:s}" >> ~/.aws/credentials'.format(access, secret))
     client.exec_command('echo "[default]\naws_access_key_id={0:s}\naws_secret_access_key={1:s}" >> ~/Docker/app/credentials'.format(access, secret))
     client.exec_command('echo -e "{0:s}\n{1:s}\n\n\n\n\n\nY\ny\n" | s3cmd --configure'.format(access, secret))
@@ -192,7 +215,23 @@ class Setup(threading.Thread):
 
 
 class Node:
-  def __init__(self, node_id, s3_application_url, pending_queue, results_folder, params):
+  cpu_utilization: float
+  create_time: float
+  error: Optional[str]
+  folder: str
+  memory_utilization: float
+  num_cpus: int
+  node: Optional[Any]
+  node_id: int
+  num_tasks: int
+  params: Dict[str, Any]
+  pending_queue: collections.deque
+  results_folder: str
+  state: str
+  s3_application_url: str
+  tasks: List[Task]
+
+  def __init__(self, node_id: int, s3_application_url: str, pending_queue: collections.deque, results_folder: str, params: Dict[str, Any]):
     self.cpu_utilization = 0.0
     self.error = None
     self.folder = s3_application_url.split("/")[-1]
@@ -226,6 +265,8 @@ class Node:
     lines = list(filter(lambda line: len(line) > 0, output.split("\n")[1:]))
     for line in lines:
       m = STATS_REGEX.search(line)
+      if m is None:
+        print("wtf", output)
       assert(m is not None)
       for i in range(len(metrics)):
         metrics[i] += float(m.group(i + 1))

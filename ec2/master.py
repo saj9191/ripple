@@ -4,17 +4,14 @@ import json
 import node
 import threading
 import time
-
-
-class Task:
-  def __init__(self, key, timestamp):
-    self.key = key
-    self.created_at = timestamp
-    self.received_at = time.time()
+import util
+from typing import Any, Dict, List, Optional, Tuple
 
 
 class Run(threading.Thread):
-  def __init__(self, master):
+  master: Master
+
+  def __init__(self, master: Master):
     super(Run, self).__init__()
     self.master = master
 
@@ -23,9 +20,22 @@ class Run(threading.Thread):
 
 
 class Master:
-  def __init__(self, s3_application_url, results_folder, params):
+  error: Optional[str]
+  num_tasks: int
+  params: Dict[str, Any]
+  pending_tasks: collections.deque
+  results_folder: str
+  running: bool
+  scale_down_start_time: Optional[float]
+  scale_up_start_time: Optional[float]
+  starting_nodes: List[node.Node]
+  running_nodes: List[node.Node]
+  terminating_nodes: List[node.Node]
+  total_node_count: int
+
+  def __init__(self, s3_application_url: str, results_folder: str, params: Dict[str, Any]):
     self.error = None
-    self.num_tasks_average = 0.0
+    self.num_tasks = 0
     self.params = dict(params)
     self.pending_tasks = collections.deque()
     self.results_folder = results_folder
@@ -41,6 +51,7 @@ class Master:
   def __check_for_new_items__(self):
     if len(self.running_nodes) == 0:
       return
+
     sqs = boto3.client("sqs", region_name=self.params["region"])
     response = sqs.receive_message(
       AttributeNames=["SentTimestamp"],
@@ -53,47 +64,48 @@ class Master:
       body = json.loads(message["Body"])
       if "Records" in body:
         for record in body["Records"]:
-          key = record["s3"]["object"]["key"]
-          timestamp = float(message["Attributes"]["SentTimestamp"]) / 1000.0
+          key: str = record["s3"]["object"]["key"]
+          timestamp: float = float(message["Attributes"]["SentTimestamp"]) / 1000.0
           print("Adding task", key)
-          self.pending_tasks.append(Task(key, timestamp))
+          self.pending_tasks.append(util.Task(key, timestamp))
       sqs.delete_message(QueueUrl=self.queue.url, ReceiptHandle=message["ReceiptHandle"])
 
   def __check_nodes__(self):
     print("Number of Pending Tasks", len(self.pending_tasks))
-    i = 0
+    i: int = 0
     while i < len(self.starting_nodes):
-      n = self.starting_nodes[i]
+      n: node.Node = self.starting_nodes[i]
       n.reload()
       if n.state == "RUNNING":
         self.running_nodes.append(n)
-        self.starting_nodes = self.starting_nodes[:i] + self.starting_nodes[i+1:]
+        self.starting_nodes.pop(i)
       else:
         assert(n.state == "STARTING")
         i += 1
 
     self.__check_termination__()
-    [cpu_average, num_tasks_average] = self.__compute_statistics__()
-    self.num_tasks_average = num_tasks_average
+    [cpu_average, num_tasks, num_tasks_average] = self.__compute_statistics__()
+    self.num_tasks = num_tasks
     self.__scale_nodes__(cpu_average, num_tasks_average)
 
   def __check_termination__(self):
-    i = 0
+    i: int = 0
     while i < len(self.terminating_nodes):
-      n = self.terminating_nodes[i]
+      n: node.Node = self.terminating_nodes[i]
       if n.state == "TERMINATED":
-        self.terminating_nodes = self.terminating_nodes[:i] + self.terminating_nodes[i+1:]
+        self.terminating_nodes.pop(i)
       else:
         assert(n.state == "TERMINATING")
         i += 1
 
-  def __compute_statistics__(self):
-    cpu_average = 0.0
-    mem_average = 0.0
-    num_tasks_average = 0.0
+  def __compute_statistics__(self) -> Tuple[float, int, float]:
+    cpu_average: float = 0.0
+    mem_average: float = 0.0
+    num_tasks: int = 0
+    num_tasks_average: float = 0.0
 
-    nodes = self.running_nodes + self.terminating_nodes
-    num_nodes = len(nodes)
+    nodes: List[node.Node] = self.running_nodes + self.terminating_nodes
+    num_nodes: int = len(nodes)
 
     if len(nodes) > 0:
       for n in nodes:
@@ -102,10 +114,10 @@ class Master:
           self.error = n.error
         cpu_average += n.cpu_utilization
         mem_average += n.memory_utilization
-        num_tasks_average += n.num_tasks
+        num_tasks += n.num_tasks
       cpu_average /= num_nodes
       mem_average /= num_nodes
-      num_tasks_average /= num_nodes
+      num_tasks_average = float(num_tasks) / num_nodes
 
     print("Average CPU Utilization", cpu_average)
     print("Average Memory Utilization", mem_average)
@@ -114,7 +126,7 @@ class Master:
     print("Number of Starting Nodes", len(self.starting_nodes))
     print("Number of Terminating Nodes", len(self.terminating_nodes))
     print("")
-    return [cpu_average, num_tasks_average]
+    return (cpu_average, num_tasks, num_tasks_average)
 
   def __create_node__(self):
     self.starting_nodes.append(node.Node(self.total_node_count, self.s3_application_url, self.pending_tasks, self.results_folder, self.params))
@@ -122,7 +134,7 @@ class Master:
 
   def __scale_nodes__(self, cpu_average, num_tasks_average):
     if len(self.starting_nodes) == 0 and len(self.running_nodes) < self.params["max_nodes"]:
-      if cpu_average >= self.params["scale_up_utilization"]:
+      if (len(self.starting_nodes + self.running_nodes) == 0 and len(self.pending_tasks) > 0) or cpu_average >= self.params["scale_up_utilization"]:
         if self.scale_up_start_time is None:
           self.scale_up_start_time = time.time()
         if time.time() - self.scale_up_start_time > self.params["scale_time"]:
@@ -132,17 +144,16 @@ class Master:
         self.scale_up_start_time = None
 
     if len(self.terminating_nodes) == 0:
-      if len(self.running_nodes) > 1 or (len(self.pending_tasks) == 0 and len(self.running_nodes) > 0):
-        if cpu_average <= self.params["scale_down_utilization"]:
-          self.running_nodes = sorted(self.running_nodes, key=lambda n: n.cpu_utilization)
-          if len(self.running_nodes) > 1:
-            if self.scale_down_start_time is None:
-              self.scale_down_start_time = time.time()
-            if time.time() - self.scale_down_start_time > self.params["scale_time"]:
-              self.__terminate_node__()
-              self.scale_down_start_time = time.time()
-        else:
-          self.scale_down_start_time = None
+      if cpu_average <= self.params["scale_down_utilization"] and len(self.running_nodes) > 0:
+        self.running_nodes = sorted(self.running_nodes, key=lambda n: n.cpu_utilization)
+        if self.scale_down_start_time is None:
+          self.scale_down_start_time = time.time()
+        if time.time() - self.scale_down_start_time > self.params["scale_time"]:
+          if len(self.running_nodes) > 1 or len(self.pending_tasks) == 0:
+            self.__terminate_node__()
+            self.scale_down_start_time = time.time()
+      else:
+        self.scale_down_start_time = None
 
   def __setup_queue__(self):
     client = boto3.client("sqs", region_name=self.params["region"])
@@ -164,6 +175,7 @@ class Master:
         n.add_tasks()
 
   def __terminate_node__(self):
+    self.running_nodes = sorted(self.running_nodes, key=lambda n: n.cpu_utilization)
     self.terminating_nodes.append(self.running_nodes.pop(0))
     self.terminating_nodes[-1].terminate()
     assert(self.terminating_nodes[-1].state == "TERMINATING")
@@ -182,7 +194,7 @@ class Master:
       time.sleep(10)
 
   def run(self):
-    while len(self.pending_tasks) > 0 or self.num_tasks_average > 0.0 or self.running:
+    while len(self.pending_tasks) > 0 or self.num_tasks > 0 or self.running:
       self.__check_for_new_items__()
       self.__check_nodes__()
       self.__start_tasks__()
@@ -197,7 +209,7 @@ class Master:
   def shutdown(self):
     self.running = False
 
-  def start(self, asynch):
+  def start(self, asynch: bool):
     if asynch:
       r = Run(self)
       r.start()
