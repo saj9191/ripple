@@ -8,7 +8,7 @@ import util
 def process_objects(s3, bucket_name, objects, params):
   costs = {-1: 0}
   durations = {-1: [sys.maxsize, 0]}
-  memory_parameters = json.loads(open("json/memory.json").read())
+  memory_parameters = json.loads(open("../json/memory.json").read())
   statistics = []
 
   for stage in params["pipeline"]:
