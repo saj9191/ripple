@@ -1,23 +1,27 @@
 import boto3
 import importlib
 import util
+from iterator import OffsetBounds
+from typing import Any, Dict, List
 
 
-def run_application(bucket_name, key, input_format, output_format, offsets, params):
+def run_application(bucket_name: str, key: str, input_format: Dict[str, Any], output_format: Dict[str, Any], offsets: List[int], params: Dict[str, Any]):
   s3 = boto3.resource('s3')
   temp_file = "/tmp/{0:s}".format(key)
   util.make_folder(util.parse_file_name(key))
 
   if len(offsets) == 0:
-    with open(temp_file, "wb+") as f:
-      s3.Bucket(bucket_name).download_fileobj(key, f)
+    with open(temp_file, "wb+") as fb:
+      s3.Bucket(bucket_name).download_fileobj(key, fb)
   else:
     obj = s3.Object(bucket_name, key)
     format_lib = importlib.import_module(params["format"])
     iterator_class = getattr(format_lib, "Iterator")
-    iterator = iterator_class(obj, 0, offsets)
-    with open(temp_file, "w") as f:
-      f.write(util.read(obj, iterator.current_offset, iterator.content_length))
+    iterator = iterator_class(obj, OffsetBounds(offsets[0], offsets[1]))
+    items = iterator.get(iterator.get_start_index(), iterator.get_end_index())
+    with open(temp_file, "w+") as f:
+      items = list(items)
+      iterator_class.from_array(list(items), f, iterator.get_extra())
 
   application_lib = importlib.import_module(params["application"])
   application_method = getattr(application_lib, "run")

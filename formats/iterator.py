@@ -2,7 +2,7 @@ import boto3
 from enum import Enum
 import heapq
 import util
-from typing import Any, ClassVar, Dict, Generic, Iterable, List, Optional, Tuple, TextIO, TypeVar
+from typing import Any, BinaryIO, ClassVar, Dict, Generic, Iterable, List, Optional, Tuple, TypeVar
 
 
 T = TypeVar("T")
@@ -85,20 +85,21 @@ class Iterator(Generic[T]):
     self.offsets = [self.next_index]
 
   @classmethod
-  def combine(cls: Any, objs: List[Any], f: TextIO) -> Dict[str, str]:
+  def combine(cls: Any, objs: List[Any], f: BinaryIO) -> Dict[str, str]:
     metadata: Dict[str, str] = {}
 
     for i in range(len(objs)):
       obj = objs[i]
       if cls.options.has_header and i > 0:
-        f.write(util.read(0, obj.content_length).split(cls.delimiter.item_token)[1:])
+        lines = util.read(obj, 0, obj.content_length).split(cls.delimiter.item_token)[1:]
+        f.write(str.encode(cls.delimiter.item_token.join(lines)))
       else:
         obj.download_fileobj(f)
 
     return metadata
 
   @classmethod
-  def from_array(cls: Any, items: List[str], f: TextIO, extra: Dict[str, Any]) -> Dict[str, str]:
+  def from_array(cls: Any, items: List[str], f: BinaryIO, extra: Dict[str, Any]) -> Dict[str, str]:
     metadata: Dict[str, str] = {}
     if cls.delimiter.position == DelimiterPosition.inbetween:
       content = cls.delimiter.item_token.join(items)
@@ -125,25 +126,34 @@ class Iterator(Generic[T]):
     content: str = util.read(self.obj, start_byte, end_byte)
     return self.to_array(content)
 
+  def get_extra(self) -> Dict[str, Any]:
+    return {}
+
   def get_item_count(self) -> int:
     raise Exception("Not Implemented")
+
+  def get_end_index(self) -> int:
+    return self.start_index
 
   def get_start_index(self) -> int:
     return self.start_index
 
-  def get_end_index(self) -> int:
+  def get_offset_end_index(self) -> int:
     return self.end_index
 
-  def next(self) -> Tuple[Iterable[str], Optional[OffsetBounds], bool]:
+  def get_offset_start_index(self) -> int:
+    return self.start_index
+
+  def next(self) -> Tuple[Iterable[Any], Optional[OffsetBounds], bool]:
     if self.next_index == -1:
-      self.next_index = self.get_start_index()
+      self.next_index = self.get_offset_start_index()
     next_start_index: int = self.next_index
-    next_end_index: int = min(next_start_index + self.read_chunk_size, self.get_end_index())
+    next_end_index: int = min(next_start_index + self.read_chunk_size, self.get_offset_end_index())
     more: bool = True
     stream: str = util.read(self.obj, next_start_index, next_end_index)
     stream = self.remainder + stream
 
-    if next_end_index == self.get_end_index():
+    if next_end_index == self.get_offset_end_index():
       next_start_index -= len(self.remainder)
       self.remainder = ""
       more = False
@@ -160,7 +170,7 @@ class Iterator(Generic[T]):
         self.remainder = stream
         next_end_index -= len(self.remainder)
         stream = ""
-    self.next_index = min(next_end_index + len(self.remainder) + 1, self.get_end_index())
+    self.next_index = min(next_end_index + len(self.remainder) + 1, self.get_offset_end_index())
     offset_bounds: Optional[OffsetBounds]
     if len(stream) == 0:
       offset_bounds = None

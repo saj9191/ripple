@@ -43,10 +43,10 @@ class IteratorMethods(unittest.TestCase):
     self.assertFalse(more)
 
   def test_combine(self):
-    object1 = Object("test1.tsv", "A\tB\tC\na\tb\tc\n1\t2\t3\n")
-    object2 = Object("test2.tsv", "D\tE\tF\nd\te\tf\n4\t5\t6\n")
-    object3 = Object("test3.tsv", "G\tH\tI\ng\th\ti\n7\t8\t9\n")
-    object4 = Object("test4.tsv", "J\tK\tL\nj\tk\tl\n10\t11\t12\n")
+    object1 = Object("test1.tsv", "HEADER\nA\tB\tC\na\tb\tc\n1\t2\t3\n")
+    object2 = Object("test2.tsv", "HEADER\nD\tE\tF\nd\te\tf\n4\t5\t6\n")
+    object3 = Object("test3.tsv", "HEADER\nG\tH\tI\ng\th\ti\n7\t8\t9\n")
+    object4 = Object("test4.tsv", "HEADER\nJ\tK\tL\nj\tk\tl\n10\t11\t12\n")
     objects = [object1, object2, object3, object4]
 
     temp_name = "/tmp/ripple_test"
@@ -54,7 +54,7 @@ class IteratorMethods(unittest.TestCase):
       tsv.Iterator.combine(objects, f)
 
     with open(temp_name) as f:
-      self.assertEqual(f.read(), "A\tB\tC\na\tb\tc\n1\t2\t3\nD\tE\tF\nd\te\tf\n4\t5\t6\nG\tH\tI\ng\th\ti\n7\t8\t9\nJ\tK\tL\nj\tk\tl\n10\t11\t12\n")
+      self.assertEqual(f.read(), "HEADER\nA\tB\tC\na\tb\tc\n1\t2\t3\nD\tE\tF\nd\te\tf\n4\t5\t6\nG\tH\tI\ng\th\ti\n7\t8\t9\nJ\tK\tL\nj\tk\tl\n10\t11\t12\n")
     os.remove(temp_name)
 
 

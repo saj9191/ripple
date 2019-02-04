@@ -129,7 +129,7 @@ class IteratorMethods(unittest.TestCase):
     [spectra, offset_bounds, more] = it.next()
     self.assertFalse(more)
     self.assertEqual(offset_bounds.start_index, 123)
-    self.assertEqual(offset_bounds.end_index, 618)
+    self.assertEqual(offset_bounds.end_index, 617)
     self.assertEqual(len(list(spectra)), 3)
 
     # One spectra starts in range

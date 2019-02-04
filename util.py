@@ -59,7 +59,6 @@ DOWNLOAD_TIME = 0
 LIST_TIME = 0
 UPLOAD_TIME = 0
 
-
 def invoke(client, name, params, payload):
   params["payloads"].append(payload)
   response = client.invoke(
@@ -183,13 +182,6 @@ def object_exists(s3, bucket_name, key):
     return False
 
 
-def get_auxilary_key(key, name):
-  m = parse_file_name(key)
-  if len(m) == 0:
-    return None
-  return "aux/{0:f}-{1:d}/{2:s}".format(m["timestamp"], m["nonce"], name)
-
-
 def get_batch(bucket_name, key, prefix, params):
   objects = get_objects(bucket_name, prefix, params)
   batch_size = None if "batch_size" not in params else params["batch_size"]
@@ -250,7 +242,7 @@ def load_parameters(s3_dict, key_fields, start_time, event):
     s3 = boto3.resource("s3")
     client = boto3.client("lambda")
 
-  params["offsets"] = {}
+  params["offsets"] = []
   params["prefix"] = prefix
   params["s3"] = s3
   params["client"] = client

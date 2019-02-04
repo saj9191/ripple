@@ -1,6 +1,8 @@
 import boto3
 import importlib
 import util
+from iterator import OffsetBounds
+from typing import Any, Dict, List
 
 
 def bin_input(s3, obj, sorted_input, format_lib, input_format, output_format, bin_ranges, offsets, params):
@@ -23,21 +25,23 @@ def bin_input(s3, obj, sorted_input, format_lib, input_format, output_format, bi
   for i in range(len(binned_input)):
     [content, metadata] = iterator_class.from_array(obj, binned_input[i], offsets)
     output_format["bin"] = bin_ranges[i]["bin"]
+    output_format["num_bins"] = len(bin_ranges)
     bin_key = util.file_name(output_format)
     util.write(params["bucket"], bin_key, str.encode(content), metadata, params)
 
 
-def handle_sort(bucket_name, key, input_format, output_format, offsets, params):
+def handle_sort(bucket_name: str, key: str, input_format: Dict[str, Any], output_format: Dict[str, Any], offsets: List[int], params: Dict[str, Any]):
   s3 = boto3.resource("s3")
   obj = s3.Object(bucket_name, key)
 
   format_lib = importlib.import_module(params["format"])
-  iterator = getattr(format_lib, "Iterator")
-  it = iterator(obj, params["chunk_size"], offsets)
-  sorted_input = iterator.get(obj, it.spectra_start_index, it.spectra_end_index, params["identifier"])
-  sorted_input = sorted(sorted_input, key=lambda k: k[0])
+  iterator_class = getattr(format_lib, "Iterator")
+  it = iterator_class(obj, OffsetBounds(offsets[0], offsets[1]))
+  items = it.get(it.get_start_index(), it.get_end_index())
+  items = list(map(lambda item: (it.get_identifier_value(item, format_lib.Identifiers[params["identifier"]]), item), items))
+  sorted_items = sorted(items, key=lambda k: k[0])
 
-  bin_input(s3, obj, sorted_input, format_lib, input_format, dict(output_format), params["pivots"], offsets, params)
+  bin_input(s3, obj, sorted_items, format_lib, input_format, dict(output_format), params["pivots"], offsets, params)
 
 
 def handler(event, context):

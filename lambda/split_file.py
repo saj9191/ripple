@@ -1,9 +1,10 @@
 import boto3
 import pivot
 import util
+from typing import Any, Dict, List, Optional
 
 
-def create_payload(bucket, key, offsets, prefix, file_id=None, num_files=None):
+def create_payload(bucket: str, key: str, offsets: List[int], prefix: int, file_id: Optional[int]=None, num_files: Optional[int]=None):
   payload = {
     "Records": [{
       "s3": {
@@ -28,7 +29,7 @@ def create_payload(bucket, key, offsets, prefix, file_id=None, num_files=None):
   return payload
 
 
-def split_file(bucket_name, key, input_format, output_format, offsets, params):
+def split_file(bucket_name: str, key: str, input_format: Dict[str, Any], output_format: Dict[str, Any], offsets: List[int], params: Dict[str, Any]):
   split_size = params["split_size"]
 
   s3 = params["s3"] if "s3" in params else boto3.resource("s3")
@@ -47,10 +48,7 @@ def split_file(bucket_name, key, input_format, output_format, offsets, params):
   num_files = int((obj.content_length + split_size - 1) / split_size)
 
   while file_id <= num_files:
-    offsets = {
-      "offsets": [(file_id - 1) * split_size, min(obj.content_length, (file_id) * split_size) - 1]
-    }
-
+    offsets = [(file_id - 1) * split_size, min(obj.content_length, (file_id) * split_size) - 1]
     payload = create_payload(input_bucket, input_key, offsets, output_format["prefix"], file_id, num_files)
 
     s3_params = payload["Records"][0]["s3"]

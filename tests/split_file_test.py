@@ -54,9 +54,7 @@ def get_payload(bucket_name, key, prefix, file_id, num_files, offsets=None):
   }
 
   if offsets is not None:
-    payload["Records"][0]["s3"]["extra_params"]["offsets"] = {
-      "offsets": offsets
-    }
+    payload["Records"][0]["s3"]["extra_params"]["offsets"] = offsets
   return payload
 
 

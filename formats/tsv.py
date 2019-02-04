@@ -9,7 +9,7 @@ T = TypeVar("T")
 class Iterator(Generic[T], new_line.Iterator[T]):
   identifiers: T
   item_delimiter: ClassVar[str] = "\t"
-  options: ClassVar[Options] = Options(has_header = False)
+  options: ClassVar[Options] = Options(has_header = True)
 
   def __init__(self, obj: Any, offset_bounds: Optional[OffsetBounds] = None):
     new_line.Iterator.__init__(self, obj, offset_bounds)

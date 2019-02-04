@@ -6,7 +6,7 @@ import util
 import xml.etree.ElementTree as ET
 from enum import Enum
 from iterator import Delimiter, DelimiterPosition, OffsetBounds, Options
-from typing import Any, ClassVar, Dict, Iterable, List, Optional, Pattern, TextIO, Tuple
+from typing import Any, BinaryIO, ClassVar, Dict, Iterable, List, Optional, Pattern, Tuple
 
 
 class Identifiers(Enum):
@@ -44,12 +44,12 @@ class Iterator(iterator.Iterator[Identifiers]):
     self.__setup__()
 
   @classmethod
-  def __add_content__(cls: Any, content: str, f: TextIO) -> str:
+  def __add_content__(cls: Any, content: str, f: BinaryIO) -> str:
     f.write(content)
     return content
 
   @classmethod
-  def __add_footer__(cls: Any, f: TextIO, content: str, offsets: List[Tuple[int, int]], metadata: Dict[str, str]):
+  def __add_footer__(cls: Any, f: BinaryIO, content: str, offsets: List[Tuple[int, int]], metadata: Dict[str, str]):
     content += cls.__add_content__("</spectrumList>", f)
     metadata["footer_start_index"] = str(len(content))
     content += cls.__add_content__("</run></mzML>\n", f)
@@ -69,7 +69,7 @@ class Iterator(iterator.Iterator[Identifiers]):
     metadata["num_spectra"] = str(len(offsets))
 
   @classmethod
-  def __create_header__(cls: Any, f: TextIO, header: str, count: int, metadata: Dict[str, str]) -> str:
+  def __create_header__(cls: Any, f: BinaryIO, header: str, count: int, metadata: Dict[str, str]) -> str:
     header = re.sub(cls.spectrum_list_count_regex, '<spectrumList count="{0:d}"'.format(count), header)
     metadata["header_start_index"] = str(0)
     metadata["header_end_index"] = str(len(header) - 1)
@@ -160,32 +160,42 @@ class Iterator(iterator.Iterator[Identifiers]):
     self.__set_offset_indices__()
 
   def __set_offset_indices__(self):
-    self.offset_start_index = self.index_list_offset
-    self.offset_end_index = self.footer_end_index
+    self.offset_start_index = None
+    self.offset_end_index = None
 
+    start_byte: int = 0
     if self.offset_bounds:
-      start_byte: int = self.index_list_offset
-      end_byte: int = min(self.footer_end_index, start_byte + self.chunk_size)
-      remainder: str = ""
+      start_byte = self.index_list_offset
+    else:
+      start_byte: int = max(0, self.footer_end_index - self.read_chunk_size)
+      self.offset_start_index = self.index_list_offset
 
-      while start_byte < self.footer_end_index:
-        stream: str = util.read(self.obj, start_byte, end_byte)
-        stream = remainder + stream
-        offset_matches = list(self.offset_regex.finditer(stream))
-        for m in offset_matches:
-          offset: int = int(m.group(1))
-          if offset == self.spectra_start_index:
-            self.offset_start_index = start_byte + m.span(0)[0]
-          if offset == self.spectra_end_index:
-            self.offset_end_index = start_byte + m.span(0)[0]
+    end_byte: int = min(self.footer_end_index, start_byte + self.read_chunk_size)
+    remainder: str = ""
+    last_match = None
+    index: Optional[int] = None
+    while start_byte < self.footer_end_index:
+      stream: str = util.read(self.obj, start_byte, end_byte)
+      stream = remainder + stream
+      offset_matches = list(self.offset_regex.finditer(stream))
+      index = start_byte - len(remainder)
+      for m in offset_matches:
+        offset: int = int(m.group(1))
+        if self.offset_start_index is None and offset == self.spectra_start_index:
+          self.offset_start_index = index + m.span(0)[0]
+        if self.offset_end_index is None and int(m.group(1)) > self.spectra_end_index:
+          self.offset_end_index = index + m.span(0)[0] - 1
 
-        if len(offset_matches) > 0:
-          remainder = stream[offset_matches[-1].span()[1] + 1:]
-        else:
-          remainder = stream
-        start_byte = end_byte + 1
-        end_byte = min(self.footer_end_index, start_byte + self.chunk_size)
-    self.offset_end_index -= 1
+      if len(offset_matches) > 0:
+        remainder = stream[offset_matches[-1].span()[1] + 1:]
+        last_match = offset_matches[-1]
+      else:
+        remainder = stream
+      start_byte = end_byte + 1
+      end_byte = min(self.footer_end_index, start_byte + self.read_chunk_size)
+
+    if self.offset_end_index is None:
+      self.offset_end_index = index + last_match.span(0)[1]
 
   def __spectra_offsets__(self):
     if self.offset_bounds:
@@ -200,7 +210,7 @@ class Iterator(iterator.Iterator[Identifiers]):
 
       # Determine the set of spectra offsets in the offset range
       while start_byte < self.footer_end_index:
-        end_byte: int = min(start_byte + self.chunk_size, self.footer_end_index)
+        end_byte: int = min(start_byte + self.read_chunk_size, self.footer_end_index)
         [offsets, remainder] = self.__get_offsets__(start_byte, end_byte, remainder)
         for offset in offsets:
           if self.spectra_start_index <= offset and offset <= self.spectra_end_index:
@@ -214,16 +224,15 @@ class Iterator(iterator.Iterator[Identifiers]):
 
       if len(included_offsets) == 0:
         self.spectra_start_index = before_offset
-        self.spectra_end_index = after_offset
       else:
         self.spectra_start_index = included_offsets[0]
-        self.spectra_end_index = after_offset
+      self.spectra_end_index = after_offset - 1
     else:
       self.spectra_start_index = self.header_end_index + 1
       self.spectra_end_index = self.footer_start_index - 1
 
   @classmethod
-  def combine(cls: Any, objs: List[Any], f: TextIO) -> Dict[str, str]:
+  def combine(cls: Any, objs: List[Any], f: BinaryIO) -> Dict[str, str]:
     metadata: Dict[str, str] = {}
     iterators = []
     count = 0
@@ -262,15 +271,14 @@ class Iterator(iterator.Iterator[Identifiers]):
     return metadata
 
   @classmethod
-  def from_array(cls: Any, items: List[str], f: TextIO, extra: Dict[str, Any]) -> Dict[str, str]:
+  def from_array(cls: Any, items: List[Any], f: BinaryIO, extra: Dict[str, Any]) -> Dict[str, str]:
     metadata: Dict[str, str] = {}
     content: str = cls.__create_header__(f, extra["header"], len(items), metadata)
     offset = len(content)
     offsets = []
 
     count = 0
-    for i in range(len(items)):
-      xml = ET.fromstring(items[i])
+    for xml in items:
       xml.set("index", str(count))
       m = cls.id_regex.match(xml.get("id"))
       assert(m is not None)
@@ -282,6 +290,9 @@ class Iterator(iterator.Iterator[Identifiers]):
 
     cls.__add_footer__(f, content, offsets, metadata)
     return metadata
+
+  def get_extra(self) -> Dict[str, Any]:
+    return { "header": self.header }
 
   @classmethod
   def get_identifier_value(cls: Any, item: str, identifier: Identifiers) -> float:
@@ -307,10 +318,16 @@ class Iterator(iterator.Iterator[Identifiers]):
     return self.num_spectra
 
   def get_start_index(self) -> int:
-    return self.offset_start_index
+    return self.spectra_start_index
 
   def get_end_index(self) -> int:
+    return self.spectra_end_index
+
+  def get_offset_end_index(self) -> int:
     return self.offset_end_index
+
+  def get_offset_start_index(self) -> int:
+    return self.offset_start_index
 
   @classmethod
   def to_array(cls: Any, content: str) -> Iterable[Any]:
