@@ -59,6 +59,7 @@ DOWNLOAD_TIME = 0
 LIST_TIME = 0
 UPLOAD_TIME = 0
 
+
 def invoke(client, name, params, payload):
   params["payloads"].append(payload)
   response = client.invoke(
@@ -158,7 +159,7 @@ def write(bucket, key, body, metadata, params):
       time.sleep(random.randint(1, 10))
 
   WRITE_COUNT += 1
-  WRITE_BYTE_COUNT += len(params["s3"].Object(bucket, key).get()["Body"].read())
+  WRITE_BYTE_COUNT += len(params["s3"].Object(bucket, key).get()["Body"].read().decode("utf-8"))
 
   params["payloads"].append({
     "Records": [{

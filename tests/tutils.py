@@ -74,8 +74,10 @@ class Object:
 
   def put(self, Body: str="", Metadata: Dict[str, str]={}, StorageClass: str=""):
     self.metadata = Metadata
-    if type(Body) == str or type(Body) == bytes:
+    if type(Body) == str:
       self.content = Body
+    elif type(Body) == bytes:
+      self.content = Body.decode("utf-8")
     else:
       self.content = Body.read().decode("utf-8")
 

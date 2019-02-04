@@ -99,15 +99,16 @@ class Iterator(Generic[T]):
     return metadata
 
   @classmethod
-  def from_array(cls: Any, items: List[str], f: BinaryIO, extra: Dict[str, Any]) -> Dict[str, str]:
+  def from_array(cls: Any, items: List[str], f: Optional[BinaryIO], extra: Dict[str, Any]) -> Tuple[str, Dict[str, str]]:
     metadata: Dict[str, str] = {}
     if cls.delimiter.position == DelimiterPosition.inbetween:
       content = cls.delimiter.item_token.join(items)
     else:
       content = "".join(items)
 
-    f.write(content)
-    return metadata
+    if f:
+      f.write(content)
+    return (content, metadata)
 
   @classmethod
   def to_array(cls: Any, content: str) -> Iterable[Any]:
@@ -133,7 +134,7 @@ class Iterator(Generic[T]):
     raise Exception("Not Implemented")
 
   def get_end_index(self) -> int:
-    return self.start_index
+    return self.end_index
 
   def get_start_index(self) -> int:
     return self.start_index

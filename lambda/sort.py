@@ -1,11 +1,10 @@
-import boto3
 import importlib
 import util
 from iterator import OffsetBounds
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple
 
 
-def bin_input(s3, obj, sorted_input, format_lib, input_format, output_format, bin_ranges, offsets, params):
+def bin_input(sorted_input: List[Tuple[float, Any]], bin_ranges: List[Dict[str, int]]) -> List[Any]:
   bin_index = 0
   binned_input = list(map(lambda r: [], bin_ranges))
   count = 0
@@ -20,10 +19,12 @@ def bin_input(s3, obj, sorted_input, format_lib, input_format, output_format, bi
         bin_index += 1
     binned_input[bin_index].append(sinput[1])
     count += 1
+  return binned_input
 
-  iterator_class = getattr(format_lib, "Iterator")
+
+def write_binned_input(binned_input: List[Any], bin_ranges: List[Dict[str, int]], extra: Dict[str, Any], output_format, iterator_class, params):
   for i in range(len(binned_input)):
-    [content, metadata] = iterator_class.from_array(obj, binned_input[i], offsets)
+    [content, metadata] = iterator_class.from_array(binned_input[i], None, extra)
     output_format["bin"] = bin_ranges[i]["bin"]
     output_format["num_bins"] = len(bin_ranges)
     bin_key = util.file_name(output_format)
@@ -31,17 +32,21 @@ def bin_input(s3, obj, sorted_input, format_lib, input_format, output_format, bi
 
 
 def handle_sort(bucket_name: str, key: str, input_format: Dict[str, Any], output_format: Dict[str, Any], offsets: List[int], params: Dict[str, Any]):
-  s3 = boto3.resource("s3")
-  obj = s3.Object(bucket_name, key)
+  obj = params["s3"].Object(bucket_name, key)
 
   format_lib = importlib.import_module(params["format"])
   iterator_class = getattr(format_lib, "Iterator")
-  it = iterator_class(obj, OffsetBounds(offsets[0], offsets[1]))
+  if len(offsets) > 0:
+    it = iterator_class(obj, OffsetBounds(offsets[0], offsets[1]))
+  else:
+    it = iterator_class(obj, None)
+  extra = it.get_extra()
   items = it.get(it.get_start_index(), it.get_end_index())
   items = list(map(lambda item: (it.get_identifier_value(item, format_lib.Identifiers[params["identifier"]]), item), items))
   sorted_items = sorted(items, key=lambda k: k[0])
-
-  bin_input(s3, obj, sorted_items, format_lib, input_format, dict(output_format), params["pivots"], offsets, params)
+  bin_ranges = params["pivots"]
+  binned_input = bin_input(sorted_items, bin_ranges)
+  write_binned_input(binned_input, bin_ranges, extra, dict(output_format), iterator_class, params)
 
 
 def handler(event, context):

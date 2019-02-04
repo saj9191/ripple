@@ -271,7 +271,7 @@ class Iterator(iterator.Iterator[Identifiers]):
     return metadata
 
   @classmethod
-  def from_array(cls: Any, items: List[Any], f: BinaryIO, extra: Dict[str, Any]) -> Dict[str, str]:
+  def from_array(cls: Any, items: List[Any], f: Optional[BinaryIO], extra: Dict[str, Any]) -> Dict[str, str]:
     metadata: Dict[str, str] = {}
     content: str = cls.__create_header__(f, extra["header"], len(items), metadata)
     offset = len(content)
