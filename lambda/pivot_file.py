@@ -1,16 +1,19 @@
 import boto3
 import importlib
 import util
+from typing import List
 
 
-def create_pivots(s3, sorted_input, params):
-  if len(sorted_input) == 0:
+def create_pivots(s3, format_lib, iterator_class, items, params) -> List[float]:
+  if len(items) == 0:
     return []
 
-  max_identifier = int(sorted_input[-1][0] + 1)
-  pivots = list(map(lambda p: p[0], sorted_input))
+  pivots: List[float] = list(map(lambda item: iterator_class.get_identifier_value(item, format_lib.Identifiers[params["identifier"]]), items))
+  pivots.sort()
+
+  max_identifier: float = float(pivots[-1] + 1)
   num_bins = 2 * params["num_bins"]
-  increment = int((len(sorted_input) + num_bins - 1) / num_bins)
+  increment = int((len(items) + num_bins - 1) / num_bins)
   pivots = pivots[0::increment]
   if pivots[-1] == max_identifier - 1:
     pivots[-1] = max_identifier
@@ -20,18 +23,18 @@ def create_pivots(s3, sorted_input, params):
 
 
 def handle_pivots(bucket_name, key, input_format, output_format, offsets, params):
-  s3 = boto3.resource("s3")
+  s3 = params["s3"]
   obj = s3.Object(bucket_name, key)
 
   format_lib = importlib.import_module(params["format"])
-  iterator = getattr(format_lib, "Iterator")
-  if len(offsets) == 0:
-    sorted_input = iterator.get(obj, 0, obj.content_length, params["identifier"])
+  iterator_class = getattr(format_lib, "Iterator")
+  if len(offsets) > 0:
+    it = iterator_class(obj, OffsetBounds(offsets[0], offsets[1]))
   else:
-    it = iterator(obj, 100*1000, offsets)
-    sorted_input = iterator.get(obj, it.spectra_start_index, it.spectra_end_index, params["identifier"])
-  sorted_input = sorted(sorted_input, key=lambda k: k[0])
-  pivots = create_pivots(s3, sorted_input, params)
+    it = iterator_class(obj, None)
+
+  items = it.get(it.get_start_index(), it.get_end_index())
+  pivots: List[float] = create_pivots(s3, format_lib, iterator_class, list(items), params)
 
   output_format["ext"] = "pivot"
   pivot_key = util.file_name(output_format)
