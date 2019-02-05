@@ -51,9 +51,9 @@ def format_data(data, start_time):
   return results
 
 
-def process_tasks(start_time):
+def process_tasks(start_time, subfolder):
   results = []
-  folder = "simulations/uniform/tasks/"
+  folder = "simulations/" + subfolder + "/tasks/"
   regex = [S3_REGEX, TASK_START_REGEX, TASK_END_REGEX]
   files = os.listdir(folder)
   for file in files:
@@ -64,11 +64,14 @@ def process_tasks(start_time):
   return results
 
 
-def process_nodes():
+def process_nodes(subfolder):
   node_times = []
-  folder = "simulations/uniform/nodes/"
+  folder = "simulations/" + subfolder + "/nodes/"
   regex = [NODE_START_REGEX, NODE_END_REGEX]
-  for file in os.listdir(folder):
+  files = os.listdir(folder)
+  print(folder)
+  print(files)
+  for file in files:
     node_times.append(process_data(folder + file, regex))
 
   start_time = min(list(map(lambda r: r[0], node_times)))
@@ -89,8 +92,9 @@ def process_nodes():
 
 
 def main():
-  [start_time, node_results] = process_nodes()
-  task_results = process_tasks(start_time)
+  subfolder = "uniform-default"
+  [start_time, node_results] = process_nodes(subfolder)
+  task_results = process_tasks(start_time, subfolder)
   colors = ["gray", "blue"]
   labels = ["Idle", "Tide"]
   node_color = "red"

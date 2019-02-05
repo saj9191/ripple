@@ -4,14 +4,12 @@ import json
 import node
 import threading
 import time
-import util
+import ec2_util
 from typing import Any, Dict, List, Optional, Tuple
 
 
 class Run(threading.Thread):
-  master: Master
-
-  def __init__(self, master: Master):
+  def __init__(self, master):
     super(Run, self).__init__()
     self.master = master
 
@@ -67,7 +65,7 @@ class Master:
           key: str = record["s3"]["object"]["key"]
           timestamp: float = float(message["Attributes"]["SentTimestamp"]) / 1000.0
           print("Adding task", key)
-          self.pending_tasks.append(util.Task(key, timestamp))
+          self.pending_tasks.append(ec2_util.Task(key, timestamp))
       sqs.delete_message(QueueUrl=self.queue.url, ReceiptHandle=message["ReceiptHandle"])
 
   def __check_nodes__(self):

@@ -6,9 +6,9 @@ import random
 import re
 import threading
 import time
-import util
+import ec2_util
 from enum import Enum
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Pattern, Tuple
 
 STATS_REGEX = re.compile("([0-9\.]+)%\s+([0-9\.]+)%")
 
@@ -17,10 +17,12 @@ class Client:
   client: paramiko.SSHClient
   ip: str
   pem: str
+  timeout: int
 
-  def __init__(self, ip: str, pem: str):
+  def __init__(self, ip: str, pem: str, timeout: int):
     self.ip = ip
     self.pem = pem
+    self.timeout = timeout
     self.__create__()
 
   def __create__(self):
@@ -56,7 +58,7 @@ class Client:
     i = 0
     while not done and i < 3:
       try:
-        (stdin, stdout, stderr) = self.client.exec_command(command)
+        (stdin, stdout, stderr) = self.client.exec_command(command, timeout=self.timeout)
         done = True
       except Exception as e:
         i += 1
@@ -73,9 +75,8 @@ class Client:
     self.client.close()
 
 
-class ErrorCodes(Enum):
-  process = 1  # Usually happens if process runs out of space
-  docker_container = 125  # Usually happens if there is not enough space on machine
+PROCESS_OUT_OF_SPACE_CODE = 1
+CONTAINER_OUT_OF_SPACE_CODE = 125
 
 
 class Task(threading.Thread):
@@ -87,10 +88,10 @@ class Task(threading.Thread):
   node_ip: str
   pending_queue: collections.deque
   results_folder: str
-  running: bool
-  task: util.Task
+  task: ec2_util.Task
+  timeout: int
 
-  def __init__(self, results_folder: str, node_ip: str, key: str, folder: str, pending_queue: collections.deque):
+  def __init__(self, results_folder: str, node_ip: str, key: str, folder: str, pending_queue: collections.deque, timeout: int):
     super(Task, self).__init__()
     self.cpu = 170
     self.error = None
@@ -98,54 +99,67 @@ class Task(threading.Thread):
     self.folder = folder
     self.memory = 2*1024*1024*1024
     self.node_ip = node_ip
+    self.nonce = random.randint(1, 100*1000)
     self.pending_queue = pending_queue
     self.results_folder = results_folder
-    self.running = True
+    self.timeout = timeout
     self.__setup__(key + ".pem")
 
   def __setup__(self, pem: str):
-    self.client = Client(self.node_ip, pem)
+    self.client = Client(self.node_ip, pem, self.timeout)
+
+  def running(self):
+    if self.client is None:
+      return False
+
+    c = "sudo docker ps -a --filter=name={0:d}".format(self.nonce)
+    _, output, _ = self.client.exec_command(c)
+    output = output.split("\n")
+    if len(output) < 2:
+      print("wtf", output)
+    done = len(output) < 2 or " Exited " in output[1]
+    if done and self.client is not None:
+      self.client.close()
+      self.client = None
+    return not done
 
   def run(self):
     start_time: float = time.time()
-    nonce: int = random.randint(1, 100*1000)
-    c = "sudo docker run --name {0:d} -m {1:d} --cpu-shares {2:d} app python3 main.py {3:s}".format(nonce, self.memory, self.cpu, self.file.key)
+    c = "sudo docker run --name {0:d} -m {1:d} --cpu-shares {2:d} app python3 main.py {3:s}".format(self.nonce, self.memory, self.cpu, self.task.key)
     code, output, err = self.client.exec_command(c)
     end_time: float = time.time()
     if code != 0:
-      if code not in [ErrorCodes.process, ErrorCodes.docker_container]:
+      if code not in [PROCESS_OUT_OF_SPACE_CODE, CONTAINER_OUT_OF_SPACE_CODE]:
         print("CODE:", code)
         print("OUTPUT:", output)
         print("ERROR:", err)
         self.error = err
-      self.pending_queue.appendleft(self.file)
+      self.pending_queue.appendleft(self.task)
     else:
       s3 = boto3.resource("s3")
       bucket = s3.Bucket("maccoss-ec2")
-      objs = list(bucket.objects.filter(Prefix="/".join(self.file.key.split("/")[:2])))
+      objs = list(bucket.objects.filter(Prefix="/".join(self.task.key.split("/")[:2])))
       if len(objs) != 1:
-        print("Cannot find output for", self.file.key, len(objs))
-        self.error = "Cannot find output for " + self.file.key
-        self.running = False
+        print("Cannot find output for", self.task.key, len(objs))
+        self.error = "Cannot find output for " + self.task.key
         return
-      print("Finished task", self.file.key)
+      print("Finished task", self.task.key)
       with open("{0:s}/tasks/{1:f}-{2:f}".format(self.results_folder, start_time, end_time), "w+") as f:
-        f.write("S3 CREATED TIME: {0:f}\n".format(self.file.created_at))
-        f.write("RECEIVED TIME {0:f}\n".format(self.file.received_at))
+        f.write("S3 CREATED TIME: {0:f}\n".format(self.task.created_at))
+        f.write("RECEIVED TIME {0:f}\n".format(self.task.received_at))
         f.write("EXECUTION START TIME: {0:f}\n".format(start_time))
         f.write("EXECUTION END TIME: {0:f}\n".format(end_time))
-        f.write("KEY NAME: {0:s}\n".format(self.file.key))
-    stop_code, _, _ = self.client.exec_command("sudo docker rm {0:d}".format(name))
+        f.write("KEY NAME: {0:s}\n".format(self.task.key))
+    stop_code, _, _ = self.client.exec_command("sudo docker rm {0:d}".format(self.nonce))
     if stop_code != 0 and self.error is not None:
       self.error = "Unexpected top code: " + str(stop_code)
-    self.client.close()
-    self.running = False
+    if self.client is not None:
+      self.client.close()
+      self.client = None
 
 
 class Setup(threading.Thread):
-  node: Node
-
-  def __init__(self, node: Node):
+  def __init__(self, node):
     super(Setup, self).__init__()
     self.node = node
 
@@ -197,7 +211,7 @@ class Setup(threading.Thread):
   def run(self):
     node = self.__create_instance__("emr-node-{0:f}".format(time.time()), self.node.params)
     node.reload()
-    client = Client(node.public_ip_address, self.node.params["key"] + ".pem")
+    client = Client(node.public_ip_address, self.node.params["key"] + ".pem", self.node.params["timeout"])
     access, secret = self.__get_credentials__()
     client.exec_command('echo "[default]\naws_access_key_id={0:s}\naws_secret_access_key={1:s}" >> ~/.aws/credentials'.format(access, secret))
     client.exec_command('echo "[default]\naws_access_key_id={0:s}\naws_secret_access_key={1:s}" >> ~/Docker/app/credentials'.format(access, secret))
@@ -255,7 +269,7 @@ class Node:
 
   def add_tasks(self):
     if len(self.pending_queue) > 0:
-      self.tasks.append(Task(self.results_folder, self.node.public_ip_address, self.params["key"], self.folder, self.pending_queue))
+      self.tasks.append(Task(self.results_folder, self.node.public_ip_address, self.params["key"], self.folder, self.pending_queue, self.params["timeout"]))
       self.tasks[-1].start()
     self.num_tasks = len(self.tasks)
 
@@ -290,7 +304,7 @@ class Node:
     elif self.setup is not None:
       self.setup.join()
       self.setup = None
-      self.client = Client(self.node.public_ip_address, self.params["key"] + ".pem")
+      self.client = Client(self.node.public_ip_address, self.params["key"] + ".pem", self.params["timeout"])
       if self.state == "STARTING":
         self.state = "RUNNING"
       elif self.state == "TERMINATING":
@@ -299,12 +313,13 @@ class Node:
 
     i = 0
     while i < len(self.tasks):
-      if not self.tasks[i].running:
+      print("Checking task", self.tasks[i].nonce, "Running", self.tasks[i].running())
+      if not self.tasks[i].running():
         if self.tasks[i].error is not None:
           print(self.node.instance_id, "ERROR", self.tasks[i].error)
           self.error = self.tasks[i].error
-        self.tasks[i].join()
-        self.tasks = self.tasks[:i] + self.tasks[i + 1:]
+#        self.tasks[i].join()
+        self.tasks.pop(i)
       else:
         i += 1
 
