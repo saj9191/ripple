@@ -353,6 +353,7 @@ def main():
   parser.add_argument('--parameters', type=str, required=True, help="File containing parameters")
   args = parser.parse_args()
   params = json.loads(open(args.parameters).read())
+  process_functions(params)
   [access_key, secret_key] = util.get_credentials("default")
   params["access_key"] = access_key
   params["secret_key"] = secret_key
