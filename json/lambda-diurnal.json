@@ -1,0 +1,14 @@
+{
+	"agg_period": 5,
+	"bucket": "maccoss-tide",
+  "distribution": "diurnal",
+	"duration": 7200,
+	"idle": 300,
+	"input_bucket": "tide-source-data",
+	"input_prefix": "DIA-Files",
+	"interval": 600,
+	"num_interval_requests": 5,
+	"num_threads": 5,
+	"region": "us-west-2",
+	"start_offset": 0
+}
