@@ -18,7 +18,7 @@
 	"s3_check_interval": 10,
 	"scale_down_utilization": 30.0,
 	"scale_up_utilization": 70.0,
-	"scale_time": 300,
+	"scale_time": 20,
 	"security": "sg-4ea90530",
 	"start_offset": 0,
 	"subnet": "subnet-0856ecef46b386550",

@@ -84,6 +84,7 @@ class Task(threading.Thread):
   cpu: int
   error: Optional[str]
   folder: str
+  lock: threading.Lock
   memory: int
   node_ip: str
   pending_queue: collections.deque
@@ -97,6 +98,7 @@ class Task(threading.Thread):
     self.error = None
     self.task = pending_queue.popleft()
     self.folder = folder
+    self.lock = threading.Lock()
     self.memory = 2*1024*1024*1024
     self.node_ip = node_ip
     self.nonce = random.randint(1, 100*1000)
@@ -108,6 +110,16 @@ class Task(threading.Thread):
   def __setup__(self, pem: str):
     self.client = Client(self.node_ip, pem, self.timeout)
 
+  def shutdown(self):
+    self.lock.acquire()
+    if self.client is not None:
+      stop_code, _, _ = self.client.exec_command("sudo docker rm {0:d}".format(self.nonce))
+      if stop_code != 0:
+        self.error = "Unexpected top code: " + str(stop_code)
+      self.client.close()
+      self.client = None
+    self.lock.release()
+
   def running(self):
     if self.client is None:
       return False
@@ -115,12 +127,9 @@ class Task(threading.Thread):
     c = "sudo docker ps -a --filter=name={0:d}".format(self.nonce)
     _, output, _ = self.client.exec_command(c)
     output = output.split("\n")
-    if len(output) < 2:
-      print("wtf", output)
     done = len(output) < 2 or " Exited " in output[1]
-    if done and self.client is not None:
-      self.client.close()
-      self.client = None
+    if done:
+      self.shutdown()
     return not done
 
   def run(self):
@@ -150,12 +159,8 @@ class Task(threading.Thread):
         f.write("EXECUTION START TIME: {0:f}\n".format(start_time))
         f.write("EXECUTION END TIME: {0:f}\n".format(end_time))
         f.write("KEY NAME: {0:s}\n".format(self.task.key))
-    stop_code, _, _ = self.client.exec_command("sudo docker rm {0:d}".format(self.nonce))
-    if stop_code != 0 and self.error is not None:
-      self.error = "Unexpected top code: " + str(stop_code)
-    if self.client is not None:
-      self.client.close()
-      self.client = None
+
+    self.shutdown()
 
 
 class Setup(threading.Thread):

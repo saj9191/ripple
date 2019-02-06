@@ -1,3 +1,4 @@
+import argparse
 import matplotlib
 import os
 import re
@@ -12,7 +13,7 @@ NODE_START_REGEX = re.compile("NODE START TIME: ([0-9\.]+)")
 NODE_END_REGEX = re.compile("NODE END TIME: ([0-9\.]+)")
 
 
-def graph(node_results, node_color, max_y_height, task_results, task_colors, task_labels):
+def graph(subfolder, node_results, node_color, max_y_height, task_results, task_colors, task_labels):
   fig, ax = plt.subplots()
   y_values = list(map(lambda r: r % max_y_height, range(len(task_results))))
   offsets = list(map(lambda r: 0.0, task_results))
@@ -29,7 +30,7 @@ def graph(node_results, node_color, max_y_height, task_results, task_colors, tas
 
   plt.xlabel("Time (Seconds)")
   plt.legend(handles, task_labels)
-  plot_name = "simulation.png"
+  plot_name = subfolder + "/simulation.png"
   print("Plot", plot_name)
   fig.savefig(plot_name)
   plt.close()
@@ -53,7 +54,7 @@ def format_data(data, start_time):
 
 def process_tasks(start_time, subfolder):
   results = []
-  folder = "simulations/" + subfolder + "/tasks/"
+  folder = subfolder + "/tasks/"
   regex = [S3_REGEX, TASK_START_REGEX, TASK_END_REGEX]
   files = os.listdir(folder)
   for file in files:
@@ -66,7 +67,7 @@ def process_tasks(start_time, subfolder):
 
 def process_nodes(subfolder):
   node_times = []
-  folder = "simulations/" + subfolder + "/nodes/"
+  folder = subfolder + "/nodes/"
   regex = [NODE_START_REGEX, NODE_END_REGEX]
   files = os.listdir(folder)
   print(folder)
@@ -92,14 +93,16 @@ def process_nodes(subfolder):
 
 
 def main():
-  subfolder = "uniform-default"
-  [start_time, node_results] = process_nodes(subfolder)
-  task_results = process_tasks(start_time, subfolder)
+  parser = argparse.ArgumentParser()
+  parser.add_argument("--subfolder", type=str, required=True, help="Folder containing data to graph")
+  args = parser.parse_args()
+  [start_time, node_results] = process_nodes(args.subfolder)
+  task_results = process_tasks(start_time, args.subfolder)
   colors = ["gray", "blue"]
   labels = ["Idle", "Tide"]
   node_color = "red"
   max_y_height = 100
-  graph(node_results, node_color, max_y_height, task_results, colors, labels)
+  graph(args.subfolder,node_results, node_color, max_y_height, task_results, colors, labels)
 
 
 if __name__ == "__main__":
