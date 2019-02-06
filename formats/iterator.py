@@ -75,7 +75,7 @@ class Iterator(Generic[T]):
       if self.end_index != self.obj.content_length:
         self.end_index -= self.__adjust__(self.end_index, self.delimiter.offset_token)
         if self.delimiter.position == DelimiterPosition.start:
-          self.end_index += len(self.delimiter.identifier)
+          self.end_index += len(self.delimiter.offset_token)
     else:
       self.start_index = 0
       self.end_index = self.obj.content_length - 1
