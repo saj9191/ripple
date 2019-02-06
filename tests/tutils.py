@@ -116,7 +116,7 @@ class Client:
     }
 
 
-def create_event(bucket_name: str, key: str, buckets: List[Bucket], params: Dict[str, Any]):
+def create_event(bucket_name: str, key: str, buckets: List[Bucket], params: Dict[str, Any], offsets=None):
   def load():
     return params
 
@@ -132,6 +132,9 @@ def create_event(bucket_name: str, key: str, buckets: List[Bucket], params: Dict
         },
         "object": {
           "key": key,
+        },
+        "extra_params": {
+          "offsets": offsets if offsets else []
         }
       }
     }]
