@@ -1,6 +1,7 @@
 import argparse
 import boto3
 import json
+import math
 import numpy as np
 import queue
 import random
@@ -36,6 +37,30 @@ class Uniform(Distribution):
     return requests
 
 
+class Diurnal(Distribution):
+  def __init__(self, params):
+    Distribution.__init__(self, params)
+
+  def generate(self):
+    requests = []
+    cycle = self.params["interval"] + self.params["idle"]
+    num_intervals = int(self.params["duration"] / cycle)
+    half_interval = int(self.params["interval"] / 2)
+    interval_requests = self.params["num_interval_requests"]
+    increment = int(half_interval / interval_requests)
+
+    for i in range(num_intervals):
+      for j in range(0, half_interval, increment):
+        num_requests = math.ceil(interval_requests * (float(j + 1) / half_interval))
+        for k in range(num_requests):
+          print(i, cycle, j)
+          requests.append(i * cycle + self.params["start_offset"] + j)
+          requests.append(i * cycle + self.params["interval"] + self.params["start_offset"] - j)
+
+    requests.sort()
+    return requests
+
+
 class Request(threading.Thread):
   def __init__(self, thread_id, date_time, request_queue, params):
     super(Request, self).__init__()
@@ -64,6 +89,8 @@ class Request(threading.Thread):
 def create_requests(params):
   if params["distribution"] == "uniform":
     distribution = Uniform(params)
+  elif params["distribution"] == "diurnal":
+    distribution = Diurnal(params)
   else:
     raise Exception("Not implemented")
 
@@ -80,7 +107,6 @@ def run(params, m):
 
   threads = []
   request_queue = queue.Queue()
-
   for i in range(len(requests)):
     request_queue.put([file_names[i % num_files], requests[i]])
 
@@ -100,6 +126,7 @@ def run(params, m):
 class DummyMaster:
   def __init__(self):
     self.error = None
+
 
 def main():
   parser = argparse.ArgumentParser()
