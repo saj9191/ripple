@@ -2,12 +2,20 @@ import inspect
 import os
 import sys
 import unittest
+from iterator import OffsetBounds
 from tutils import S3, Bucket, Object
+from typing import Any, Optional
 
 currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
 parentdir = os.path.dirname(currentdir)
 sys.path.insert(0, parentdir + "/formats")
 import pivot
+
+class TestIterator(pivot.Iterator):
+  def __init__(self, obj: Any, offset_bounds: Optional[OffsetBounds], increment: int):
+    pivot.Iterator.__init__(self, obj, offset_bounds)
+    self.increment = increment
+
 
 class PivotMethods(unittest.TestCase):
   def test_get_pivot_ranges(self):
@@ -44,56 +52,47 @@ class PivotMethods(unittest.TestCase):
     object3 = Object("test3.pivot", "bucket1\nkey3\n10\t12\t40\t41\t42")
 
     objects = [object1, object2, object3]
-    bucket1 = Bucket("bucket1", objects)
-    s3 = S3([bucket1])
-    params = {
-      "s3": s3,
-      "batch_size": 1,
-      "chunk_size": 10,
-      "identifier": "",
-      "tests": True,
-      "sort": False,
-    }
-    keys = list(map(lambda o: o.key, objects))
     temp_name = "/tmp/ripple_test"
     # 1 10 12 20 25 40 40 41 42 50 60 61 63 80 81
     # *             *              *           *
-    params["num_bins"] = 3
-    pivot.Iterator.combine("bucket1", keys, temp_name, params)
+    it = TestIterator(object1, None, increment=7)
+    with open(temp_name, "wb+") as f:
+      it.combine(objects, f)
+
     with open(temp_name) as f:
       self.assertEqual(f.read(), "bucket1\nkey3\n1.0\t40.0\t60.0\t81.0")
 
     # 1 10 12 20 25 40 40 41 42 50 60 61 63 80 81
     # *                                        *
-    params["num_bins"] = 1
-    pivot.Iterator.combine("bucket1", keys, temp_name, params)
+    it = TestIterator(object1, None, increment=20)
+    with open(temp_name, "wb+") as f:
+      it.combine(objects, f)
+
     with open(temp_name) as f:
       self.assertEqual(f.read(), "bucket1\nkey3\n1.0\t81.0")
     os.remove(temp_name)
 
   def test_combine_edge_case(self):
+    # If we always increment by an integer amount, we may run into the
+    # case where the last bin has significantly less values than the rest
+    # of the bins. We want to make sure values are distributed across
+    # bins as uniformly as possible, so we increment by non-integer values.
+    # This test tests the non-uniform case.
     object1 = Object("test1.pivot", "bucket1\nkey1\n20\t25\t60\t61\t80")
     object2 = Object("test2.pivot", "bucket1\nkey2\n1\t40\t50\t63\t81")
     object3 = Object("test3.pivot", "bucket1\nkey3\n10\t12\t40\t41\t42")
     objects = [object1, object2, object3]
-    bucket1 = Bucket("bucket1", objects)
-    s3 = S3([bucket1])
-    params = {
-      "s3": s3,
-      "batch_size": 1,
-      "chunk_size": 10,
-      "identifier": "",
-      "tests": True,
-      "sort": False,
-    }
-    keys = list(map(lambda o: o.key, objects))
-    temp_name = "/tmp/ripple_test"
+
     # 1 10 12 20 25 40 40 41 42 50 60 61 63 80 81
     # *          *           *        *        *
-    params["num_bins"] = 4
-    pivot.Iterator.combine("bucket1", keys, temp_name, params)
+    temp_name = "/tmp/ripple_test"
+    it = TestIterator(object1, None, increment=4)
+    with open(temp_name, "wb+") as f:
+      it.combine(objects, f)
+
     with open(temp_name) as f:
       self.assertEqual(f.read(), "bucket1\nkey3\n1.0\t25.0\t42.0\t61.0\t81.0")
+    os.remove(temp_name)
 
 
 if __name__ == "__main__":
