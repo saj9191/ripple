@@ -195,7 +195,7 @@ def add_sort_pipeline(sort_params):
   add_function("sort-" + fformat, {
     "format": fformat,
     "file": "sort",
-    "identifier": "mass",
+    "identifier": sort_params["identifier"]
   }, {})
 
   add_function("combine-" + fformat, {
