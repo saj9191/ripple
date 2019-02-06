@@ -53,7 +53,6 @@ class Diurnal(Distribution):
       for j in range(0, half_interval, increment):
         num_requests = math.ceil(interval_requests * (float(j + 1) / half_interval))
         for k in range(num_requests):
-          print(i, cycle, j)
           requests.append(i * cycle + self.params["start_offset"] + j)
           requests.append(i * cycle + self.params["interval"] + self.params["start_offset"] - j)
 
@@ -65,13 +64,14 @@ class Request(threading.Thread):
   def __init__(self, thread_id, date_time, request_queue, params):
     super(Request, self).__init__()
     self.date_time = date_time
+    self.error = None
     self.start_time = time.time()
     self.params = params
     self.request_queue = request_queue
     self.thread_id = thread_id
 
   def run(self):
-    while not self.request_queue.empty():
+    while self.error is None and not self.request_queue.empty():
       try:
         print("Thread", self.thread_id, "Number of requests remaining", self.request_queue.qsize())
         [file_name, request_date_time] = self.request_queue.get(timeout=0)
@@ -116,7 +116,9 @@ def run(params, m):
 
   while request_queue.qsize() > 0:
     if m.error is not None:
-      raise Exception("Error")
+      for thread in threads:
+        thread.error = m.error
+      raise Exception("Error", m.error)
     time.sleep(10)
 
   for thread in threads:
@@ -168,7 +170,6 @@ def old():
     y = x**(-a) / special.zetac(a) * max_concurrency
     y = list(map(lambda i: int(i), list(y)))
     random.shuffle(y)
-    print(y)
     for i in range(len(y)):
       requests += [i * interval] * y[i]
   elif distribution == "bursty":
