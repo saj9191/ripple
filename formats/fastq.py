@@ -22,8 +22,11 @@ class Iterator(iterator.Iterator[Identifiers]):
   def get_identifier_value(cls: Any, item: str, identifier: Identifiers) -> float:
     lines = item.split("\n")
     print(lines)
-
-    seq = lines[1]
+    if(len(lines) < 4):
+      print("Out of Bounds")
+      return
+    else:
+      seq = lines[1]
     print("seq is",seq)
     identifier = seq[0:7]
     
