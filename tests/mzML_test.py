@@ -18,14 +18,15 @@ INPUT = """<?xml version="1.0" encoding="utf-8"?>
       <spectrumList count="3">
         <spectrum id="controllerType=0 controllerNumber=1 scan=1" index="0">
           <cvParam name="ms level" value="2"/>
+          <cvParam name="base peak m/z" value="123"/>
         </spectrum>
         <spectrum id="controllerType=0 controllerNumber=1 scan=2" index="1">
           <cvParam name="ms level" value="2"/>
-          <cvParam />
+          <cvParam name="base peak m/z" value="4"/>
         </spectrum>
         <spectrum id="controllerType=0 controllerNumber=1 scan=3" index="2">
           <cvParam name="ms level" value="2"/>
-          <cvParam />
+          <cvParam name="base peak m/z" value="566"/>
           <cvParam />
         </spectrum>
       </spectrumList>
@@ -34,11 +35,11 @@ INPUT = """<?xml version="1.0" encoding="utf-8"?>
   <indexList count="1">
     <index name="spectrum">
       <offset idRef="controllerType=0 controllerNumber=1 scan=1">123</offset>
-      <offset idRef="controllerType=0 controllerNumber=1 scan=2">267</offset>
-      <offset idRef="controllerType=0 controllerNumber=1 scan=3">433</offset>
+      <offset idRef="controllerType=0 controllerNumber=1 scan=2">321</offset>
+      <offset idRef="controllerType=0 controllerNumber=1 scan=3">517</offset>
     </index>
   </indexList>
-  <indexListOffset>659</indexListOffset>
+  <indexListOffset>774</indexListOffset>
 </indexedmzML>
 """
 
@@ -84,6 +85,7 @@ CHROMATOGRAM_INPUT = """<?xml version="1.0" encoding="utf-8"?>
 bucket = Bucket("bucket", [])
 s3 = S3([bucket])
 
+
 class IteratorMethods(unittest.TestCase):
   def test_metadata(self):
     obj = Object("0/123.4-13/1/1-1-1-test.mzML", INPUT)
@@ -91,11 +93,11 @@ class IteratorMethods(unittest.TestCase):
     self.assertEqual(it.header_start_index, 0)
     self.assertEqual(it.header_end_index, 122)
     self.assertEqual(it.spectra_start_index, 123)
-    self.assertEqual(it.spectra_end_index, 618)
+    self.assertEqual(it.spectra_end_index, 734)
     self.assertEqual(it.chromatogram_start_index, -1)
     self.assertEqual(it.chromatogram_end_index, -1)
-    self.assertEqual(it.index_list_offset, 659)
-    self.assertEqual(it.footer_start_index, 619)
+    self.assertEqual(it.index_list_offset, 774)
+    self.assertEqual(it.footer_start_index, 735)
     self.assertEqual(it.footer_end_index, len(obj.content))
 
     obj = Object("0/123.4-13/1/1-1-1-ctest.mzML", CHROMATOGRAM_INPUT)
@@ -121,15 +123,24 @@ class IteratorMethods(unittest.TestCase):
     self.assertEqual(spectra[1].get("id"), "controllerType=0 controllerNumber=1 scan=2")
     self.assertEqual(spectra[2].get("id"), "controllerType=0 controllerNumber=1 scan=3")
 
+  def test_identifier(self):
+    obj = Object("0/123.4-13/1/1-1-1-test.mzML", INPUT)
+    it = mzML.Iterator(obj)
+    [items, offset_bounds, more] = it.next()
+    spectra = list(items)
+    self.assertEqual(it.get_identifier_value(spectra[0], mzML.Identifiers.mass), 123.0)
+    self.assertEqual(it.get_identifier_value(spectra[1], mzML.Identifiers.mass), 4.0)
+    self.assertEqual(it.get_identifier_value(spectra[2], mzML.Identifiers.mass), 566.0)
+
   def test_adjust(self):
     obj = Object("0/123.4-13/1/1-1-1-test.mzML", INPUT)
 
     # Multiple spectra start in range
-    it = mzML.Iterator(obj, OffsetBounds(120, 440))
+    it = mzML.Iterator(obj, OffsetBounds(120, 540))
     [spectra, offset_bounds, more] = it.next()
     self.assertFalse(more)
     self.assertEqual(offset_bounds.start_index, 123)
-    self.assertEqual(offset_bounds.end_index, 617)
+    self.assertEqual(offset_bounds.end_index, 733)
     self.assertEqual(len(list(spectra)), 3)
 
     # One spectra starts in range
@@ -137,14 +148,14 @@ class IteratorMethods(unittest.TestCase):
     [spectra, offset_bounds, more] = it.next()
     self.assertFalse(more)
     self.assertEqual(offset_bounds.start_index, 123)
-    self.assertEqual(offset_bounds.end_index, 266)
+    self.assertEqual(offset_bounds.end_index, 320)
 
     # No spectra start in range
     it = mzML.Iterator(obj, OffsetBounds(126, 240))
     [spectra, offset_bounds, more] = it.next()
     self.assertFalse(more)
     self.assertEqual(offset_bounds.start_index, 123)
-    self.assertEqual(offset_bounds.end_index, 266)
+    self.assertEqual(offset_bounds.end_index, 320)
 
   def test_combine(self):
     metadata = {

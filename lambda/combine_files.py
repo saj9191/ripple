@@ -29,7 +29,7 @@ def combine(bucket_name, key, input_format, output_format, offsets, params):
     print(msg)
 
     format_lib = importlib.import_module(params["format"])
-    iterator = getattr(format_lib, "Iterator")
+    iterator_class = getattr(format_lib, "Iterator")
     file_name = util.file_name(output_format)
     temp_name = "/tmp/{0:s}".format(file_name)
     # Make this deterministic and combine in the same order
@@ -37,7 +37,7 @@ def combine(bucket_name, key, input_format, output_format, offsets, params):
     objects: List[Any] = list(map(lambda key: params["s3"].Object(bucket_name, key), keys))
     metadata: Dict[str, str] = {}
     with open(temp_name, "wb+") as f:
-      metadata = iterator.combine(objects, f)
+      metadata = iterator_class.combine(objects, f)
 
     with open(temp_name, "rb") as f:
       util.write(params["bucket"], file_name, f, metadata, params)

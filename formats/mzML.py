@@ -81,9 +81,8 @@ class Iterator(iterator.Iterator[Identifiers]):
     return content
 
   @classmethod
-  def __cv_param__(cls: Any, item: str, name: str) -> Optional[float]:
-    spectrum = ET.fromstring(item)
-    for cv_param in spectrum.iter("cv_param"):
+  def __cv_param__(cls: Any, item: Any, name: str) -> Optional[float]:
+    for cv_param in item.iter("cvParam"):
       if cv_param.get("name") == name:
         return float(cv_param.get("value"))
     return None

@@ -4,7 +4,7 @@ import sys
 import unittest
 from iterator import OffsetBounds
 from tutils import S3, Bucket, Object
-from typing import Any, Optional
+from typing import Any, ClassVar, Optional
 
 currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
 parentdir = os.path.dirname(currentdir)
@@ -14,7 +14,7 @@ import pivot
 class TestIterator(pivot.Iterator):
   def __init__(self, obj: Any, offset_bounds: Optional[OffsetBounds], increment: int):
     pivot.Iterator.__init__(self, obj, offset_bounds)
-    self.increment = increment
+    self.__class__.increment = increment
 
 
 class PivotMethods(unittest.TestCase):
@@ -64,9 +64,8 @@ class PivotMethods(unittest.TestCase):
 
     # 1 10 12 20 25 40 40 41 42 50 60 61 63 80 81
     # *                                        *
-    it = TestIterator(object1, None, increment=20)
     with open(temp_name, "wb+") as f:
-      it.combine(objects, f)
+      pivot.Iterator.combine(objects, f)
 
     with open(temp_name) as f:
       self.assertEqual(f.read(), "bucket1\nkey3\n1.0\t81.0")

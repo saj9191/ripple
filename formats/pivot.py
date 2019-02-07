@@ -13,6 +13,7 @@ class Iterator(iterator.Iterator[None]):
   def __init__(self, obj: Any, offset_bounds: Optional[OffsetBounds] = None):
     iterator.Iterator.__init__(self, Iterator, obj, offset_bounds)
 
+  @classmethod
   def combine(cls: Any, objs: List[Any], f: BinaryIO) -> Dict[str, str]:
     pivots: List[int] = []
     file_key: Optional[str] = None
