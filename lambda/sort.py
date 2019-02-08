@@ -1,5 +1,6 @@
 import importlib
 import util
+from database import Database
 from iterator import OffsetBounds
 from typing import Any, Dict, List, Tuple
 
@@ -22,16 +23,16 @@ def bin_input(sorted_input: List[Tuple[float, Any]], bin_ranges: List[Dict[str, 
   return binned_input
 
 
-def write_binned_input(binned_input: List[Any], bin_ranges: List[Dict[str, int]], extra: Dict[str, Any], output_format, iterator_class, params):
+def write_binned_input(d: Database, binned_input: List[Any], bin_ranges: List[Dict[str, int]], extra: Dict[str, Any], output_format, iterator_class, params):
   for i in range(len(binned_input)):
     [content, metadata] = iterator_class.from_array(binned_input[i], None, extra)
     output_format["bin"] = bin_ranges[i]["bin"]
     output_format["num_bins"] = len(bin_ranges)
     bin_key = util.file_name(output_format)
-    util.write(params["bucket"], bin_key, str.encode(content), metadata, params)
+    d.write(params["bucket"], bin_key, str.encode(content), metadata)
 
 
-def handle_sort(bucket_name: str, key: str, input_format: Dict[str, Any], output_format: Dict[str, Any], offsets: List[int], params: Dict[str, Any]):
+def handle_sort(d: Database, bucket_name: str, key: str, input_format: Dict[str, Any], output_format: Dict[str, Any], offsets: List[int], params: Dict[str, Any]):
   obj = params["s3"].Object(bucket_name, key)
 
   format_lib = importlib.import_module(params["format"])
@@ -46,7 +47,7 @@ def handle_sort(bucket_name: str, key: str, input_format: Dict[str, Any], output
   sorted_items = sorted(items, key=lambda k: k[0])
   bin_ranges = params["pivots"]
   binned_input = bin_input(sorted_items, bin_ranges)
-  write_binned_input(binned_input, bin_ranges, extra, dict(output_format), iterator_class, params)
+  write_binned_input(d, binned_input, bin_ranges, extra, dict(output_format), iterator_class, params)
 
 
 def handler(event, context):

@@ -1,6 +1,7 @@
 import boto3
 import pivot
 import util
+from database import Database
 from typing import Any, Dict, List, Optional
 
 
@@ -29,10 +30,9 @@ def create_payload(bucket: str, key: str, offsets: List[int], prefix: int, file_
   return payload
 
 
-def split_file(bucket_name: str, key: str, input_format: Dict[str, Any], output_format: Dict[str, Any], offsets: List[int], params: Dict[str, Any]):
+def split_file(d: Database, bucket_name: str, key: str, input_format: Dict[str, Any], output_format: Dict[str, Any], offsets: List[int], params: Dict[str, Any]):
   split_size = params["split_size"]
 
-  s3 = params["s3"] if "s3" in params else boto3.resource("s3")
   client = params["client"] if "client" in params else boto3.client("lambda")
 
   if util.is_set(params, "ranges"):
@@ -41,7 +41,7 @@ def split_file(bucket_name: str, key: str, input_format: Dict[str, Any], output_
     input_bucket = bucket_name
     input_key = key
 
-  obj = s3.Object(input_bucket, input_key)
+  obj = d.get_object(input_bucket, input_key)
 
   file_id = params["file_id"] if "file_id" in params else 1
 

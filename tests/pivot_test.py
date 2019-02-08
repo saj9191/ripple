@@ -3,7 +3,7 @@ import os
 import sys
 import unittest
 from iterator import OffsetBounds
-from tutils import S3, Bucket, Object
+from tutils import TestDatabase, Bucket, Object
 from typing import Any, ClassVar, Optional
 
 currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
@@ -22,10 +22,9 @@ class PivotMethods(unittest.TestCase):
     content = "bucket_name\nfile_name\n10\t15\t23\t37\t40"
     object1 = Object("pivot.pivot", content)
     bucket1 = Bucket("bucket1", [object1])
-    s3 = S3([bucket1])
     params = {
       "test": True,
-      "s3": s3,
+      "s3": TestDatabase([bucket1]),
     }
 
     [file_bucket, file_key, ranges] = pivot.get_pivot_ranges(bucket1.name, object1.key, params)

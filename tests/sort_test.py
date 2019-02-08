@@ -3,7 +3,7 @@ import os
 import sys
 import tutils
 import unittest
-from tutils import S3, Bucket, Object
+from tutils import TestDatabase, Bucket, Object
 
 currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
 parentdir = os.path.dirname(currentdir)
@@ -29,7 +29,6 @@ target_name: 1
 query_name: 1
 optimal_alignment_score: 193 suboptimal_alignment_score: 48""")
     bucket1 = Bucket("bucket1", [object1])
-    s3 = S3([bucket1])
     pivots = []
     increment = 300000
     for i in range(3):
@@ -47,7 +46,7 @@ optimal_alignment_score: 193 suboptimal_alignment_score: 48""")
       "log": "log",
       "name": "sort",
       "pivots": pivots,
-      "s3": s3,
+      "s3": TestDatabase([bucket1]),
       "storage_class": "STANDARD",
       "timeout": 60,
     }
@@ -94,7 +93,6 @@ target_name: 1
 query_name: 1
 optimal_alignment_score: 193 suboptimal_alignment_score: 48""")
     bucket1 = Bucket("bucket1", [object1])
-    s3 = S3([bucket1])
     pivots = []
     increment = 300000
     for i in range(3):
@@ -112,7 +110,7 @@ optimal_alignment_score: 193 suboptimal_alignment_score: 48""")
       "log": "log",
       "name": "sort",
       "pivots": pivots,
-      "s3": s3,
+      "s3": TestDatabase([bucket1]),
       "storage_class": "STANDARD",
       "timeout": 60,
     }

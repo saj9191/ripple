@@ -1,4 +1,13 @@
-from typing import Any, BinaryIO, List, Dict
+import inspect
+import os
+import sys
+import time
+from typing import Any, BinaryIO, Dict, List, Optional
+
+currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
+parentdir = os.path.dirname(currentdir)
+sys.path.insert(0, parentdir)
+import database
 
 
 def equal_lists(list1, list2):
@@ -7,17 +16,51 @@ def equal_lists(list1, list2):
   return len(s1.intersection(s2)) == len(s1) and len(s2.intersection(s1)) == len(s1)
 
 
-class S3:
-  def __init__(self, buckets):
+class TestDatabase(database.Database):
+  tables: Dict[str, Any]
+
+  def __init__(self, buckets: List[Any]):
+    database.Database.__init__(self)
     self.buckets = {}
     for bucket in buckets:
       self.buckets[bucket.name] = bucket
+
+  def __download__(self, bucket_name: str, key: str, f: BinaryIO) -> int:
+    content: str = self.get_object(bucket_name, key).content
+    f.write(str.encode(content))
+    return len(content)
+
+  def __get_content__(self, bucket_name: str, key: str, start_byte: int, end_byte: int) -> str:
+    content: str = self.get_object(bucket_name, key).content
+    return content[start_byte:end_byte]
+
+  def __get_objects__(self, bucket_name: str, prefix: Optional[str]=None) -> List[Any]:
+    return list(self.buckets[bucket_name].objects.filter(Prefix=prefix))
+
+  def __read__(self, bucket_name: str, key: str) -> str:
+    return self.get_object(bucket_name, key).content
+
+  def __write__(self, bucket_name: str, key: str, content: bytes, metadata: Dict[str, str]):
+    self.Object(bucket_name, key).put(Body=content, Metadata=metadata)
+
+  def __put__(self, bucket_name: str, key: str, f: BinaryIO, metadata: Dict[str, str]):
+    self.Object(bucket_name, key).put(Body=f.read(), Metadata=metadata)
+
+  def contains(self, bucket_name: str, key: str) -> bool:
+    return bucket_name in self.buckets and key in self.buckets[bucket_name].entries
+
+  def get_object(self, bucket_name: str, key: str) -> Optional[Any]:
+    objs = self.__get_objects__(bucket_name, key)
+    assert(len(objs) <= 1)
+    if len(objs) == 0:
+      return None
+    return objs[0]
 
   def Bucket(self, bucket_name):
     return self.buckets[bucket_name]
 
   def Object(self, bucket_name: str, key: str):
-    objs = list(self.buckets[bucket_name].objects.filter(Prefix=key))
+    objs = self.__get_objects__(bucket_name, key)
     if len(objs) == 0:
       obj = Object(key, bucket_name=bucket_name)
       self.buckets[bucket_name].objects.objects.append(obj)
@@ -124,7 +167,7 @@ def create_event(bucket_name: str, key: str, buckets: List[Bucket], params: Dict
     "test": True,
     "client": Client(),
     "load_func": load,
-    "s3": S3(buckets),
+    "s3": TestDatabase(buckets),
     "Records": [{
       "s3": {
         "bucket": {

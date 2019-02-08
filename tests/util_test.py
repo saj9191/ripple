@@ -4,7 +4,7 @@ import sys
 import unittest
 import tutils
 from unittest.mock import MagicMock
-from tutils import S3, Bucket, Object
+from tutils import TestDatabase, Bucket, Object
 
 currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
 parentdir = os.path.dirname(currentdir)
@@ -20,7 +20,7 @@ object6 = Object("1/123.400000-13/1-1/3-1-1-suffix.log")
 bucket1 = Bucket("bucket1", [object1, object2, object3, object4])
 bucket2 = Bucket("bucket2", [object5, object6])
 log = Bucket("log", [object5, object6])
-s3 = S3([bucket1, bucket2, log])
+s3 = TestDatabase([bucket1, bucket2, log])
 params = {
   "file": "application",
   "log": "log",
@@ -50,7 +50,7 @@ class FileNameMethods(unittest.TestCase):
 
 class ObjectsMethods(unittest.TestCase):
   def test_get_objects(self):
-    params["s3"] = S3([bucket1, log])
+    params["s3"] = TestDatabase([bucket1, log])
     objects = util.get_objects("bucket1", prefix=None, params=params)
     self.assertEqual(len(objects), 4)
     self.assertTrue(tutils.equal_lists(objects, [object1, object2, object3, object4]))

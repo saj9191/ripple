@@ -4,7 +4,7 @@ import sys
 import unittest
 import xml.etree.ElementTree as ET
 from iterator import OffsetBounds
-from tutils import S3, Bucket, Object
+from tutils import TestDatabase, Bucket, Object
 
 currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
 parentdir = os.path.dirname(currentdir)
@@ -83,7 +83,7 @@ CHROMATOGRAM_INPUT = """<?xml version="1.0" encoding="utf-8"?>
 """
 
 bucket = Bucket("bucket", [])
-s3 = S3([bucket])
+s3 = TestDatabase([bucket])
 
 
 class IteratorMethods(unittest.TestCase):
@@ -172,10 +172,9 @@ class IteratorMethods(unittest.TestCase):
     obj1 = Object("0/123.4-13/1/1-1-2-test.mzML", CHROMATOGRAM_INPUT, metadata=metadata)
     obj2 = Object("0/123.4-13/1/2-1-2-test.mzML", CHROMATOGRAM_INPUT, metadata=metadata)
     bucket = Bucket("bucket", [obj1, obj2])
-    s3 = S3([bucket])
     params = {
       "chunk_size": 100,
-      "s3": s3,
+      "s3": TestDatabase([bucket]),
     }
     temp_file = "/tmp/test_combine"
     metadata: Dict[str, str] = {}

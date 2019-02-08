@@ -1,6 +1,7 @@
 import boto3
 import botocore
 from botocore.client import Config
+import database
 import json
 import os
 import random
@@ -146,35 +147,6 @@ def read(obj, start_byte, end_byte):
   return content.decode("utf-8")
 
 
-def write(bucket, key, body, metadata, params):
-  global WRITE_COUNT
-  global WRITE_BYTE_COUNT
-  done = False
-  while not done:
-    try:
-      params["s3"].Object(bucket, key).put(Body=body, Metadata=metadata, StorageClass=params["storage_class"])
-      done = True
-    except botocore.exceptions.ClientError as e:
-      print("ERROR: RATE LIMIT")
-      time.sleep(random.randint(1, 10))
-
-  WRITE_COUNT += 1
-  WRITE_BYTE_COUNT += len(params["s3"].Object(bucket, key).get()["Body"].read().decode("utf-8"))
-
-  params["payloads"].append({
-    "Records": [{
-      "s3": {
-        "bucket": {
-          "name": bucket
-        },
-        "object": {
-          "key": key
-        }
-      }
-    }]
-  })
-
-
 def object_exists(s3, bucket_name, key):
   try:
     s3.Object(bucket_name, key).load()
@@ -240,7 +212,7 @@ def load_parameters(s3_dict, key_fields, start_time, event):
     client = event["client"]
   else:
     params = json.loads(open("{0:d}.json".format(prefix)).read())
-    s3 = boto3.resource("s3")
+    s3 = database.S3()
     client = boto3.client("lambda")
 
   params["offsets"] = []
@@ -275,7 +247,7 @@ def handle(event, context, func):
       if not is_set(event, "test"):
         clear_tmp(params)
       make_folder(output_format)
-      func(bucket_name, key, input_format, output_format, params["offsets"], params)
+      func(params["s3"], bucket_name, key, input_format, output_format, params["offsets"], params)
 
     show_duration(context, input_format, bucket_format, params)
 
