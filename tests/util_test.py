@@ -4,7 +4,7 @@ import sys
 import unittest
 import tutils
 from unittest.mock import MagicMock
-from tutils import TestDatabase, Bucket, Object
+from tutils import TestDatabase, TestTable, Object
 
 currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
 parentdir = os.path.dirname(currentdir)
@@ -17,10 +17,10 @@ object3 = Object("0/123.400000-13/1-1/2-1-1-suffix.txt")
 object4 = Object("1/123.400000-13/1-1/2-1-1-suffix.txt")
 object5 = Object("0/123.400000-13/1-1/3-1-1-suffix.log")
 object6 = Object("1/123.400000-13/1-1/3-1-1-suffix.log")
-bucket1 = Bucket("bucket1", [object1, object2, object3, object4])
-bucket2 = Bucket("bucket2", [object5, object6])
-log = Bucket("log", [object5, object6])
-s3 = TestDatabase([bucket1, bucket2, log])
+#bucket1 = Bucket("bucket1", [object1, object2, object3, object4])
+#bucket2 = Bucket("bucket2", [object5, object6])
+#log = Bucket("log", [object5, object6])
+
 params = {
   "file": "application",
   "log": "log",
@@ -48,21 +48,16 @@ class FileNameMethods(unittest.TestCase):
     self.assertEqual("0/123.400000-13/1-4/1-0-0-suffix.txt", util.file_name(util.parse_file_name("0/123.400000-13/1-4/1-0-0-suffix.txt")))
 
 
-class ObjectsMethods(unittest.TestCase):
-  def test_get_objects(self):
-    params["s3"] = TestDatabase([bucket1, log])
-    objects = util.get_objects("bucket1", prefix=None, params=params)
-    self.assertEqual(len(objects), 4)
-    self.assertTrue(tutils.equal_lists(objects, [object1, object2, object3, object4]))
-
-    objects = util.get_objects("bucket1", prefix="0", params=params)
-    self.assertEqual(len(objects), 2)
-    self.assertTrue(tutils.equal_lists(objects, [object1, object3]))
-
-
 class ExecutionMethods(unittest.TestCase):
   def test_run(self):
-    event = tutils.create_event("bucket1", "0/123.4-13/1-1/1-1-0-suffix.txt", [bucket1, log], params)
+    s3 = TestDatabase()
+    bucket1 = s3.create_table("bucket1")
+    log = s3.create_table("log")
+
+    bucket1.add_objects([object1, object2, object3, object4])
+    log.add_objects([object5, object6])
+
+    event = tutils.create_event(s3, bucket1.name, "0/123.4-13/1-1/1-1-0-suffix.txt", params)
     context = tutils.create_context(params)
 
     # Call on object that doesn't have a log entry

@@ -3,7 +3,7 @@ import os
 import sys
 import unittest
 from iterator import OffsetBounds
-from tutils import TestDatabase, Bucket, Object
+from tutils import TestDatabase, Object
 from typing import Any, ClassVar, Optional
 
 currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
@@ -19,15 +19,17 @@ class TestIterator(pivot.Iterator):
 
 class PivotMethods(unittest.TestCase):
   def test_get_pivot_ranges(self):
+    s3 = TestDatabase()
+    table1 = s3.create_table("table1")
     content = "bucket_name\nfile_name\n10\t15\t23\t37\t40"
     object1 = Object("pivot.pivot", content)
-    bucket1 = Bucket("bucket1", [object1])
+    table1.add_object(object1)
     params = {
       "test": True,
-      "s3": TestDatabase([bucket1]),
+      "s3": s3,
     }
 
-    [file_bucket, file_key, ranges] = pivot.get_pivot_ranges(bucket1.name, object1.key, params)
+    [file_bucket, file_key, ranges] = pivot.get_pivot_ranges(table1.name, object1.key, params)
     self.assertEqual(file_bucket, "bucket_name")
     self.assertEqual(file_key, "file_name")
     expected_ranges = [{

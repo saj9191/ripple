@@ -3,7 +3,7 @@ import os
 import sys
 import tutils
 import unittest
-from tutils import TestDatabase, Bucket, Object
+from tutils import TestDatabase, TestTable, Object
 
 currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
 parentdir = os.path.dirname(currentdir)
@@ -15,7 +15,10 @@ import blast
 
 class SortMethods(unittest.TestCase):
   def test_basic(self):
-    log = Bucket("log", [])
+    s3 = TestDatabase()
+    s3.create_table("log")
+    bucket1 = s3.create_table("bucket1")
+
     object1 = Object("0/123.400000-13/1-1/1-1-1-suffix.blast",
 """target_name: 1
 query_name: 1
@@ -28,7 +31,7 @@ optimal_alignment_score: 300 suboptimal_alignment_score: 112
 target_name: 1
 query_name: 1
 optimal_alignment_score: 193 suboptimal_alignment_score: 48""")
-    bucket1 = Bucket("bucket1", [object1])
+    bucket1.add_object(object1)
     pivots = []
     increment = 300000
     for i in range(3):
@@ -46,16 +49,18 @@ optimal_alignment_score: 193 suboptimal_alignment_score: 48""")
       "log": "log",
       "name": "sort",
       "pivots": pivots,
-      "s3": TestDatabase([bucket1]),
+      "s3": s3,
       "storage_class": "STANDARD",
       "timeout": 60,
     }
 
-    event = tutils.create_event(bucket1.name, object1.key, [bucket1, log], params)
+    event = tutils.create_event(s3, bucket1.name, object1.key, params)
     context = tutils.create_context(params)
     sort.handler(event, context)
-    self.assertEqual(len(bucket1.objects.objects), 4)
-    objs = sorted(bucket1.objects.objects, key=lambda obj: obj.key)
+
+    objs = s3.get_objects(bucket1.name)
+    self.assertEqual(len(objs), 4)
+    objs = sorted(objs, key=lambda obj: obj.key)
 
     self.assertEqual(objs[1].content,
 """target_name: 1
@@ -79,7 +84,10 @@ optimal_alignment_score: 540 suboptimal_alignment_score: 9
     self.assertEqual(objs[3].content, "")
 
   def test_offsets(self):
-    log = Bucket("log", [])
+    s3 = TestDatabase()
+    s3.create_table("log")
+    table1 = s3.create_table("table1")
+
     object1 = Object("0/123.400000-13/1-1/1-1-1-suffix.blast",
 """target_name: 1
 query_name: 1
@@ -92,7 +100,7 @@ optimal_alignment_score: 300 suboptimal_alignment_score: 112
 target_name: 1
 query_name: 1
 optimal_alignment_score: 193 suboptimal_alignment_score: 48""")
-    bucket1 = Bucket("bucket1", [object1])
+    table1.add_object(object1)
     pivots = []
     increment = 300000
     for i in range(3):
@@ -103,33 +111,39 @@ optimal_alignment_score: 193 suboptimal_alignment_score: 48""")
       })
 
     params = {
-      "bucket": "bucket1",
+      "bucket": table1.name,
       "file": "sort",
       "format": "blast",
       "identifier": "score",
       "log": "log",
       "name": "sort",
       "pivots": pivots,
-      "s3": TestDatabase([bucket1]),
+      "s3": s3,
       "storage_class": "STANDARD",
       "timeout": 60,
     }
-    event = tutils.create_event(bucket1.name, object1.key, [bucket1, log], params, offsets=[0, 90])
+    event = tutils.create_event(s3, table1.name, object1.key, params)
     context = tutils.create_context(params)
     sort.handler(event, context)
-    self.assertEqual(len(bucket1.objects.objects), 4)
-    objs = sorted(bucket1.objects.objects, key=lambda obj: obj.key)
-
-    self.assertEqual(objs[1].content, "")
-
-    self.assertEqual(objs[2].content, """target_name: 1
+    objs = sorted(s3.get_objects(table1.name, "1/"), key=lambda obj: obj.key)
+    self.assertEqual(len(objs), 3)
+    self.assertEqual(objs[0].content, """target_name: 1
 query_name: 1
-optimal_alignment_score: 540 suboptimal_alignment_score: 9
-
+optimal_alignment_score: 193 suboptimal_alignment_score: 48
 
 """)
 
-    self.assertEqual(objs[3].content, "")
+    self.assertEqual(objs[1].content, """target_name: 1
+query_name: 1
+optimal_alignment_score: 300 suboptimal_alignment_score: 112
+
+target_name: 1
+query_name: 1
+optimal_alignment_score: 540 suboptimal_alignment_score: 9
+
+""")
+
+    self.assertEqual(objs[2].content, "")
 
 
 if __name__ == "__main__":

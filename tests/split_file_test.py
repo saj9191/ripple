@@ -4,7 +4,7 @@ import os
 import sys
 import unittest
 import tutils
-from tutils import Bucket, Object
+from tutils import TestDatabase, Object
 
 currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
 parentdir = os.path.dirname(currentdir)
@@ -14,10 +14,12 @@ sys.path.insert(0, parentdir + "/lambda")
 import split_file
 sys.path.insert(0, parentdir + "/formats")
 
+s3 = TestDatabase()
+bucket1 = s3.create_table("bucket1")
+s3.create_table("log")
 content = "A B C\nD E F\nG H I\nJ K L\nM N O\nP Q R\n"
 object1 = Object("0/123.400000-13/1-1/1-1-0-suffix.new_line", content)
-bucket1 = Bucket("bucket1", [object1])
-log = Bucket("log", [])
+log = bucket1.add_object(object1)
 input_format = util.parse_file_name(object1.key)
 output_format = dict(input_format)
 output_format["prefix"] = 1
@@ -77,7 +79,7 @@ class SplitFunction(unittest.TestCase):
       self.assertDictEqual(expected_invokes[i], actual_invokes[i])
 
   def test_basic(self):
-    event = tutils.create_event(bucket1.name, object1.key, [bucket1, log], params)
+    event = tutils.create_event(s3, bucket1.name, object1.key, params)
     context = tutils.create_context(params)
     split_file.handler(event, context)
 

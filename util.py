@@ -114,26 +114,6 @@ def download(bucket, file):
   return path
 
 
-def get_objects(bucket_name, prefix=None, params={}):
-  s3 = params["s3"]
-  bucket = s3.Bucket(bucket_name)
-  found = False
-  while not found:
-    try:
-      if prefix is None:
-        objects = bucket.objects.all()
-      else:
-        objects = bucket.objects.filter(Prefix=prefix)
-      objects = list(objects)
-      found = True
-    except Exception as e:
-      print("ERROR, util.get_objects", e)
-      found = False
-      time.sleep(1)
-
-  return objects
-
-
 def read(obj, start_byte, end_byte):
   global READ_COUNT
   READ_COUNT += 1
@@ -156,7 +136,7 @@ def object_exists(s3, bucket_name, key):
 
 
 def get_batch(bucket_name, key, prefix, params):
-  objects = get_objects(bucket_name, prefix, params)
+  objects = params["s3"].get_objects(bucket_name, prefix)
   batch_size = None if "batch_size" not in params else params["batch_size"]
   batch = []
   expected_batch_id = None
@@ -279,7 +259,7 @@ def run_function(params, m):
 
 def duplicate_execution(bucket_format, params):
   prefix = "-".join(file_name(bucket_format).split("-")[:-1])
-  objects = get_objects(params["log"], prefix, params)
+  objects = params["s3"].get_objects(params["log"], prefix)
   return len(objects) != 0
 
 
