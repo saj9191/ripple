@@ -141,12 +141,14 @@ class Master:
       else:
         self.scale_up_start_time = None
 
-    if len(self.terminating_nodes) == 0:
-      if cpu_average <= self.params["scale_down_utilization"] and len(self.running_nodes) > 0:
+    if len(self.terminating_nodes) == 0 and len(self.running_nodes) > 0:
+      if cpu_average <= self.params["scale_down_utilization"]:
         self.running_nodes = sorted(self.running_nodes, key=lambda n: n.cpu_utilization)
         if self.scale_down_start_time is None:
           self.scale_down_start_time = time.time()
-        if time.time() - self.scale_down_start_time > self.params["scale_time"]:
+        now = time.time()
+        print("High load for", now - self.scale_down_start_time)
+        if now - self.scale_down_start_time > self.params["scale_time"]:
           if len(self.running_nodes) > 1 or len(self.pending_tasks) == 0:
             self.__terminate_node__()
             self.scale_down_start_time = time.time()
@@ -188,6 +190,7 @@ class Master:
     self.running_nodes = []
     self.starting_nodes = []
     while len(self.terminating_nodes) > 0:
+      print("Shutting down!", self.running)
       self.__check_nodes__()
       time.sleep(10)
 

@@ -115,7 +115,7 @@ class Task(threading.Thread):
     if self.client is not None:
       stop_code, _, _ = self.client.exec_command("sudo docker rm {0:d}".format(self.nonce))
       if stop_code != 0:
-        self.error = "Unexpected top code: " + str(stop_code)
+        print("Unexpected stop code", stop_code)
       self.client.close()
       self.client = None
     self.lock.release()
