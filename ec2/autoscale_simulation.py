@@ -33,7 +33,7 @@ def main():
   m = master.Master(args.s3_application_url, args.result_folder, params)
   m.setup()
   m.start(asynch=True)
-  simulation.run(params, m)
+  simulation.run(params, m, False)
   m.shutdown()
 
 

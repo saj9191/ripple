@@ -98,7 +98,7 @@ def create_requests(params):
   return requests
 
 
-def run(params, m):
+def run(params, m, distribution):
   s3 = boto3.resource("s3")
   file_names = list(map(lambda o: o.key, s3.Bucket(params["input_bucket"]).objects.filter(Prefix=params["input_prefix"])))
   file_names = list(filter(lambda k: not k.endswith("/"), file_names))
@@ -107,6 +107,9 @@ def run(params, m):
 
   threads = []
   request_queue = queue.Queue()
+  if distribution:
+    print(requests)
+    return
   for i in range(len(requests)):
     request_queue.put([file_names[i % num_files], requests[i]])
 
@@ -133,9 +136,10 @@ class DummyMaster:
 def main():
   parser = argparse.ArgumentParser()
   parser.add_argument("--parameters", type=str, required=True, help="File containing simulation distribution parameters")
+  parser.add_argument("--distribution", action="store_true", help="Just print the distribution timestamps")
   args = parser.parse_args()
   params = json.loads(open(args.parameters).read())
-  run(params, DummyMaster())
+  run(params, DummyMaster(), args.distribution)
 
 
 if __name__ == "__main__":
