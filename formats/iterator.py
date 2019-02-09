@@ -100,7 +100,7 @@ class Iterator(Generic[T]):
     return metadata
 
   @classmethod
-  def from_array(cls: Any, items: List[str], f: Optional[BinaryIO], extra: Dict[str, Any]) -> Tuple[str, Dict[str, str]]:
+  def from_array(cls: Any, items: List[Any], f: Optional[BinaryIO], extra: Dict[str, Any]) -> Tuple[str, Dict[str, str]]:
     metadata: Dict[str, str] = {}
     if cls.delimiter.position == DelimiterPosition.inbetween:
       content = cls.delimiter.item_token.join(items)

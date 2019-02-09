@@ -3,7 +3,7 @@ import os
 import sys
 import time
 from database import Database, Table, Entry
-from typing import Any, BinaryIO, Dict, Iterable, List, Optional
+from typing import Any, BinaryIO, Dict, Iterable, List, Optional, Set
 
 currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
 parentdir = os.path.dirname(currentdir)
@@ -17,29 +17,69 @@ def equal_lists(list1, list2):
   return len(s1.intersection(s2)) == len(s1) and len(s2.intersection(s1)) == len(s1)
 
 
+def create_payload(table_name: str, key: str, prefix: int, file_id: Optional[int]=None, num_files: Optional[int]=None, offsets: Optional[List[int]]=None):
+  extra_params: Dict[str, Any] = {"prefix": prefix}
+  if file_id:
+    extra_params["file_id"] = file_id
+    extra_params["num_files"] = num_files
+
+  if offsets:
+    extra_params["offsets"] = offsets
+
+  return {
+    "Records": [{
+      "s3": {
+        "bucket": {
+          "name": table_name
+        },
+        "object": {
+          "key": key,
+        },
+        "extra_params": extra_params
+      }
+    }]
+  }
+
+
 class TestEntry(Entry):
   content: str
 
-  def __init__(self, key: str, content: str, statistics: Optional[database.Statistics]=None):
+  def __init__(self, key: str, content: Optional[str], statistics: Optional[database.Statistics]=None):
+    self.file_name = key.replace("/tmp/", "")
+    self.file_name = self.file_name.replace("/", "-")
+    self.file_name = "/tmp/" + self.file_name
     Entry.__init__(self, key, None, None)
-    self.content = content
+
+    if content is not None:
+      with open(self.file_name, "w+") as f:
+        f.write(content)
+      self.length = len(content)
+    else:
+      self.length = os.path.getsize(self.file_name)
     self.last_modified = time.time()
 
+  def __del__(self):
+    os.remove(self.file_name)
+
   def __download__(self, f: BinaryIO) -> int:
-    f.write(str.encode(self.content))
-    return len(self.content)
+    with open(self.file_name, "rb") as g:
+      f.write(g.read())
+    return self.length
 
   def content_length(self) -> int:
-    return len(self.content)
+    return self.length
 
   def get_content(self) -> str:
-    return self.content
+    with open(self.file_name) as f:
+      return f.read()
 
   def get_metadata(self) -> Dict[str, str]:
     return {}
 
   def get_range(self, start_index: int, end_index: int) -> str:
-    return self.content[start_index:end_index + 1]
+    with open(self.file_name) as f:
+      f.seek(start_index)
+      return f.read(end_index - start_index + 1)
 
   def last_modified_at(self) -> float:
     return self.last_modified
@@ -62,10 +102,12 @@ class TestTable(Table):
 
 
 class TestDatabase(Database):
+  payloads: List[Dict[str, Any]]
   tables: Dict[str, TestTable]
 
   def __init__(self):
     Database.__init__(self)
+    self.payloads = []
     self.tables = {}
 
   def __download__(self, table_name: str, key: str, f: BinaryIO) -> int:
@@ -84,17 +126,30 @@ class TestDatabase(Database):
     entries = list(map(lambda key: self.tables[table_name].entries[key], keys))
     return sorted(entries, key=lambda entry: entry.key)
 
+  def __put__(self, table_name: str, key: str, f: BinaryIO, metadata: Dict[str, str]):
+    self.add_entry(table_name, key, f.read())
+
   def __read__(self, table_name: str, key: str) -> str:
     return self.get_object(table_name, key).content
 
   def __write__(self, table_name: str, key: str, content: bytes, metadata: Dict[str, str]):
     self.add_entry(table_name, key, content)
+    if not key.endswith(".log"):
+      self.payloads.append({
+        "Records": [{
+          "s3": {
+            "bucket": {
+              "name": table_name
+            },
+            "object": {
+            "key": key
+            }
+          }
+        }]
+      })
 
   def add_entry(self, table_name: str, key: str, content: bytes):
     self.tables[table_name].add_entry(key, content.decode("utf-8"))
-
-  def __put__(self, table_name: str, key: str, f: BinaryIO, metadata: Dict[str, str]):
-    self.add_entry(table_name, key, f.read())
 
   def add_table(self, table_name: str) -> Table:
     table: Table = TestTable(table_name, self.statistics, None)
@@ -115,24 +170,8 @@ class TestDatabase(Database):
       return table.entries[key]
     return None
 
-
-class Objects:
-  def __init__(self, objects):
-    self.objects = objects
-
-  def all(self):
-    return self.objects
-
-  def filter(self, Prefix):
-    return filter(lambda o: o.key.startswith(Prefix), self.objects)
-
-
-class Content:
-  def __init__(self, content: str):
-    self.content = content
-
-  def read(self):
-    return str.encode(self.content)
+  def invoke(self, client, name, params, payload):
+    self.payloads.append(payload)
 
 
 class Context:
@@ -160,30 +199,21 @@ class Client:
       }
     }
 
-
-def create_event(database: Database, table_name: str, key: str, params: Dict[str, Any], offsets=None):
+def create_event_from_payload(database: Database, payload: Dict[str, Any], params: Dict[str, Any]):
   def load():
     return params
 
-  return {
+  base = {
     "test": True,
     "client": Client(),
     "load_func": load,
     "s3": database,
-    "Records": [{
-      "s3": {
-        "bucket": {
-          "name": table_name,
-        },
-        "object": {
-          "key": key,
-        },
-        "extra_params": {
-          "offsets": offsets if offsets else []
-        }
-      }
-    }]
   }
+
+  return {**base, **payload}
+
+def create_event(database: Database, table_name: str, key: str, params: Dict[str, Any], offsets=None):
+  return create_event_from_payload(database, create_payload(table_name, key, int(key.split("/")[0]), offsets=offsets), params)
 
 
 def create_context(params):

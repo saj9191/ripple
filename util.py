@@ -62,16 +62,6 @@ LIST_TIME = 0
 UPLOAD_TIME = 0
 
 
-def invoke(client, name, params, payload):
-  params["payloads"].append(payload)
-  response = client.invoke(
-    FunctionName=name,
-    InvocationType="Event",
-    Payload=json.JSONEncoder().encode(payload)
-  )
-  assert(response["ResponseMetadata"]["HTTPStatusCode"] == 202)
-
-
 def check_output(command):
   try:
     stdout = subprocess.check_output(command, stderr=subprocess.STDOUT, shell=True)
@@ -200,7 +190,7 @@ def handle(event, context, func):
       make_folder(output_format)
       func(params["s3"], bucket_name, key, input_format, output_format, params["offsets"], params)
 
-    show_duration(context, input_format, bucket_format, params)
+      show_duration(context, input_format, bucket_format, params)
 
 
 def get_formats(input_format, params):
@@ -334,6 +324,7 @@ def show_duration(context, input_format, bucket_format, params):
 
   for key in ["name"]:
     log_results[key] = params[key]
+
   params["s3"].write(params["log"], file_name(bucket_format), str.encode(json.dumps(log_results)), {})
 
 

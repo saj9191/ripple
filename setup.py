@@ -67,9 +67,6 @@ def create_parameter_files(zip_directory, function_name, params):
         if value in params:
           p[value] = params[value]
 
-      if i != len(params["pipeline"]) - 1:
-        p["output_function"] = params["pipeline"][i + 1]["name"]
-
       name = "{0:d}.json".format(i)
       json_path = "{0:s}/{1:s}".format(zip_directory, name)
       f = open(json_path, "w")
@@ -213,6 +210,9 @@ def process_functions(params):
   i = 0
   while i < len(pipeline):
     name = pipeline[i]["name"]
+    if i != len(params["pipeline"]) - 1:
+      pipeline[i]["output_function"] = pipeline[i + 1]["name"]
+
     fn_params = params["functions"][name]
     if "output" in fn_params:
       variable_to_step[fn_params["output"]] = i + 1

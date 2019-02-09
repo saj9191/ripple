@@ -61,14 +61,14 @@ optimal_alignment_score: 193 suboptimal_alignment_score: 48""")
     self.assertEqual(len(objs), 4)
     objs = sorted(objs, key=lambda obj: obj.key)
 
-    self.assertEqual(objs[1].content,
+    self.assertEqual(objs[1].get_content(),
 """target_name: 1
 query_name: 1
 optimal_alignment_score: 193 suboptimal_alignment_score: 48
 
 """)
 
-    self.assertEqual(objs[2].content,
+    self.assertEqual(objs[2].get_content(),
 """target_name: 1
 query_name: 1
 optimal_alignment_score: 300 suboptimal_alignment_score: 112
@@ -79,8 +79,7 @@ optimal_alignment_score: 540 suboptimal_alignment_score: 9
 
 """)
 
-    print(objs[3].content)
-    self.assertEqual(objs[3].content, "")
+    self.assertEqual(objs[3].get_content(), "")
 
   def test_offsets(self):
     s3 = TestDatabase()

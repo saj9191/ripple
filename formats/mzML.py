@@ -45,7 +45,7 @@ class Iterator(iterator.Iterator[Identifiers]):
 
   @classmethod
   def __add_content__(cls: Any, content: str, f: BinaryIO) -> str:
-    f.write(content)
+    f.write(str.encode(content))
     return content
 
   @classmethod
@@ -273,7 +273,7 @@ class Iterator(iterator.Iterator[Identifiers]):
     return metadata
 
   @classmethod
-  def from_array(cls: Any, items: List[Any], f: Optional[BinaryIO], extra: Dict[str, Any]) -> Dict[str, str]:
+  def from_array(cls: Any, items: List[Any], f: Optional[BinaryIO], extra: Dict[str, Any]) -> Tuple[str, Dict[str, str]]:
     metadata: Dict[str, str] = {}
     content: str = cls.__create_header__(f, extra["header"], len(items), metadata)
     offset = len(content)
@@ -291,7 +291,7 @@ class Iterator(iterator.Iterator[Identifiers]):
       count += 1
 
     cls.__add_footer__(f, content, offsets, metadata)
-    return metadata
+    return (content, metadata)
 
   def get_extra(self) -> Dict[str, Any]:
     return { "header": self.header }

@@ -40,7 +40,7 @@ class CombineFunction(unittest.TestCase):
     self.assertEqual(len(entries), 3)
     combined_entry = entries[-1]
     self.assertEqual(combined_entry.key, "1/123.400000-13/1-1/1-1-1-suffix.new")
-    self.assertEqual(combined_entry.content, "A B C\nD E F\nG H I\nJ K L\n")
+    self.assertEqual(combined_entry.get_content(), "A B C\nD E F\nG H I\nJ K L\n")
 
   def test_batches(self):
     database: TestDatabase = TestDatabase()

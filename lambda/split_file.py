@@ -57,7 +57,7 @@ def split_file(d: Database, bucket_name: str, key: str, input_format: Dict[str, 
     if util.is_set(params, "ranges"):
       s3_params["extra_params"]["pivots"] = ranges
 
-    util.invoke(client, params["output_function"], params, payload)
+    d.invoke(client, params["output_function"], params, payload)
     file_id += 1
 
 

@@ -1,8 +1,9 @@
 import boto3
 import botocore
+import json
 import random
 import time
-from typing import Any, BinaryIO, Dict, List, Optional
+from typing import Any, BinaryIO, Dict, List, Optional, Union
 
 
 class Statistics:
@@ -23,7 +24,7 @@ class Statistics:
 class Entry:
   key: str
   resources: Any
-  statistics: Statistics
+  statistics: Optional[Statistics]
 
   def __init__(self, key: str, resources: Any, statistics: Optional[Statistics]):
     self.key = key
@@ -76,13 +77,10 @@ class Database:
   def __get_entries__(self, table_name: str, prefix: Optional[str]=None) -> List[Entry]:
     raise Exception("Database::__get_entries__ not implemented")
 
-  def __put__(self, table_name: str, key: str, f: BinaryIO, metadata: Dict[str, str]):
+  def __put__(self, table_name: str, key: str, content: BinaryIO, metadata: Dict[str, str]):
     raise Exception("Database::__put__ not implemented")
 
-  def __read__(self, table_name: str, key: str) -> str:
-    raise Exception("Database::__read__ not implemented")
-
-  def __write__(self, table_name: str, key: str, content: bytes):
+  def __write__(self, table_name: str, key: str, content: bytes, metadata: Dict[str, str]):
     raise Exception("Database::__write__ not implemented")
 
   def contains(self, table_name: str, key: str) -> bool:
@@ -95,12 +93,6 @@ class Database:
   def get(self, table_name: str, key: str) -> Any:
     raise Exception("Database::get not implemented")
 
-  def get_content(self, table_name: str, key: str, start_byte: int, end_byte: int) -> str:
-    self.statistics.read_count += 1
-    content: str = self.__get_content__(table, key, start_byte, end_byte)
-    self.statistics.read_byte_count += len(content)
-    return content
-
   def get_entry(self, table_name: str, key: str) -> Optional[Entry]:
     raise Exception("Database::key not implemented")
 
@@ -111,14 +103,17 @@ class Database:
   def get_table(self, table_name: str) -> Table:
     raise Exception("Database::get_table not implemented")
 
-  def put(self, table_name: str, key: str, f: BinaryIO, metadata: Dict[str, str]):
+  def invoke(self, client, name, params, payload):
+    raise Exception("Database::invoke not implemented")
+
+  def put(self, table_name: str, key: str, content: BinaryIO, metadata: Dict[str, str]):
     self.statistics.write_count += 1
-    self.statistics.write_byte_count += f.tell()
-    self.__put__(table_name, key, f, metadata)
+    self.statistics.write_byte_count += content.tell()
+    self.__put__(table_name, key, content, metadata)
 
   def read(self, table_name: str, key: str) -> str:
     self.statistics.read_count += 1
-    content: str = self.__read__(table, key)
+    content: str = self.__read__(table_name, key)
     self.statistics.read_byte_count += len(content)
     return content
 
@@ -130,10 +125,10 @@ class Database:
 
 class Object(Entry):
   def __init__(self, key: str, statistics: Statistics, resources: Any):
-    Key.__init__(key, statistics, resources)
+    Entry.__init__(self, key, statistics, resources)
 
   def __download__(self, f: BinaryIO) -> int:
-    self.resource.download_fileobj(f)
+    self.resources.download_fileobj(f)
     return f.tell()
 
   def content_length(self) -> int:
@@ -143,18 +138,18 @@ class Object(Entry):
     return self.resources.get()["Body"].decode("utf-8")
 
   def get_metadata(self) -> Dict[str, str]:
-    self.resources.metadata
+    return self.resources.metadata
 
   def get_range(self, start_index: int, end_index: int) -> str:
     return self.resources.get(Range="bytes={0:d}-{1:d}".format(start_index, end_index))["Body"].read().decode("utf-8")
 
   def last_modified_at(self) -> float:
-    return self.resource.last_modified.timestamp()
+    return self.resources.last_modified.timestamp()
 
 
 class Bucket(Table):
   def __init__(self, name: str, statistics: Statistics, resources: Any):
-    Table.__init__(name, statistics, resources)
+    Table.__init__(self, name, statistics, resources)
     self.bucket = self.resources.Bucket(name)
 
 
@@ -166,16 +161,16 @@ class S3(Database):
     Database.__init__(self)
 
   def __download__(self, table_name: str, key: str, f: BinaryIO) -> int:
-    bucket = self.s3.Bucket(table)
+    bucket = self.s3.Bucket(table_name)
     bucket.download_fileobj(key, f)
     return f.tell()
 
   def __get_content__(self, table_name: str, key: str, start_byte: int, end_byte: int) -> str:
-    obj = self.s3.Object(table, key)
+    obj = self.s3.Object(table_name, key)
     content = obj.get(Range="bytes={0:d}-{1:d}".format(start_byte, end_byte))["Body"].read()
     return content.decode("utf-8")
 
-  def __get_entries__(self, table_name: str, prefix: Optional[str]=None) -> List[Object]:
+  def __get_entries__(self, table_name: str, prefix: Optional[str]=None) -> List[Entry]:
     done = False
     while not done:
       try:
@@ -190,29 +185,32 @@ class S3(Database):
     objects = list(map(lambda obj: Object(obj.key, self.statistics, obj), objects))
     return objects
 
-  def __put__(self, table_name: str, key: str, f: BinaryIO, metadata: Dict[str, str]):
-    self.__write__(table, key, f, metadata)
+  def __put__(self, table_name: str, key: str, content: BinaryIO, metadata: Dict[str, str]):
+    self.__s3_write__(table_name, key, content, metadata)
 
   def __read__(self, table_name: str, key: str) -> str:
-    obj = self.s3.Object(table, key)
+    obj = self.s3.Object(table_name, key)
     content = obj.get()["Body"].read()
     return content.decode("utf-8")
 
   def __write__(self, table_name: str, key: str, content: bytes, metadata: Dict[str, str]):
+    self.__s3_write__(table_name, key, content, metadata)
+
+  def __s3_write__(self, table_name: str, key: str, content: Union[bytes, BinaryIO], metadata: Dict[str, str]):
     done: bool = False
     while not done:
       try:
-        self.s3.Object(table, key).put(Body=content, Metadata=metadata)
+        self.s3.Object(table_name, key).put(Body=content, Metadata=metadata)
         done = True
       except botocore.exceptions.ClientError as e:
         print("Warning: S3::write Rate Limited")
         time.sleep(random.randint(1, 10))
 
-    payloads.append({
+    self.payloads.append({
       "Records": [{
         "s3": {
           "bucket": {
-            "name": table
+            "name": table_name
           },
           "object": {
             "key": key
@@ -223,7 +221,7 @@ class S3(Database):
 
   def contains(self, table_name: str, key: str) -> bool:
     try:
-      self.s3.Object(table, key).load()
+      self.s3.Object(table_name, key).load()
       return True
     except Exception:
       return False
@@ -233,3 +231,12 @@ class S3(Database):
 
   def get_table(self, table_name: str) -> Table:
     return Table(table_name, self.statistics, self.s3)
+
+  def invoke(self, client, name, params, payload):
+    self.payloads.append(payload)
+    response = client.invoke(
+      FunctionName=name,
+      InvocationType="Event",
+      Payload=json.JSONEncoder().encode(payload)
+    )
+    assert(response["ResponseMetadata"]["HTTPStatusCode"] == 202)

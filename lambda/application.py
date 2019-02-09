@@ -13,7 +13,7 @@ def run_application(d: Database, bucket_name: str, key: str, input_format: Dict[
     with open(temp_file, "wb+") as fb:
       d.download(bucket_name, key, fb)
   else:
-    obj = d.Key(bucket_name, key)
+    obj = d.get_entry(bucket_name, key)
     format_lib = importlib.import_module(params["format"])
     iterator_class = getattr(format_lib, "Iterator")
     iterator = iterator_class(obj, OffsetBounds(offsets[0], offsets[1]))
