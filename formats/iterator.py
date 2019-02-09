@@ -2,6 +2,7 @@ import boto3
 from enum import Enum
 import heapq
 import util
+from database import Entry
 from typing import Any, BinaryIO, ClassVar, Dict, Generic, Iterable, List, Optional, Tuple, TypeVar
 
 
@@ -47,17 +48,17 @@ class Iterator(Generic[T]):
   delimiter: Delimiter
   identifiers: T
 
-  def __init__(self, cls: Any, obj: Any, offset_bounds: Optional[OffsetBounds]):
+  def __init__(self, cls: Any, entry: Entry, offset_bounds: Optional[OffsetBounds]):
     self.cls = cls
     self.item_count = None
-    self.obj = obj
+    self.entry = entry
     self.offset_bounds = offset_bounds
     self.offsets: List[int] = []
     self.remainder: str = ""
     self.__setup__()
 
   def __adjust__(self, end_index: int, token: str) -> int:
-    content: str = util.read(self.obj, max(end_index - self.adjust_chunk_size, 0), end_index)
+    content: str = self.entry.get_range(max(end_index - self.adjust_chunk_size, 0), end_index)
     last_byte: int = len(content) - 1
     offset_index: int = last_byte - content.rindex(token)
     assert(offset_index >= 0)
@@ -72,13 +73,13 @@ class Iterator(Generic[T]):
         if self.delimiter.position != DelimiterPosition.start:
           # Don't include delimiter
           self.start_index += len(self.delimiter.offset_token)
-      if self.end_index != self.obj.content_length:
+      if self.end_index != self.entry.content_length():
         self.end_index -= self.__adjust__(self.end_index, self.delimiter.offset_token)
         if self.delimiter.position == DelimiterPosition.start:
           self.end_index += len(self.delimiter.offset_token)
     else:
       self.start_index = 0
-      self.end_index = self.obj.content_length - 1
+      self.end_index = self.entry.content_length() - 1
 
     assert(self.start_index <= self.end_index)
     self.content_length = self.end_index - self.start_index
@@ -91,10 +92,10 @@ class Iterator(Generic[T]):
     for i in range(len(objs)):
       obj = objs[i]
       if cls.options.has_header and i > 0:
-        lines = util.read(obj, 0, obj.content_length).split(cls.delimiter.item_token)[1:]
+        lines = obj.get_content().split(cls.delimiter.item_token)[1:]
         f.write(str.encode(cls.delimiter.item_token.join(lines)))
       else:
-        obj.download_fileobj(f)
+        obj.download(f)
 
     return metadata
 
@@ -124,7 +125,7 @@ class Iterator(Generic[T]):
     raise Exception("Not Implemented")
 
   def get(self, start_byte: int, end_byte: int) -> Iterable[Any]:
-    content: str = util.read(self.obj, start_byte, end_byte)
+    content: str = self.entry.get_range(start_byte, end_byte)
     return self.to_array(content)
 
   def get_extra(self) -> Dict[str, Any]:
@@ -151,7 +152,7 @@ class Iterator(Generic[T]):
     next_start_index: int = self.next_index
     next_end_index: int = min(next_start_index + self.read_chunk_size, self.get_offset_end_index())
     more: bool = True
-    stream: str = util.read(self.obj, next_start_index, next_end_index)
+    stream: str = self.entry.get_range(next_start_index, next_end_index)
     stream = self.remainder + stream
 
     if next_end_index == self.get_offset_end_index():

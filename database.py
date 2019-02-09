@@ -20,6 +20,39 @@ class Statistics:
     self.write_count = 0
 
 
+class Entry:
+  key: str
+  resources: Any
+  statistics: Statistics
+
+  def __init__(self, key: str, resources: Any, statistics: Optional[Statistics]):
+    self.key = key
+    self.resources = resources
+    self.statistics = statistics
+
+  def __download__(self, f: BinaryIO) -> int:
+    raise Exception("Entry::__download__ not implemented")
+
+  def content_length(self) -> int:
+    raise Exception("Entry::content_length not implemented")
+
+  def download(self, f: BinaryIO) -> int:
+    content_length: int = self.__download__(f)
+    return content_length
+
+  def get_content(self) -> str:
+    raise Exception("Entry::get_content not implemented")
+
+  def get_metadata(self) -> Dict[str, str]:
+    raise Exception("Entry::get_metadata not implemented")
+
+  def get_range(self, start_index: int, end_index: int) -> str:
+    raise Exception("Entry::get_range not implemented")
+
+  def last_modified_at(self) -> float:
+    raise Exception("Entry::last_modified_at not implemented")
+
+
 class Table:
   name: str
   resources: Any
@@ -40,7 +73,7 @@ class Database:
   def __download__(self, table_name: str, key: str, f: BinaryIO) -> int:
     raise Exception("Database::__download__ not implemented")
 
-  def __get_objects__(self, table_name: str, prefix: Optional[str]=None) -> List[Any]:
+  def __get_entries__(self, table_name: str, prefix: Optional[str]=None) -> List[Entry]:
     raise Exception("Database::__get_entries__ not implemented")
 
   def __put__(self, table_name: str, key: str, f: BinaryIO, metadata: Dict[str, str]):
@@ -68,12 +101,12 @@ class Database:
     self.statistics.read_byte_count += len(content)
     return content
 
-  def get_object(self, table_name: str, key: str) -> Optional[Any]:
+  def get_entry(self, table_name: str, key: str) -> Optional[Entry]:
     raise Exception("Database::key not implemented")
 
-  def get_objects(self, table_name: str, prefix: Optional[str]=None) -> List[Any]:
+  def get_entries(self, table_name: str, prefix: Optional[str]=None) -> List[Entry]:
     self.statistics.list_count += 1
-    return self.__get_objects__(table_name, prefix)
+    return self.__get_entries__(table_name, prefix)
 
   def get_table(self, table_name: str) -> Table:
     raise Exception("Database::get_table not implemented")
@@ -93,6 +126,30 @@ class Database:
     self.statistics.write_count += 1
     self.statistics.write_byte_count += len(content)
     self.__write__(table_name, key, content, metadata)
+
+
+class Object(Entry):
+  def __init__(self, key: str, statistics: Statistics, resources: Any):
+    Key.__init__(key, statistics, resources)
+
+  def __download__(self, f: BinaryIO) -> int:
+    self.resource.download_fileobj(f)
+    return f.tell()
+
+  def content_length(self) -> int:
+    return self.resources.content_length
+
+  def get_content(self) -> str:
+    return self.resources.get()["Body"].decode("utf-8")
+
+  def get_metadata(self) -> Dict[str, str]:
+    self.resources.metadata
+
+  def get_range(self, start_index: int, end_index: int) -> str:
+    return self.resources.get(Range="bytes={0:d}-{1:d}".format(start_index, end_index))["Body"].read().decode("utf-8")
+
+  def last_modified_at(self) -> float:
+    return self.resource.last_modified.timestamp()
 
 
 class Bucket(Table):
@@ -118,17 +175,19 @@ class S3(Database):
     content = obj.get(Range="bytes={0:d}-{1:d}".format(start_byte, end_byte))["Body"].read()
     return content.decode("utf-8")
 
-  def __get_objects__(self, table_name: str, prefix: Optional[str]=None) -> List[Any]:
+  def __get_entries__(self, table_name: str, prefix: Optional[str]=None) -> List[Object]:
     done = False
     while not done:
       try:
         if prefix:
-          objects = list(self.s3.Bucket.objects.filter(Prefix=prefix))
+          objects = self.s3.Bucket.objects.filter(Prefix=prefix)
         else:
-          objects = list(self.s3.Bucket.objects.all())
+          objects = self.s3.Bucket.objects.all()
         done = True
       except Exception as e:
         time.sleep(1)
+
+    objects = list(map(lambda obj: Object(obj.key, self.statistics, obj), objects))
     return objects
 
   def __put__(self, table_name: str, key: str, f: BinaryIO, metadata: Dict[str, str]):
@@ -169,8 +228,8 @@ class S3(Database):
     except Exception:
       return False
 
-  def get_object(self, table_name: str, key: str) -> Optional[Any]:
-    return self.s3.Object(table_name, key)
+  def get_entry(self, table_name: str, key: str) -> Optional[Object]:
+    return Object(key, self.statistics, self.s3.Object(table_name, key))
 
   def get_table(self, table_name: str) -> Table:
     return Table(table_name, self.statistics, self.s3)

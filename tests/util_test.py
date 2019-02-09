@@ -4,22 +4,12 @@ import sys
 import unittest
 import tutils
 from unittest.mock import MagicMock
-from tutils import TestDatabase, TestTable, Object
+from tutils import TestDatabase
 
 currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
 parentdir = os.path.dirname(currentdir)
 sys.path.insert(0, parentdir)
 import util
-
-object1 = Object("0/123.400000-13/1-1/1-1-0-suffix.txt")
-object2 = Object("1/123.400000-13/1-1/1-1-0-suffix.txt")
-object3 = Object("0/123.400000-13/1-1/2-1-1-suffix.txt")
-object4 = Object("1/123.400000-13/1-1/2-1-1-suffix.txt")
-object5 = Object("0/123.400000-13/1-1/3-1-1-suffix.log")
-object6 = Object("1/123.400000-13/1-1/3-1-1-suffix.log")
-#bucket1 = Bucket("bucket1", [object1, object2, object3, object4])
-#bucket2 = Bucket("bucket2", [object5, object6])
-#log = Bucket("log", [object5, object6])
 
 params = {
   "file": "application",
@@ -53,19 +43,22 @@ class ExecutionMethods(unittest.TestCase):
     s3 = TestDatabase()
     bucket1 = s3.create_table("bucket1")
     log = s3.create_table("log")
-
-    bucket1.add_objects([object1, object2, object3, object4])
-    log.add_objects([object5, object6])
+    bucket1.add_entry("0/123.400000-13/1-1/1-1-0-suffix.txt", "")
+    bucket1.add_entry("1/123.400000-13/1-1/1-1-0-suffix.txt", "")
+    bucket1.add_entry("0/123.400000-13/1-1/2-1-1-suffix.txt", "")
+    bucket1.add_entry("1/123.400000-13/1-1/2-1-1-suffix.txt", "")
+    log.add_entry("0/123.400000-13/1-1/3-1-1-suffix.log", "")
+    log.add_entry("1/123.400000-13/1-1/3-1-1-suffix.log", "")
 
     event = tutils.create_event(s3, bucket1.name, "0/123.4-13/1-1/1-1-0-suffix.txt", params)
     context = tutils.create_context(params)
 
-    # Call on object that doesn't have a log entry
+    # Call on entry that doesn't have a log entry
     func = MagicMock()
     util.handle(event, context, func)
     self.assertTrue(func.called)
 
-    # Call on object that does have a log entry
+    # Call on entry that does have a log entry
     func = MagicMock()
     event["Records"][0]["s3"]["bucket"]["name"] = "bucket2"
     event["Records"][0]["s3"]["object"]["key"] = "0/123.4-13/1-1/3-1-1-suffix.txt"

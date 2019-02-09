@@ -3,7 +3,7 @@ import os
 import sys
 import unittest
 from iterator import OffsetBounds
-from tutils import Object
+from tutils import TestDatabase, TestEntry
 from typing import Any, Optional
 
 currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
@@ -13,25 +13,27 @@ import fasta
 
 
 class TestIterator(fasta.Iterator):
-  def __init__(self, obj: Any, offset_bounds: Optional[OffsetBounds], adjust_chunk_size: int, read_chunk_size: int):
+  def __init__(self, entry: TestEntry, offset_bounds: Optional[OffsetBounds], adjust_chunk_size: int, read_chunk_size: int):
     self.adjust_chunk_size = adjust_chunk_size
     self.read_chunk_size = read_chunk_size
-    fasta.Iterator.__init__(self, obj, offset_bounds)
+    fasta.Iterator.__init__(self, entry, offset_bounds)
 
 
 class IteratorMethods(unittest.TestCase):
   def test_next(self):
-    obj = Object("test.fasta", ">A\tB\tC\n>a\tb\tc\n>1\t2\t3\n")
+    database: TestDatabase = TestDatabase()
+    table1: TestTable = database.create_table("table1")
+    entry1: TestEntry = table1.add_entry("test.fasta", ">A\tB\tC\n>a\tb\tc\n>1\t2\t3\n")
 
     # Read everything in one pass
-    it = TestIterator(obj, None, 30, 30)
+    it = TestIterator(entry1, None, 30, 30)
     [items, offset_bounds, more] = it.next()
     self.assertEqual(list(items), [">A\tB\tC\n", ">a\tb\tc\n", ">1\t2\t3\n"])
     self.assertEqual(offset_bounds, OffsetBounds(0, 20))
     self.assertFalse(more)
 
     # Requires multiple passes
-    it = TestIterator(obj, None, 8, 8)
+    it = TestIterator(entry1, None, 8, 8)
     [items, offset_bounds, more] = it.next()
     self.assertEqual(list(items), [">A\tB\tC\n"])
     self.assertEqual(offset_bounds, OffsetBounds(0, 6))

@@ -41,14 +41,15 @@ def split_file(d: Database, bucket_name: str, key: str, input_format: Dict[str, 
     input_bucket = bucket_name
     input_key = key
 
-  obj = d.get_object(input_bucket, input_key)
+  obj = d.get_entry(input_bucket, input_key)
 
   file_id = params["file_id"] if "file_id" in params else 1
 
-  num_files = int((obj.content_length + split_size - 1) / split_size)
+  content_length: int = obj.content_length()
+  num_files = int((content_length + split_size - 1) / split_size)
 
   while file_id <= num_files:
-    offsets = [(file_id - 1) * split_size, min(obj.content_length, (file_id) * split_size) - 1]
+    offsets = [(file_id - 1) * split_size, min(content_length, (file_id) * split_size) - 1]
     payload = create_payload(input_bucket, input_key, offsets, output_format["prefix"], file_id, num_files)
 
     s3_params = payload["Records"][0]["s3"]

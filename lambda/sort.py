@@ -32,15 +32,15 @@ def write_binned_input(d: Database, binned_input: List[Any], bin_ranges: List[Di
     d.write(params["bucket"], bin_key, str.encode(content), metadata)
 
 
-def handle_sort(d: Database, bucket_name: str, key: str, input_format: Dict[str, Any], output_format: Dict[str, Any], offsets: List[int], params: Dict[str, Any]):
-  obj = params["s3"].Object(bucket_name, key)
+def handle_sort(d: Database, table_name: str, key: str, input_format: Dict[str, Any], output_format: Dict[str, Any], offsets: List[int], params: Dict[str, Any]):
+  entry = params["s3"].get_entry(table_name, key)
 
   format_lib = importlib.import_module(params["format"])
   iterator_class = getattr(format_lib, "Iterator")
   if len(offsets) > 0:
-    it = iterator_class(obj, OffsetBounds(offsets[0], offsets[1]))
+    it = iterator_class(entry, OffsetBounds(offsets[0], offsets[1]))
   else:
-    it = iterator_class(obj, None)
+    it = iterator_class(entry, None)
   extra = it.get_extra()
   items = it.get(it.get_start_index(), it.get_end_index())
   items = list(map(lambda item: (it.get_identifier_value(item, format_lib.Identifiers[params["identifier"]]), item), items))

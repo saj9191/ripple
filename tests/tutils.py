@@ -2,8 +2,8 @@ import inspect
 import os
 import sys
 import time
-from database import Database, Table
-from typing import Any, BinaryIO, Dict, List, Optional
+from database import Database, Table, Entry
+from typing import Any, BinaryIO, Dict, Iterable, List, Optional
 
 currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
 parentdir = os.path.dirname(currentdir)
@@ -17,52 +17,49 @@ def equal_lists(list1, list2):
   return len(s1.intersection(s2)) == len(s1) and len(s2.intersection(s1)) == len(s1)
 
 
-class Object:
-  def __init__(self, key: str, content: str="", last_modified: int=0, bucket_name="bucket", metadata: Dict[str, str]={}):
-    self.bucket_name = bucket_name
-    self.key = key
+class TestEntry(Entry):
+  content: str
+
+  def __init__(self, key: str, content: str, statistics: Optional[database.Statistics]=None):
+    Entry.__init__(self, key, None, None)
     self.content = content
-    self.metadata = metadata
-    self.last_modified = last_modified
-    self.content_length = len(content)
+    self.last_modified = time.time()
 
-  def download_fileobj(self, f: BinaryIO):
+  def __download__(self, f: BinaryIO) -> int:
     f.write(str.encode(self.content))
+    return len(self.content)
 
-  def get(self, Range: str=""):
-    if len(Range) == 0:
-      return {"Body": Content(self.content)}
-    parts = Range.split("=")[1].split("-")
-    start = int(parts[0])
-    end = min(int(parts[1]), self.content_length - 1)
-    return {"Body": Content(self.content[start:end + 1])}
+  def content_length(self) -> int:
+    return len(self.content)
 
-  def load(self):
-    raise Exception("")
+  def get_content(self) -> str:
+    return self.content
 
-  def put(self, Body: str="", Metadata: Dict[str, str]={}, StorageClass: str=""):
-    self.metadata = Metadata
-    if type(Body) == str:
-      self.content = Body
-    elif type(Body) == bytes:
-      self.content = Body.decode("utf-8")
-    else:
-      self.content = Body.read().decode("utf-8")
+  def get_metadata(self) -> Dict[str, str]:
+    return {}
 
+  def get_range(self, start_index: int, end_index: int) -> str:
+    return self.content[start_index:end_index + 1]
+
+  def last_modified_at(self) -> float:
+    return self.last_modified
 
 
 class TestTable(Table):
-  objects: Dict[str, Object]
+  entries: Dict[str, TestEntry]
   def __init__(self, name: str, statistics: database.Statistics, resources: Any):
     Table.__init__(self, name, statistics, resources)
-    self.objects = {}
+    self.entries = {}
 
-  def add_object(self, obj: Any):
-    self.objects[obj.key] = obj
+  def add_entry(self, key: str, content: str) -> TestEntry:
+    entry = TestEntry(key, content, self.statistics)
+    self.entries[key] = entry
+    return entry
 
-  def add_objects(self, objs: List[Any]):
-    for obj in objs:
-      self.add_object(obj)
+  def add_entries(self, entries: List[TestEntry]):
+    for entry in entries:
+      self.entries[entry.key] = entry
+
 
 class TestDatabase(Database):
   tables: Dict[str, TestTable]
@@ -72,29 +69,32 @@ class TestDatabase(Database):
     self.tables = {}
 
   def __download__(self, table_name: str, key: str, f: BinaryIO) -> int:
-    content: str = self.get_object(bucket_name, key).content
+    content: str = self.get_object(table_name, key).content
     f.write(str.encode(content))
     return len(content)
 
   def __get_content__(self, table_name: str, key: str, start_byte: int, end_byte: int) -> str:
-    content: str = self.get_object(bucket_name, key).content
+    content: str = self.get_object(table_name, key).content
     return content[start_byte:end_byte]
 
-  def __get_objects__(self, table_name: str, prefix: Optional[str]=None) -> List[Any]:
-    keys = self.tables[table_name].objects.keys()
+  def __get_entries__(self, table_name: str, prefix: Optional[str]=None) -> List[TestEntry]:
+    keys: Iterable[str] = self.tables[table_name].entries.keys()
     if prefix:
       keys = filter(lambda key: key.startswith(prefix), keys)
-    objs = list(map(lambda key: self.tables[table_name].objects[key], keys))
-    return objs
+    entries = list(map(lambda key: self.tables[table_name].entries[key], keys))
+    return sorted(entries, key=lambda entry: entry.key)
 
   def __read__(self, table_name: str, key: str) -> str:
-    return self.get_object(bucket_name, key).content
+    return self.get_object(table_name, key).content
 
   def __write__(self, table_name: str, key: str, content: bytes, metadata: Dict[str, str]):
-    self.Object(table_name, key).put(Body=content, Metadata=metadata)
+    self.add_entry(table_name, key, content)
+
+  def add_entry(self, table_name: str, key: str, content: bytes):
+    self.tables[table_name].add_entry(key, content.decode("utf-8"))
 
   def __put__(self, table_name: str, key: str, f: BinaryIO, metadata: Dict[str, str]):
-    self.Object(table_name, key).put(Body=f.read(), Metadata=metadata)
+    self.add_entry(table_name, key, f.read())
 
   def add_table(self, table_name: str) -> Table:
     table: Table = TestTable(table_name, self.statistics, None)
@@ -109,20 +109,11 @@ class TestDatabase(Database):
     self.tables[table_name] = table
     return table
 
-  def get_object(self, table_name: str, key: str) -> Optional[Any]:
-    objs = self.__get_objects__(table_name, key)
-    assert(len(objs) <= 1)
-    if len(objs) == 0:
-      return None
-    return objs[0]
-
-  def Object(self, table_name: str, key: str):
-    objs = self.__get_objects__(table_name, key)
-    if len(objs) == 0:
-      obj = Object(key, bucket_name=table_name)
-      self.tables[table_name].objects[key] = obj
-      return obj
-    return objs[0]
+  def get_entry(self, table_name: str, key: str) -> Optional[TestEntry]:
+    table: TestTable = self.tables[table_name]
+    if key in table.entries:
+      return table.entries[key]
+    return None
 
 
 class Objects:

@@ -1,13 +1,14 @@
 import boto3
 import botocore
-from botocore.client import Config
-import database
 import json
 import os
 import random
 import re
 import subprocess
 import time
+from database import Entry, S3
+from botocore.client import Config
+from typing import List
 
 
 FILE_FORMAT = [{
@@ -97,36 +98,6 @@ def s3(params):
   return s3
 
 
-def download(bucket, file):
-  global READ_BYTE_COUNT
-  global DOWNLOAD_TIME
-  s3 = boto3.resource("s3")
-  bucket = s3.Bucket(bucket)
-
-  name = file.split("/")[-1]
-  path = "/tmp/{0:s}".format(name)
-  with open(path, "wb") as f:
-    st = time.time()
-    bucket.download_fileobj(file, f)
-    et = time.time()
-    DOWNLOAD_TIME += (et - st)
-    READ_BYTE_COUNT += f.tell()
-  return path
-
-
-def read(obj, start_byte, end_byte):
-  global READ_COUNT
-  READ_COUNT += 1
-  global READ_BYTE_COUNT
-  global DOWNLOAD_TIME
-  READ_BYTE_COUNT += (end_byte - start_byte)
-  st = time.time()
-  content = obj.get(Range="bytes={0:d}-{1:d}".format(start_byte, end_byte))["Body"].read()
-  et = time.time()
-  DOWNLOAD_TIME += (et - st)
-  return content.decode("utf-8")
-
-
 def object_exists(s3, bucket_name, key):
   try:
     s3.Object(bucket_name, key).load()
@@ -136,7 +107,7 @@ def object_exists(s3, bucket_name, key):
 
 
 def get_batch(bucket_name, key, prefix, params):
-  objects = params["s3"].get_objects(bucket_name, prefix)
+  objects = params["s3"].get_entries(bucket_name, prefix)
   batch_size = None if "batch_size" not in params else params["batch_size"]
   batch = []
   expected_batch_id = None
@@ -192,7 +163,7 @@ def load_parameters(s3_dict, key_fields, start_time, event):
     client = event["client"]
   else:
     params = json.loads(open("{0:d}.json".format(prefix)).read())
-    s3 = database.S3()
+    s3 = S3()
     client = boto3.client("lambda")
 
   params["offsets"] = []
@@ -259,16 +230,16 @@ def run_function(params, m):
 
 def duplicate_execution(bucket_format, params):
   prefix = "-".join(file_name(bucket_format).split("-")[:-1])
-  objects = params["s3"].get_objects(params["log"], prefix)
+  objects = params["s3"].get_entries(params["log"], prefix)
   return len(objects) != 0
 
 
 def current_last_file(batch, current_key, params):
-  objects = list(map(lambda o: o[0], batch))
-  objects = sorted(objects, key=lambda o: [o.last_modified, o.key])
-  keys = set(list(map(lambda o: o.key, objects)))
+  entries: List[Entry] = list(map(lambda entry: entry[0], batch))
+  entries = sorted(entries, key=lambda entry: [entry.last_modified_at(), entry.key])
+  keys = set(list(map(lambda entry: entry.key, entries)))
 
-  return ((current_key not in keys) or (objects[-1].key == current_key))
+  return ((current_key not in keys) or (entries[-1].key == current_key))
 
 
 def have_all_files(batch, prefix, params):
@@ -363,7 +334,7 @@ def show_duration(context, input_format, bucket_format, params):
 
   for key in ["name"]:
     log_results[key] = params[key]
-  params["s3"].Object(params["log"], file_name(bucket_format)).put(Body=str.encode(json.dumps(log_results)))
+  params["s3"].write(params["log"], file_name(bucket_format), str.encode(json.dumps(log_results)), {})
 
 
 def print_request(m, params):
