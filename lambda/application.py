@@ -24,7 +24,7 @@ def run_application(d: Database, bucket_name: str, key: str, input_format: Dict[
 
   application_lib = importlib.import_module(params["application"])
   application_method = getattr(application_lib, "run")
-  output_files = application_method(temp_file, params, input_format, output_format, offsets)
+  output_files = application_method(d, temp_file, params, input_format, output_format, offsets)
 
   for output_file in output_files:
     p = util.parse_file_name(output_file.replace("/tmp/", ""))
@@ -36,7 +36,8 @@ def run_application(d: Database, bucket_name: str, key: str, input_format: Dict[
     else:
       new_key = util.file_name(p)
 
-    util.write(params["bucket"], new_key, open(output_file, "rb"), {}, params)
+    with open(output_file, "rb") as f:
+      d.put(params["bucket"], new_key, f, {})
 
 
 def handler(event, context):

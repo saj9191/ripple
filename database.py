@@ -1,6 +1,7 @@
 import boto3
 import botocore
 import json
+import os
 import random
 import time
 from typing import Any, BinaryIO, Dict, List, Optional, Union
@@ -108,7 +109,7 @@ class Database:
 
   def put(self, table_name: str, key: str, content: BinaryIO, metadata: Dict[str, str]):
     self.statistics.write_count += 1
-    self.statistics.write_byte_count += content.tell()
+    self.statistics.write_byte_count += os.path.getsize(content.name)
     self.__put__(table_name, key, content, metadata)
 
   def read(self, table_name: str, key: str) -> str:

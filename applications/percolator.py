@@ -1,18 +1,14 @@
-import boto3
 import os
+import shutil
 import subprocess
 import util
+from database import Database
 from typing import List
 
 
-def run(file, params, input_format, output_format, offsets: List[int]):
-  util.print_read(input_format, file, params)
-
-  s3 = boto3.resource('s3')
-  database_bucket = s3.Bucket(params["database_bucket"])
-
+def run(database: Database, file: str, params, input_format, output_format, offsets: List[int]):
   with open("/tmp/crux", "wb") as f:
-    database_bucket.download_fileobj("crux", f)
+    database.download(params["database_bucket"], "crux", f)
 
   subprocess.call("chmod 755 /tmp/crux", shell=True)
   output_dir = "/tmp/percolator-crux-output-{0:f}-{1:d}".format(input_format["timestamp"], input_format["nonce"])
@@ -33,5 +29,6 @@ def run(file, params, input_format, output_format, offsets: List[int]):
     output_file = "/tmp/{0:s}".format(util.file_name(output_format))
     os.rename(input_file, output_file)
     output_files.append(output_file)
+  shutil.rmtree(output_dir)
 
   return output_files

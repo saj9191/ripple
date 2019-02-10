@@ -3,7 +3,7 @@ import os
 import sys
 import time
 from database import Database, Table, Entry
-from typing import Any, BinaryIO, Dict, Iterable, List, Optional, Set
+from typing import Any, BinaryIO, Dict, Iterable, List, Optional, Set, Union
 
 currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
 parentdir = os.path.dirname(currentdir)
@@ -44,30 +44,36 @@ def create_payload(table_name: str, key: str, prefix: int, file_id: Optional[int
 class TestEntry(Entry):
   content: str
 
-  def __init__(self, key: str, content: Optional[str], statistics: Optional[database.Statistics]=None):
+  def __init__(self, key: str, content: Optional[Union[str, bytes]], statistics: Optional[database.Statistics]=None):
+    self.file_name = key.replace("/tmp/s3/", "")
     self.file_name = key.replace("/tmp/", "")
     self.file_name = self.file_name.replace("/", "-")
-    self.file_name = "/tmp/" + self.file_name
+    self.file_name = "/tmp/s3/" + self.file_name
     Entry.__init__(self, key, None, None)
 
     if content is not None:
-      with open(self.file_name, "w+") as f:
+      if type(content) == str:
+        options = "w+"
+      else:
+        options = "wb+"
+      with open(self.file_name, options) as f:
         f.write(content)
       self.length = len(content)
     else:
       self.length = os.path.getsize(self.file_name)
     self.last_modified = time.time()
 
-  def __del__(self):
-    os.remove(self.file_name)
-
   def __download__(self, f: BinaryIO) -> int:
-    with open(self.file_name, "rb") as g:
+    with open(self.file_name, "rb+") as g:
       f.write(g.read())
     return self.length
 
   def content_length(self) -> int:
     return self.length
+
+  def destroy(self):
+    if self.file_name.startswith("/tmp"):
+      os.remove(self.file_name)
 
   def get_content(self) -> str:
     with open(self.file_name) as f:
@@ -91,7 +97,7 @@ class TestTable(Table):
     Table.__init__(self, name, statistics, resources)
     self.entries = {}
 
-  def add_entry(self, key: str, content: str) -> TestEntry:
+  def add_entry(self, key: str, content: Union[str, bytes]) -> TestEntry:
     entry = TestEntry(key, content, self.statistics)
     self.entries[key] = entry
     return entry
@@ -99,6 +105,10 @@ class TestTable(Table):
   def add_entries(self, entries: List[TestEntry]):
     for entry in entries:
       self.entries[entry.key] = entry
+
+  def destroy(self):
+    for entry in self.entries.values():
+      entry.destroy()
 
 
 class TestDatabase(Database):
@@ -110,10 +120,12 @@ class TestDatabase(Database):
     self.payloads = []
     self.tables = {}
 
+  def __del__(self):
+    for table in self.tables.values():
+      table.destroy()
+
   def __download__(self, table_name: str, key: str, f: BinaryIO) -> int:
-    content: str = self.get_object(table_name, key).content
-    f.write(str.encode(content))
-    return len(content)
+    return self.get_entry(table_name, key).download(f)
 
   def __get_content__(self, table_name: str, key: str, start_byte: int, end_byte: int) -> str:
     content: str = self.get_object(table_name, key).content
@@ -127,7 +139,7 @@ class TestDatabase(Database):
     return sorted(entries, key=lambda entry: entry.key)
 
   def __put__(self, table_name: str, key: str, f: BinaryIO, metadata: Dict[str, str]):
-    self.add_entry(table_name, key, f.read())
+    self.__write__(table_name, key, f.read(), metadata)
 
   def __read__(self, table_name: str, key: str) -> str:
     return self.get_object(table_name, key).content

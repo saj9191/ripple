@@ -41,7 +41,7 @@
 			"memory_size": 3008,
 			"database_bucket": "maccoss-fasta",
 			"num_threads": 0,
-			"species": "normalMouse"
+			"species": "normalHuman"
 		},
 		"combine-tsv-files": {
 			"file": "combine_files",
