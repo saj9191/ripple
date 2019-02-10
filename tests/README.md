@@ -18,10 +18,10 @@ For every file in files, the pipeline class looks in the subfolder "ssw/" and po
 The line
 
 ```
-pp.run(name, f.read())
+pp.run(name, "ssw/input-10.fasta")
 ```
 
-initiates the pipeline for using name as the key name and the content from f.read() as the content for the object.
+initiates the pipeline for using name as the key name and the content from ssw/input-10.fasta as the content for the object.
 
 Once the pipeline is done, all intermediate and final results can be accessed using
 

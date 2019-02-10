@@ -22,7 +22,8 @@ class Pipeline:
   table_name: str
 
   def __init__(self, json_path: str):
-    with open(json_path) as f:
+    self.dir_path = os.path.dirname(os.path.realpath(__file__))
+    with open(self.dir_path + "/" + json_path) as f:
       self.params = json.loads(f.read())
 
     self.stage = -1
@@ -105,12 +106,14 @@ class Pipeline:
   def populate_table(self, table_name: str, prefix: str, files: List[str]):
     table: TestTable = self.database.add_table(table_name)
     for file in files:
-      with open(prefix + file, "rb") as f:
+      with open(self.dir_path + "/" + prefix + file, "rb") as f:
         table.add_entry(file, f.read())
 
   # Okay so we need to look at payloads instead
   # So it may be better to try to create the S3 wrapper first.
-  def run(self, key: str, content: str):
+  def run(self, key: str, file: str):
+    with open(self.dir_path + "/" + file) as f:
+      content: str = f.read()
     token: str = key.split("/")[1]
     entry: TestEntry = self.table.add_entry(key, content)
     self.database.payloads.append(tutils.create_payload(self.table_name, key, 0))

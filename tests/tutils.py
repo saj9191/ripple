@@ -119,6 +119,8 @@ class TestDatabase(Database):
     Database.__init__(self)
     self.payloads = []
     self.tables = {}
+    if not os.path.isdir("/tmp/s3"):
+      os.mkdir("/tmp/s3")
 
   def __del__(self):
     for table in self.tables.values():

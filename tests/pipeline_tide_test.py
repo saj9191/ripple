@@ -15,10 +15,9 @@ class Tide(unittest.TestCase):
     pp.populate_table("maccoss-fasta", "tide/", files)
 
     name = "0/123.400000-13/1-1/1-1-1-tide.mzML"
-    with open("tide/tide.mzML") as f:
-      pp.run(name, f.read())
+    pp.run(name, "tide/tide.mzML")
 
-    with open("tide/tide-search.txt") as f:
+    with open(pp.dir_path + "/tide/tide-search.txt") as f:
       expected_output: List[str] = sorted(f.read().split("\n"))
 
     entries: List[TestEntry] = pp.database.get_entries(pp.table.name)
@@ -27,7 +26,7 @@ class Tide(unittest.TestCase):
     self.assertCountEqual(expected_output, actual_output)
     self.assertListEqual(expected_output, actual_output)
 
-    with open("tide/percolator.target.peptides.txt") as f:
+    with open(pp.dir_path + "/tide/percolator.target.peptides.txt") as f:
       expected_output: List[str] = sorted(f.read().split("\n"))
 
     entry: TestEntry = entries[-1]
