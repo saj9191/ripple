@@ -105,8 +105,8 @@ class Pipeline:
   def populate_table(self, table_name: str, prefix: str, files: List[str]):
     table: TestTable = self.database.add_table(table_name)
     for file in files:
-      with open(file, "rb") as f:
-        table.add_entry(file.replace(prefix, ""), f.read())
+      with open(prefix + file, "rb") as f:
+        table.add_entry(file, f.read())
 
   # Okay so we need to look at payloads instead
   # So it may be better to try to create the S3 wrapper first.

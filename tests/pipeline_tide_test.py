@@ -8,9 +8,9 @@ class Tide(unittest.TestCase):
   def test_basic(self):
     pp: pipeline.Pipeline = pipeline.Pipeline("tide/basic-tide.json")
 
-    files = ["tide/crux"]
+    files = ["crux"]
     for file in ["auxlocs", "fasta", "pepix", "protix"]:
-      files.append("tide/normalHuman/{0:s}".format(file))
+      files.append("normalHuman/{0:s}".format(file))
 
     pp.populate_table("maccoss-fasta", "tide/", files)
 

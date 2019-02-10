@@ -10,10 +10,10 @@ class SmithWaterman(unittest.TestCase):
 
     files = []
     for i in range(3):
-      files.append("ssw/uniprot-fasta-{0:d}".format(i + 1))
+      files.append("uniprot-fasta-{0:d}".format(i + 1))
 
     pp.populate_table("ssw-database", "ssw/", files)
-    pp.populate_table("ssw-program", "ssw/", ["ssw/ssw_test"])
+    pp.populate_table("ssw-program", "ssw/", ["ssw_test"])
 
     name = "0/123.400000-13/1-1/1-1-1-fasta.fasta"
     with open("ssw/input-10.fasta") as f:
