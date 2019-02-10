@@ -1,3 +1,5 @@
+ec2/ssw
+ec2/tide
 lambda/*.zip
 lambda/*.json
 paper/*.aux

@@ -1,12 +1,14 @@
 import boto3
 import botocore
-from botocore.client import Config
 import json
 import os
 import random
 import re
 import subprocess
 import time
+from database import Entry, S3
+from botocore.client import Config
+from typing import List
 
 
 FILE_FORMAT = [{
@@ -60,16 +62,6 @@ LIST_TIME = 0
 UPLOAD_TIME = 0
 
 
-def invoke(client, name, params, payload):
-  params["payloads"].append(payload)
-  response = client.invoke(
-    FunctionName=name,
-    InvocationType="Event",
-    Payload=json.JSONEncoder().encode(payload)
-  )
-  assert(response["ResponseMetadata"]["HTTPStatusCode"] == 202)
-
-
 def check_output(command):
   try:
     stdout = subprocess.check_output(command, stderr=subprocess.STDOUT, shell=True)
@@ -96,85 +88,6 @@ def s3(params):
   return s3
 
 
-def download(bucket, file):
-  global READ_BYTE_COUNT
-  global DOWNLOAD_TIME
-  s3 = boto3.resource("s3")
-  bucket = s3.Bucket(bucket)
-
-  name = file.split("/")[-1]
-  path = "/tmp/{0:s}".format(name)
-  with open(path, "wb") as f:
-    st = time.time()
-    bucket.download_fileobj(file, f)
-    et = time.time()
-    DOWNLOAD_TIME += (et - st)
-    READ_BYTE_COUNT += f.tell()
-  return path
-
-
-def get_objects(bucket_name, prefix=None, params={}):
-  s3 = params["s3"]
-  bucket = s3.Bucket(bucket_name)
-  found = False
-  while not found:
-    try:
-      if prefix is None:
-        objects = bucket.objects.all()
-      else:
-        objects = bucket.objects.filter(Prefix=prefix)
-      objects = list(objects)
-      found = True
-    except Exception as e:
-      print("ERROR, util.get_objects", e)
-      found = False
-      time.sleep(1)
-
-  return objects
-
-
-def read(obj, start_byte, end_byte):
-  global READ_COUNT
-  READ_COUNT += 1
-  global READ_BYTE_COUNT
-  global DOWNLOAD_TIME
-  READ_BYTE_COUNT += (end_byte - start_byte)
-  st = time.time()
-  content = obj.get(Range="bytes={0:d}-{1:d}".format(start_byte, end_byte))["Body"].read()
-  et = time.time()
-  DOWNLOAD_TIME += (et - st)
-  return content.decode("utf-8")
-
-
-def write(bucket, key, body, metadata, params):
-  global WRITE_COUNT
-  global WRITE_BYTE_COUNT
-  done = False
-  while not done:
-    try:
-      params["s3"].Object(bucket, key).put(Body=body, Metadata=metadata, StorageClass=params["storage_class"])
-      done = True
-    except botocore.exceptions.ClientError as e:
-      print("ERROR: RATE LIMIT")
-      time.sleep(random.randint(1, 10))
-
-  WRITE_COUNT += 1
-  WRITE_BYTE_COUNT += len(params["s3"].Object(bucket, key).get()["Body"].read().decode("utf-8"))
-
-  params["payloads"].append({
-    "Records": [{
-      "s3": {
-        "bucket": {
-          "name": bucket
-        },
-        "object": {
-          "key": key
-        }
-      }
-    }]
-  })
-
-
 def object_exists(s3, bucket_name, key):
   try:
     s3.Object(bucket_name, key).load()
@@ -184,7 +97,7 @@ def object_exists(s3, bucket_name, key):
 
 
 def get_batch(bucket_name, key, prefix, params):
-  objects = get_objects(bucket_name, prefix, params)
+  objects = params["s3"].get_entries(bucket_name, prefix)
   batch_size = None if "batch_size" not in params else params["batch_size"]
   batch = []
   expected_batch_id = None
@@ -240,7 +153,7 @@ def load_parameters(s3_dict, key_fields, start_time, event):
     client = event["client"]
   else:
     params = json.loads(open("{0:d}.json".format(prefix)).read())
-    s3 = boto3.resource("s3")
+    s3 = S3()
     client = boto3.client("lambda")
 
   params["offsets"] = []
@@ -275,9 +188,9 @@ def handle(event, context, func):
       if not is_set(event, "test"):
         clear_tmp(params)
       make_folder(output_format)
-      func(bucket_name, key, input_format, output_format, params["offsets"], params)
+      func(params["s3"], bucket_name, key, input_format, output_format, params["offsets"], params)
 
-    show_duration(context, input_format, bucket_format, params)
+      show_duration(context, input_format, bucket_format, params)
 
 
 def get_formats(input_format, params):
@@ -307,16 +220,16 @@ def run_function(params, m):
 
 def duplicate_execution(bucket_format, params):
   prefix = "-".join(file_name(bucket_format).split("-")[:-1])
-  objects = get_objects(params["log"], prefix, params)
+  objects = params["s3"].get_entries(params["log"], prefix)
   return len(objects) != 0
 
 
 def current_last_file(batch, current_key, params):
-  objects = list(map(lambda o: o[0], batch))
-  objects = sorted(objects, key=lambda o: [o.last_modified, o.key])
-  keys = set(list(map(lambda o: o.key, objects)))
+  entries: List[Entry] = list(map(lambda entry: entry[0], batch))
+  entries = sorted(entries, key=lambda entry: [entry.last_modified_at(), entry.key])
+  keys = set(list(map(lambda entry: entry.key, entries)))
 
-  return ((current_key not in keys) or (objects[-1].key == current_key))
+  return ((current_key not in keys) or (entries[-1].key == current_key))
 
 
 def have_all_files(batch, prefix, params):
@@ -411,7 +324,8 @@ def show_duration(context, input_format, bucket_format, params):
 
   for key in ["name"]:
     log_results[key] = params[key]
-  params["s3"].Object(params["log"], file_name(bucket_format)).put(Body=str.encode(json.dumps(log_results)))
+
+  params["s3"].write(params["log"], file_name(bucket_format), str.encode(json.dumps(log_results)), {})
 
 
 def print_request(m, params):

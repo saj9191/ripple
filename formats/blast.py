@@ -2,7 +2,7 @@ import iterator
 import re
 import util
 from enum import Enum
-from iterator import Delimiter, DelimiterPosition, OffsetBounds, Optional
+from iterator import Delimiter, DelimiterPosition, OffsetBounds, Optional, Options
 from typing import Any, ClassVar, Generic
 
 
@@ -11,9 +11,10 @@ class Identifiers(Enum):
 
 
 class Iterator(iterator.Iterator[Identifiers]):
-  delimiter: Delimiter = Delimiter(item_token="\n\n", offset_token="\n\n", position=DelimiterPosition.end)
+  delimiter: Delimiter = Delimiter(item_token="\n\n", offset_token="\n\n", position=DelimiterPosition.inbetween)
   identifiers: Identifiers
   optimal_score_regex = re.compile("[\S\s]*^optimal_alignment_score:\s(\d+)[\S\s]*", re.MULTILINE)
+  options: ClassVar[Options] = Options(has_header=False)
   suboptimal_score_regex = re.compile("[\S\s]*suboptimal_alignment_score:\s(\d+)[\S\s]*", re.MULTILINE)
 
   def __init__(self, obj: Any, offset_bounds: Optional[OffsetBounds] = None):

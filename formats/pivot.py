@@ -1,6 +1,7 @@
 import boto3
 import iterator
 import util
+from database import Entry
 from iterator import Delimiter, DelimiterPosition, OffsetBounds, Options
 from typing import Any, BinaryIO, ClassVar, Dict, List, Optional
 
@@ -14,11 +15,11 @@ class Iterator(iterator.Iterator[None]):
     iterator.Iterator.__init__(self, Iterator, obj, offset_bounds)
 
   @classmethod
-  def combine(cls: Any, objs: List[Any], f: BinaryIO) -> Dict[str, str]:
+  def combine(cls: Any, objs: List[Entry], f: BinaryIO) -> Dict[str, str]:
     pivots: List[int] = []
     file_key: Optional[str] = None
     for obj in objs:
-      content: str = util.read(obj, 0, obj.content_length)
+      content: str = obj.get_content()
       [file_bucket, file_key, pivot_content] = content.split("\n")
       pivot_content: str = pivot_content.strip()
       if len(pivot_content) > 0:
@@ -46,14 +47,9 @@ class Iterator(iterator.Iterator[None]):
 
 
 def get_pivot_ranges(bucket_name, key, params={}):
-  if "s3" in params:
-    s3 = params["s3"]
-  else:
-    s3 = boto3.resource("s3")
   ranges = []
 
-  obj = s3.Object(bucket_name, key)
-  content = util.read(obj, 0, obj.content_length)
+  content: str = params["s3"].get_entry(bucket_name, key).get_content()
   [file_bucket, file_key, pivot_content] = content.split("\n")
   pivots = list(map(lambda p: float(p), pivot_content.split("\t")))
 

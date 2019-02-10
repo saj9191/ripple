@@ -1,6 +1,7 @@
 import boto3
 import pivot
 import util
+from database import Database
 from typing import Any, Dict, List, Optional
 
 
@@ -29,10 +30,9 @@ def create_payload(bucket: str, key: str, offsets: List[int], prefix: int, file_
   return payload
 
 
-def split_file(bucket_name: str, key: str, input_format: Dict[str, Any], output_format: Dict[str, Any], offsets: List[int], params: Dict[str, Any]):
+def split_file(d: Database, bucket_name: str, key: str, input_format: Dict[str, Any], output_format: Dict[str, Any], offsets: List[int], params: Dict[str, Any]):
   split_size = params["split_size"]
 
-  s3 = params["s3"] if "s3" in params else boto3.resource("s3")
   client = params["client"] if "client" in params else boto3.client("lambda")
 
   if util.is_set(params, "ranges"):
@@ -41,14 +41,15 @@ def split_file(bucket_name: str, key: str, input_format: Dict[str, Any], output_
     input_bucket = bucket_name
     input_key = key
 
-  obj = s3.Object(input_bucket, input_key)
+  obj = d.get_entry(input_bucket, input_key)
 
   file_id = params["file_id"] if "file_id" in params else 1
 
-  num_files = int((obj.content_length + split_size - 1) / split_size)
+  content_length: int = obj.content_length()
+  num_files = int((content_length + split_size - 1) / split_size)
 
   while file_id <= num_files:
-    offsets = [(file_id - 1) * split_size, min(obj.content_length, (file_id) * split_size) - 1]
+    offsets = [(file_id - 1) * split_size, min(content_length, (file_id) * split_size) - 1]
     payload = create_payload(input_bucket, input_key, offsets, output_format["prefix"], file_id, num_files)
 
     s3_params = payload["Records"][0]["s3"]
@@ -56,7 +57,7 @@ def split_file(bucket_name: str, key: str, input_format: Dict[str, Any], output_
     if util.is_set(params, "ranges"):
       s3_params["extra_params"]["pivots"] = ranges
 
-    util.invoke(client, params["output_function"], params, payload)
+    d.invoke(client, params["output_function"], params, payload)
     file_id += 1
 
 

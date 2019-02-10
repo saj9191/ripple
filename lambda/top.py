@@ -1,6 +1,8 @@
 import heapq
 import importlib
 import util
+from database import Database
+from typing import Any, Dict, List
 
 
 class Element:
@@ -9,33 +11,34 @@ class Element:
     self.identifier = identifier
 
   def __lt__(self, other):
-    return self.identifier < other.identifier
+    return [self.identifier, self.value] < [other.identifier, other.value]
 
 
-def find_top(bucket_name, key, input_format, output_format, offsets, params):
-  s3 = params["s3"]
-  obj = s3.Object(bucket_name, key)
+def find_top(d: Database, table: str, key: str, input_format: Dict[str, Any], output_format: Dict[str, Any], offsets: List[int], params: Dict[str, Any]):
+  entry = d.get_entry(table, key)
   format_lib = importlib.import_module(params["format"])
   iterator = getattr(format_lib, "Iterator")
-  it = iterator(obj, params["chunk_size"], offsets)
-  offsets = it.format_offsets(offsets)
+  it = iterator(entry, offsets)
 
   top = []
   more = True
-  identifier = params["identifier"] if "identifier" in params else None
   while more:
-    [values, more] = it.next(identifier=identifier)
+    [items, _, more] = it.next()
 
-    for value in values:
-      heapq.heappush(top, Element(value[0], value[1]))
+    for item in items:
+      score: float = it.get_identifier_value(item, params["identifier"])
+      heapq.heappush(top, Element(score, item))
       if len(top) > params["number"]:
         heapq.heappop(top)
 
-  values = list(map(lambda t: t.value, top))
-  [content, metadata] = iterator.from_array(obj, values, offsets)
-
   file_name = util.file_name(output_format)
-  util.write(bucket_name, file_name, str.encode(content), metadata, params)
+  temp_name = "/tmp/{0:s}".format(file_name)
+  items = list(map(lambda t: t.value, top))
+  with open(temp_name, "wb+") as f:
+    [content, metadata] = iterator.from_array(items, f, it.get_extra())
+
+  with open(temp_name, "rb") as f:
+    d.put(table, file_name, f, metadata)
 
 
 def handler(event, context):

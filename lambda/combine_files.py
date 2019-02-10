@@ -1,12 +1,11 @@
 import importlib
 import os
 import util
+from database import Database, Entry
 from typing import Any, Dict, List
 
 
-def combine(bucket_name, key, input_format, output_format, offsets, params):
-  util.print_read(input_format, key, params)
-
+def combine(database: Database, bucket_name, key, input_format, output_format, offsets, params):
   batch_size = params["batch_size"] if "batch_size" in params else 1
 
   # TODO: Fix.
@@ -34,13 +33,13 @@ def combine(bucket_name, key, input_format, output_format, offsets, params):
     temp_name = "/tmp/{0:s}".format(file_name)
     # Make this deterministic and combine in the same order
     keys.sort()
-    objects: List[Any] = list(map(lambda key: params["s3"].Object(bucket_name, key), keys))
+    entries: List[Entry] = list(map(lambda key: database.get_entry(bucket_name, key), keys))
     metadata: Dict[str, str] = {}
     with open(temp_name, "wb+") as f:
-      metadata = iterator_class.combine(objects, f)
+      metadata = iterator_class.combine(entries, f)
 
     with open(temp_name, "rb") as f:
-      util.write(params["bucket"], file_name, f, metadata, params)
+      params["s3"].put(params["bucket"], file_name, f, metadata)
     os.remove(temp_name)
 
 
