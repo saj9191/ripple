@@ -6,8 +6,6 @@ from typing import Any, Dict, List
 
 
 def combine(database: Database, bucket_name, key, input_format, output_format, offsets, params):
-  util.print_read(input_format, key, params)
-
   batch_size = params["batch_size"] if "batch_size" in params else 1
 
   # TODO: Fix.

@@ -86,11 +86,13 @@ class Iterator(Generic[T]):
     self.offsets = [self.next_index]
 
   @classmethod
-  def combine(cls: Any, objs: List[Any], f: BinaryIO) -> Dict[str, str]:
+  def combine(cls: Any, objs: List[Entry], f: BinaryIO) -> Dict[str, str]:
     metadata: Dict[str, str] = {}
 
     for i in range(len(objs)):
       obj = objs[i]
+      if i > 0:
+        f.write(str.encode(cls.delimiter.item_token))
       if cls.options.has_header and i > 0:
         lines = obj.get_content().split(cls.delimiter.item_token)[1:]
         f.write(str.encode(cls.delimiter.item_token.join(lines)))
@@ -108,7 +110,7 @@ class Iterator(Generic[T]):
       content = "".join(items)
 
     if f:
-      f.write(content)
+      f.write(str.encode(content))
     return (content, metadata)
 
   @classmethod

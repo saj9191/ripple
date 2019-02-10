@@ -64,9 +64,7 @@ optimal_alignment_score: 193 suboptimal_alignment_score: 48""")
     self.assertEqual(objs[1].get_content(),
 """target_name: 1
 query_name: 1
-optimal_alignment_score: 193 suboptimal_alignment_score: 48
-
-""")
+optimal_alignment_score: 193 suboptimal_alignment_score: 48""")
 
     self.assertEqual(objs[2].get_content(),
 """target_name: 1
@@ -75,9 +73,7 @@ optimal_alignment_score: 300 suboptimal_alignment_score: 112
 
 target_name: 1
 query_name: 1
-optimal_alignment_score: 540 suboptimal_alignment_score: 9
-
-""")
+optimal_alignment_score: 540 suboptimal_alignment_score: 9""")
 
     self.assertEqual(objs[3].get_content(), "")
 
@@ -126,9 +122,7 @@ optimal_alignment_score: 193 suboptimal_alignment_score: 48""")
     self.assertEqual(len(entries), 3)
     self.assertEqual(entries[0].get_content(), """target_name: 1
 query_name: 1
-optimal_alignment_score: 193 suboptimal_alignment_score: 48
-
-""")
+optimal_alignment_score: 193 suboptimal_alignment_score: 48""")
 
     self.assertEqual(entries[1].get_content(), """target_name: 1
 query_name: 1
@@ -136,9 +130,7 @@ optimal_alignment_score: 300 suboptimal_alignment_score: 112
 
 target_name: 1
 query_name: 1
-optimal_alignment_score: 540 suboptimal_alignment_score: 9
-
-""")
+optimal_alignment_score: 540 suboptimal_alignment_score: 9""")
 
     self.assertEqual(entries[2].get_content(), "")
 
