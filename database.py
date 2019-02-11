@@ -21,6 +21,17 @@ class Statistics:
     self.write_byte_count = 0
     self.write_count = 0
 
+  def calculate_total_cost(self) -> float:
+    list_cost: float = (self.list_count / 1000.0) * 0.005
+    read_cost: float = (self.read_count / 1000.0) * 0.004
+    write_cost: float = (self.write_count / 1000.0) * 0.005
+    print("List cost:", list_cost)
+    print("Read cost:", read_cost)
+    print("Write cost:", write_cost)
+    total_cost: float = list_cost + read_cost + write_cost
+    print("Total cost:", total_cost)
+    return total_cost
+
 
 class Entry:
   key: str
@@ -35,21 +46,30 @@ class Entry:
   def __download__(self, f: BinaryIO) -> int:
     raise Exception("Entry::__download__ not implemented")
 
+  def __get_content__(self) -> str:
+    raise Exception("Entry::__get_content__ not implemented")
+
+  def __get_range__(self, start_index: int, end_index: int) -> str:
+    raise Exception("Entry::get_range not implemented")
+
   def content_length(self) -> int:
     raise Exception("Entry::content_length not implemented")
 
   def download(self, f: BinaryIO) -> int:
+    self.statistics.read_count += 1
     content_length: int = self.__download__(f)
     return content_length
 
   def get_content(self) -> str:
-    raise Exception("Entry::get_content not implemented")
+    self.statistics.read_count += 1
+    return self.__get_content__()
 
   def get_metadata(self) -> Dict[str, str]:
     raise Exception("Entry::get_metadata not implemented")
 
   def get_range(self, start_index: int, end_index: int) -> str:
-    raise Exception("Entry::get_range not implemented")
+    self.statistics.read_count += 1
+    return self.__get_range__(start_index, end_index)
 
   def last_modified_at(self) -> float:
     raise Exception("Entry::last_modified_at not implemented")
@@ -88,11 +108,9 @@ class Database:
     raise Exception("Database::contains not implemented")
 
   def download(self, table_name: str, key: str, f: BinaryIO) -> int:
+    self.statistics.read_count += 1
     content_length: int = self.__download__(table_name, key, f)
     return content_length
-
-  def get(self, table_name: str, key: str) -> Any:
-    raise Exception("Database::get not implemented")
 
   def get_entry(self, table_name: str, key: str) -> Optional[Entry]:
     raise Exception("Database::key not implemented")
@@ -132,17 +150,17 @@ class Object(Entry):
     self.resources.download_fileobj(f)
     return f.tell()
 
+  def __get_content__(self) -> str:
+    return self.resources.get()["Body"].decode("utf-8")
+
+  def __get_range__(self, start_index: int, end_index: int) -> str:
+    return self.resources.get(Range="bytes={0:d}-{1:d}".format(start_index, end_index))["Body"].read().decode("utf-8")
+
   def content_length(self) -> int:
     return self.resources.content_length
 
-  def get_content(self) -> str:
-    return self.resources.get()["Body"].decode("utf-8")
-
   def get_metadata(self) -> Dict[str, str]:
     return self.resources.metadata
-
-  def get_range(self, start_index: int, end_index: int) -> str:
-    return self.resources.get(Range="bytes={0:d}-{1:d}".format(start_index, end_index))["Body"].read().decode("utf-8")
 
   def last_modified_at(self) -> float:
     return self.resources.last_modified.timestamp()

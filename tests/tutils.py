@@ -2,7 +2,7 @@ import inspect
 import os
 import sys
 import time
-from database import Database, Table, Entry
+from database import Database, Entry, Statistics, Table
 from typing import Any, BinaryIO, Dict, Iterable, List, Optional, Set, Union
 
 currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
@@ -49,7 +49,9 @@ class TestEntry(Entry):
     self.file_name = key.replace("/tmp/", "")
     self.file_name = self.file_name.replace("/", "-")
     self.file_name = "/tmp/s3/" + self.file_name
-    Entry.__init__(self, key, None, None)
+    if statistics is None:
+      statistics = Statistics()
+    Entry.__init__(self, key, None, statistics)
 
     if content is not None:
       if type(content) == str:
@@ -68,6 +70,15 @@ class TestEntry(Entry):
       f.write(g.read())
     return self.length
 
+  def __get_content__(self) -> str:
+    with open(self.file_name) as f:
+      return f.read()
+
+  def __get_range__(self, start_index: int, end_index: int) -> str:
+    with open(self.file_name) as f:
+      f.seek(start_index)
+      return f.read(end_index - start_index + 1)
+
   def content_length(self) -> int:
     return self.length
 
@@ -75,17 +86,8 @@ class TestEntry(Entry):
     if self.file_name.startswith("/tmp"):
       os.remove(self.file_name)
 
-  def get_content(self) -> str:
-    with open(self.file_name) as f:
-      return f.read()
-
   def get_metadata(self) -> Dict[str, str]:
     return {}
-
-  def get_range(self, start_index: int, end_index: int) -> str:
-    with open(self.file_name) as f:
-      f.seek(start_index)
-      return f.read(end_index - start_index + 1)
 
   def last_modified_at(self) -> float:
     return self.last_modified

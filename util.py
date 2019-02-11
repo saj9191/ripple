@@ -51,16 +51,6 @@ FILE_FORMAT = [{
 
 LOG_NAME = "/tmp/log.txt"
 
-READ_BYTE_COUNT = 0
-WRITE_BYTE_COUNT = 0
-READ_COUNT = 0
-LIST_COUNT = 0
-WRITE_COUNT = 0
-FOUND = False
-DOWNLOAD_TIME = 0
-LIST_TIME = 0
-UPLOAD_TIME = 0
-
 
 def check_output(command):
   try:
@@ -255,16 +245,8 @@ def have_all_files(batch, prefix, params):
 
 def lambda_setup(event, context):
   start_time = time.time()
-  global FOUND, READ_COUNT, READ_BYTE_COUNT, FOUND, LIST_COUNT
-  READ_COUNT = 0
-  LIST_COUNT = 0
-  READ_BYTE_COUNT = 0
+  global FOUND
   FOUND = False
-  global DOWNLOAD_TIME, LIST_TIME, UPLOAD_TIME, WRITE_BYTE_COUNT
-  WRITE_BYTE_COUNT = 0
-  DOWNLOAD_TIME = 0
-  LIST_TIME = 0
-  UPLOAD_TIME = 0
   if os.path.isfile("/tmp/warm"):
     FOUND = True
 
@@ -301,25 +283,17 @@ def lambda_setup(event, context):
 
 
 def show_duration(context, input_format, bucket_format, params):
-  global READ_COUNT, WRITE_COUNT
-  READ_COUNT += 1
-  WRITE_COUNT += 1
-
   duration = params["timeout"] * 1000 - context.get_remaining_time_in_millis()
 
   log_results = {
     "payloads": params["payloads"],
     "start_time": params["start_time"],
-    "read_count": READ_COUNT,
-    "write_count": WRITE_COUNT,
-    "list_count": LIST_COUNT,
-    "write_byte_count": WRITE_BYTE_COUNT,
-    "read_byte_count": READ_BYTE_COUNT,
+    "read_count": params["s3"].statistics.read_count,
+    "write_count": params["s3"].statistics.write_count,
+    "list_count": params["s3"].statistics.list_count,
+    "write_byte_count": params["s3"].statistics.write_byte_count,
+    "read_byte_count": params["s3"].statistics.read_byte_count,
     "duration": duration,
-    "download_time": DOWNLOAD_TIME,
-    "list_time": LIST_TIME,
-    "upload_time": UPLOAD_TIME,
-    "found": FOUND,
   }
 
   for key in ["name"]:

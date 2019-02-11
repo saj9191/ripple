@@ -123,4 +123,5 @@ class Pipeline:
       payload = self.database.payloads.pop(0)
       self.__trigger__(payload)
 
+    self.database.statistics.calculate_total_cost()
     self.__clean_up__(token)
