@@ -20,7 +20,11 @@ def run(database: Database, file: str, params, input_format, output_format, offs
   ]
 
   command = "cd /tmp; ./crux percolator {0:s} {1:s}".format(file, " ".join(arguments))
-  subprocess.check_output(command, shell=True)
+  try:
+    subprocess.check_output(command, stderr=subprocess.STDOUT, shell=True)
+  except subprocess.CalledProcessError as exc:
+    print("Status : FAIL", exc.returncode, exc.output)
+    raise exc
 
   output_files = []
   for item in ["target.{0:s}".format(params["output"])]:
