@@ -87,9 +87,11 @@ class Table:
 
 
 class Database:
+  payloads: List[Dict[str, Any]]
   statistics: Statistics
 
   def __init__(self):
+    self.payloads = []
     self.statistics = Statistics()
 
   def __download__(self, table_name: str, key: str, f: BinaryIO) -> int:
@@ -173,8 +175,6 @@ class Bucket(Table):
 
 
 class S3(Database):
-  payloads: List[Dict[str, Any]]
-
   def __init__(self):
     self.s3 = boto3.resource("s3")
     Database.__init__(self)

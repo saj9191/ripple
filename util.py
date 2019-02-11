@@ -286,7 +286,7 @@ def show_duration(context, input_format, bucket_format, params):
   duration = params["timeout"] * 1000 - context.get_remaining_time_in_millis()
 
   log_results = {
-    "payloads": params["payloads"],
+    "payloads": params["s3"].payloads,
     "start_time": params["start_time"],
     "read_count": params["s3"].statistics.read_count,
     "write_count": params["s3"].statistics.write_count,
