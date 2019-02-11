@@ -112,7 +112,7 @@ class IteratorMethods(unittest.TestCase):
 
     temp_name = "/tmp/ripple_test"
     with open(temp_name, "wb+") as f:
-      new_line.Iterator.combine(entries, f)
+      new_line.Iterator.combine(entries, f, {})
 
     with open(temp_name) as f:
       self.assertEqual(f.read(), "".join(list(map(lambda entry: entry.get_content(), entries))))

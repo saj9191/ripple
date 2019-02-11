@@ -36,7 +36,7 @@ def combine(database: Database, bucket_name, key, input_format, output_format, o
     entries: List[Entry] = list(map(lambda key: database.get_entry(bucket_name, key), keys))
     metadata: Dict[str, str] = {}
     with open(temp_name, "wb+") as f:
-      metadata = iterator_class.combine(entries, f)
+      metadata = iterator_class.combine(entries, f, params)
 
     with open(temp_name, "rb") as f:
       params["s3"].put(params["bucket"], file_name, f, metadata)

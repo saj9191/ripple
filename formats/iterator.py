@@ -87,21 +87,21 @@ class Iterator(Generic[T]):
     self.offsets = [self.next_index]
 
   @classmethod
-  def combine(cls: Any, objs: List[Entry], f: BinaryIO) -> Dict[str, str]:
+  def combine(cls: Any, entries: List[Entry], f: BinaryIO, extra: Dict[str, Any]) -> Dict[str, str]:
     metadata: Dict[str, str] = {}
 
-    for i in range(len(objs)):
-      obj = objs[i]
+    for i in range(len(entries)):
+      entry = entries[i]
       if i > 0 and cls.delimiter.position == DelimiterPosition.inbetween:
         f.seek(-1 * len(cls.delimiter.item_token), os.SEEK_END)
         end: str = f.read(len(cls.delimiter.item_token)).decode("utf-8")
         if end != cls.delimiter.item_token:
           f.write(str.encode(cls.delimiter.item_token))
       if cls.options.has_header and i > 0:
-        lines = obj.get_content().split(cls.delimiter.item_token)[1:]
+        lines = entry.get_content().split(cls.delimiter.item_token)[1:]
         f.write(str.encode(cls.delimiter.item_token.join(lines)))
       else:
-        obj.download(f)
+        entry.download(f)
 
     return metadata
 

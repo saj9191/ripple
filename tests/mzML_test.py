@@ -185,7 +185,7 @@ class IteratorMethods(unittest.TestCase):
     temp_file = "/tmp/test_combine"
     metadata: Dict[str, str] = {}
     with open(temp_file, "wb+") as f:
-      metadata = mzML.Iterator.combine(database.get_entries(table1.name), f)
+      metadata = mzML.Iterator.combine(database.get_entries(table1.name), f, {})
     self.assertEqual(metadata["count"], "6")
     self.assertEqual(metadata["header_start_index"], "0")
     self.assertEqual(metadata["header_end_index"], "122")

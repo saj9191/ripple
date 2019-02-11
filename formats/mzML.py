@@ -5,6 +5,7 @@ import re
 import util
 import xml.etree.ElementTree as ET
 from enum import Enum
+from database import Entry
 from iterator import Delimiter, DelimiterPosition, OffsetBounds, Options
 from typing import Any, BinaryIO, ClassVar, Dict, Iterable, List, Optional, Pattern, Tuple
 
@@ -234,13 +235,13 @@ class Iterator(iterator.Iterator[Identifiers]):
       self.spectra_end_index = self.footer_start_index - 1
 
   @classmethod
-  def combine(cls: Any, objs: List[Any], f: BinaryIO) -> Dict[str, str]:
+  def combine(cls: Any, entries: List[Entry], f: BinaryIO, extra: Dict[str, Any]) -> Dict[str, str]:
     metadata: Dict[str, str] = {}
     iterators = []
     count = 0
     header: str = ""
-    for obj in objs:
-      iterator = Iterator(obj)
+    for entry in entries:
+      iterator = Iterator(entry)
       iterators.append(iterator)
       count += iterator.get_item_count()
 
@@ -294,7 +295,7 @@ class Iterator(iterator.Iterator[Identifiers]):
     return (content, metadata)
 
   def get_extra(self) -> Dict[str, Any]:
-    return { "header": self.header }
+    return {"header": self.header}
 
   @classmethod
   def get_identifier_value(cls: Any, item: str, identifier: Identifiers) -> float:

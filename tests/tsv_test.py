@@ -51,7 +51,7 @@ class IteratorMethods(unittest.TestCase):
 
     temp_name = "/tmp/ripple_test"
     with open(temp_name, "wb+") as f:
-      tsv.Iterator.combine(entries, f)
+      tsv.Iterator.combine(entries, f, {})
 
     with open(temp_name) as f:
       self.assertEqual(f.read(), "HEADER\nA\tB\tC\na\tb\tc\n1\t2\t3\nD\tE\tF\nd\te\tf\n4\t5\t6\nG\tH\tI\ng\th\ti\n7\t8\t9\nJ\tK\tL\nj\tk\tl\n10\t11\t12\n")
