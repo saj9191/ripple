@@ -18,6 +18,23 @@ class Distribution:
     raise Exception("Not implemented")
 
 
+class Bursty(Distribution):
+  def __init__(self, params):
+    Distribution.__init__(self, params)
+
+  def generate(self):
+    requests = []
+    num_uniform = self.params["num_uniform"]
+    cycle = num_uniform + 1
+    num_intervals = int(self.params["duration"] / (cycle * 60))
+    for i in range(num_intervals):
+      for j in range(num_uniform):
+        requests.append(self.params["start_offset"] + (num_intervals * cycle + j) * 60)
+      for j in range(self.params["max_requests"]):
+        requests.append(self.params["start_offset"] + (num_intervals * cycle + num_uniform) * 60)
+    return requests
+
+
 class Uniform(Distribution):
   def __init__(self, params):
     Distribution.__init__(self, params)
