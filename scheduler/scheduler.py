@@ -10,6 +10,7 @@ import time
 currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
 parentdir = os.path.dirname(currentdir)
 sys.path.insert(0, parentdir)
+import database
 import setup
 import util
 
@@ -30,7 +31,7 @@ def payload(bucket, key):
 
 
 class Task(threading.Thread):
-  def __init__(self, bucket_name, key, params):
+  def __init__(self, bucket_name, key, timeout, params):
     super(Task, self).__init__()
     self.bucket_name = bucket_name
     self.check_time = time.time()
@@ -40,6 +41,7 @@ class Task(threading.Thread):
     self.processed = set()
     self.running = True
     self.stage = 1
+    self.timeout = timeout
     self.token = key.split("/")[1]
     self.client = util.setup_client("lambda", self.params)
 
@@ -72,7 +74,7 @@ class Task(threading.Thread):
     return util.file_name(bucket_format)
 
   def __invoke__(self, name, payload):
-    util.invoke(self.client, name, self.params, payload)
+    self.params["s3"].invoke(self.client, name, self.params, payload)
 
   def __process_object__(self, s3, obj):
     if obj not in self.processed:
@@ -85,7 +87,7 @@ class Task(threading.Thread):
     s3 = boto3.resource("s3")
     bucket = s3.Bucket(self.bucket_name)
 
-    while self.stage < len(self.params["pipeline"]):
+    while self.stage <= len(self.params["pipeline"]):
       objs = list(map(lambda o: o.key, bucket.objects.filter(Prefix=str(self.stage) + "/" + self.token)))
       expected_num_objs = self.__expected_num_objects__(objs)
 
@@ -99,7 +101,7 @@ class Task(threading.Thread):
         self.stage += 1
         self.check_time = time.time()
       else:
-        if time.time() - self.check_time > self.params["timeout"]:
+        if time.time() - self.check_time > self.timeout:
           found = {}
           for obj in objs:
             m = util.parse_file_name(obj)
@@ -123,7 +125,7 @@ class Task(threading.Thread):
 
 
 class Scheduler:
-  def __init__(self, policy, params):
+  def __init__(self, policy, timeout, params):
     self.max_tasks = 1000
     self.next_job_id = 0
     self.params = params
@@ -132,6 +134,7 @@ class Scheduler:
     self.running_tasks = {}
     self.__setup__()
     self.tasks = []
+    self.timeout = timeout
 
   def __setup__(self):
     if self.policy == "fifo":
@@ -233,7 +236,7 @@ class Scheduler:
       if "Records" in body:
         for record in body["Records"]:
           key = record["s3"]["object"]["key"]
-          self.tasks.append(Task(self.params["log"], key, self.params))
+          self.tasks.append(Task(self.params["log"], key, self.timeout, self.params))
           self.tasks[-1].start()
       sqs.delete_message(QueueUrl=self.log_queue.url, ReceiptHandle=message["ReceiptHandle"])
 
@@ -253,8 +256,8 @@ class Scheduler:
       self.__check_tasks__()
 
 
-def run(policy, params):
-  scheduler = Scheduler(policy, params)
+def run(policy, timeout, params):
+  scheduler = Scheduler(policy, timeout, params)
   scheduler.listen()
 
 
@@ -262,11 +265,12 @@ def main():
   parser = argparse.ArgumentParser()
   parser.add_argument("--parameters", type=str, required=True, help="File containing parameters")
   parser.add_argument("--policy", type=str, default="fifo", help="Scheduling policy to use (fifo, robin, deadline)")
+  parser.add_argument("--timeout", type=int, default=60, help="How long we should wait for a task to retrigger")
   args = parser.parse_args()
   params = json.loads(open(args.parameters).read())
   setup.process_functions(params)
-  params["payloads"] = []
-  run(args.policy, params)
+  params["s3"] = database.S3()
+  run(args.policy, args.timeout, params)
 
 
 if __name__ == "__main__":
