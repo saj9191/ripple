@@ -21,7 +21,6 @@ class Iterator(iterator.Iterator[Identifiers]):
   chromatogram_offset_regex: ClassVar[Pattern[str]] = re.compile('<offset idRef="TIC">(\d+)</offset>')
   chromatogram_start_index: ClassVar[int]
   delimiter: Delimiter = Delimiter("</spectrum>\n", "</offset>\n", DelimiterPosition.end)
-  chunk_size: ClassVar[int] = 1000
   footer_end_index: ClassVar[int]
   footer_start_index: ClassVar[int]
   header_end_index: ClassVar[int]
@@ -95,8 +94,8 @@ class Iterator(iterator.Iterator[Identifiers]):
       self.header_end_index = int(metadata["header_end_index"])
     else:
       self.header_start_index = 0
-      start_byte: int = max(0, self.index_list_offset - self.chunk_size)
-      end_byte: int = min(self.index_list_offset + self.chunk_size, self.entry.content_length())
+      start_byte: int = max(0, self.index_list_offset - self.read_chunk_size)
+      end_byte: int = min(self.index_list_offset + self.read_chunk_size, self.entry.content_length())
       stream: str = self.entry.get_range(start_byte, end_byte)
       offset_matches: List[Any] = list(self.offset_regex.finditer(stream))
       assert(len(offset_matches) > 0)
@@ -109,11 +108,11 @@ class Iterator(iterator.Iterator[Identifiers]):
       self.footer_end_index = int(metadata["footer_end_index"])
     else:
       if self.chromatogram_start_index == -1:
-        start_byte = self.index_list_offset - self.chunk_size
+        start_byte = self.index_list_offset - self.read_chunk_size
       else:
-        start_byte = self.chromatogram_start_index - self.chunk_size
+        start_byte = self.chromatogram_start_index - self.read_chunk_size
       start_byte = max(0, start_byte)
-      end_byte = min(start_byte + self.chunk_size, self.entry.content_length())
+      end_byte = min(start_byte + self.read_chunk_size, self.entry.content_length())
       stream = self.entry.get_range(start_byte, end_byte)
       self.footer_start_index = start_byte + stream.rindex(self.spectrum_list_close_tag)
       self.footer_end_index = self.entry.content_length()
@@ -126,7 +125,7 @@ class Iterator(iterator.Iterator[Identifiers]):
       self.chromatogram_end_index = int(metadata["chromatogram_end_index"])
     else:
       end_byte: int = self.entry.content_length()
-      start_byte: int = end_byte - self.chunk_size
+      start_byte: int = max(0, end_byte - self.read_chunk_size)
       stream: str = self.entry.get_range(start_byte, end_byte)
       m = self.index_list_offset_regex.search(stream)
       self.index_list_offset = int(m.group(1))
@@ -348,7 +347,7 @@ class Iterator(iterator.Iterator[Identifiers]):
     else:
       offsets: List[int] = list(map(lambda r: int(r.group(1)), self.offset_regex.finditer(stream)))
       assert(len(offsets) > 0)
-      stream = self.entry.get_range(offset_bounds.end_index, offset_bounds.end_index + self.chunk_size)
+      stream = self.entry.get_range(offset_bounds.end_index, offset_bounds.end_index + self.read_chunk_size)
       next_offsets: List[int] = list(map(lambda r: int(r.group(1)), self.offset_regex.finditer(stream)))
       offset_bounds.start_index = offsets[0]
       if len(next_offsets) > 0:
