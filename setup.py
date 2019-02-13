@@ -116,7 +116,7 @@ def zip_ripple_file(zip_directory, fparams):
   file = "{0:s}.py".format(fparams["file"])
   shutil.copyfile("lambda/{0:s}".format(file), "{0:s}/{1:s}".format(zip_directory, file))
   files.append(file)
-  for file in ["formats/iterator.py", "formats/pivot.py", "util.py"]:
+  for file in ["formats/iterator.py", "formats/pivot.py", "database.py", "util.py"]:
     files.append(copy_file(zip_directory, file))
   return files
 
@@ -293,8 +293,7 @@ def setup_triggers(params):
 
   for i in range(len(params["pipeline"])):
     pparams = params["pipeline"][i]
-    if i == 0 or "output_function" not in params["pipeline"][i - 1]:
-      prefixes[pparams["name"]].append(i)
+    prefixes[pparams["name"]].append(i)
 
   client = util.setup_client("s3", params)
   lambda_client = util.lambda_client(params)
