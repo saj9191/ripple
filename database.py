@@ -145,15 +145,15 @@ class Database:
 
 
 class Object(Entry):
-  def __init__(self, key: str, statistics: Statistics, resources: Any):
-    Entry.__init__(self, key, statistics, resources)
+  def __init__(self, key: str, resources: Any, statistics: Statistics):
+    Entry.__init__(self, key, resources, statistics)
 
   def __download__(self, f: BinaryIO) -> int:
     self.resources.download_fileobj(f)
     return f.tell()
 
   def __get_content__(self) -> str:
-    return self.resources.get()["Body"].decode("utf-8")
+    return self.resources.get()["Body"].read().decode("utf-8")
 
   def __get_range__(self, start_index: int, end_index: int) -> str:
     return self.resources.get(Range="bytes={0:d}-{1:d}".format(start_index, end_index))["Body"].read().decode("utf-8")
@@ -191,17 +191,18 @@ class S3(Database):
 
   def __get_entries__(self, table_name: str, prefix: Optional[str]=None) -> List[Entry]:
     done = False
+    bucket = self.s3.Bucket(table_name)
     while not done:
       try:
         if prefix:
-          objects = self.s3.Bucket.objects.filter(Prefix=prefix)
+          objects = bucket.objects.filter(Prefix=prefix)
         else:
-          objects = self.s3.Bucket.objects.all()
+          objects = bucket.objects.all()
         done = True
       except Exception as e:
         time.sleep(1)
 
-    objects = list(map(lambda obj: Object(obj.key, self.statistics, obj), objects))
+    objects = list(map(lambda obj: Object(obj.key, obj, self.statistics), objects))
     return objects
 
   def __put__(self, table_name: str, key: str, content: BinaryIO, metadata: Dict[str, str]):
@@ -246,7 +247,7 @@ class S3(Database):
       return False
 
   def get_entry(self, table_name: str, key: str) -> Optional[Object]:
-    return Object(key, self.statistics, self.s3.Object(table_name, key))
+    return Object(key, self.s3.Object(table_name, key), self.statistics)
 
   def get_table(self, table_name: str) -> Table:
     return Table(table_name, self.statistics, self.s3)
