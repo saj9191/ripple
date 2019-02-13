@@ -15,7 +15,7 @@ class Iterator(iterator.Iterator[None]):
     iterator.Iterator.__init__(self, Iterator, obj, offset_bounds)
 
   @classmethod
-  def combine(cls: Any, objs: List[Entry], f: BinaryIO) -> Dict[str, str]:
+  def combine(cls: Any, entries: List[Entry], f: BinaryIO, extra: Dict[str, Any]) -> Dict[str, str]:
     pivots: List[int] = []
     file_key: Optional[str] = None
     for obj in objs:
