@@ -168,6 +168,7 @@ def add_sort_pipeline(sort_params):
     "file": "split_file",
     "format": fformat,
     "split_size": sort_params["chunk_size"],
+    "output_function": "pivot-" + fformat,
   }, {
     "ranges": False,
   })
@@ -175,7 +176,7 @@ def add_sort_pipeline(sort_params):
   add_function("pivot-" + fformat, {
     "file": "pivot_file",
     "format": fformat,
-    "identifier": sort_params["identifier"]
+    "identifier": sort_params["identifier"],
   }, {})
 
   add_function("combine-pivot-" + fformat, {
@@ -186,7 +187,8 @@ def add_sort_pipeline(sort_params):
 
   pipeline.append({
     "name": "split-" + fformat,
-    "ranges": True
+    "ranges": True,
+     "output_function": "sort-" + fformat
   })
 
   add_function("sort-" + fformat, {
@@ -210,7 +212,7 @@ def process_functions(params):
   i = 0
   while i < len(pipeline):
     name = pipeline[i]["name"]
-    if i != len(params["pipeline"]) - 1:
+    if i != len(pipeline) - 1:
       pipeline[i]["output_function"] = pipeline[i + 1]["name"]
 
     fn_params = params["functions"][name]
@@ -220,7 +222,6 @@ def process_functions(params):
       fn_params["input_prefix"] = variable_to_step[fn_params["input"]]
     if params["functions"][name]["file"] == "sort":
       del params["functions"][name]
-
       sort_functions, sort_pipeline = add_sort_pipeline(fn_params)
       pipeline = pipeline[:i] + sort_pipeline + pipeline[i+1:]
       params["functions"] = { **params["functions"], **sort_functions }
