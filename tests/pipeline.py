@@ -100,7 +100,6 @@ class Pipeline:
     function_module.handler(event, context)
 
   def __clean_up__(self, token):
-    self.database.destroy()
     for i in range(len(self.params["pipeline"]) + 1):
       directory = "{0:d}/{1:s}".format(i, token)
       if os.path.isdir(directory):

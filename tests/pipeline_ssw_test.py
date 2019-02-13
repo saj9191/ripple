@@ -29,6 +29,7 @@ class SmithWaterman(unittest.TestCase):
     expected_output = sorted(expected_output, key=lambda item: [blast.Iterator.get_identifier_value(item, blast.Identifiers.score), item])
 
     self.assertCountEqual(actual_output, expected_output)
+    pp.database.destroy()
 
 
 if __name__ == "__main__":

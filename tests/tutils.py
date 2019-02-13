@@ -2,13 +2,13 @@ import inspect
 import os
 import sys
 import time
-from database import Database, Entry, Statistics, Table
 from typing import Any, BinaryIO, Dict, Iterable, List, Optional, Set, Union
 
 currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
 parentdir = os.path.dirname(currentdir)
 sys.path.insert(0, parentdir)
 import database
+from database import Database, Entry, Statistics, Table
 
 
 def equal_lists(list1, list2):
