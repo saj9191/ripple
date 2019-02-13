@@ -1,0 +1,399 @@
+target_name: sp|Q9KLR4|NAPA_VIBCH
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 600	suboptimal_alignment_score: 563	strand: +	target_end: 771	query_end: 346
+
+target_name: sp|Q1GUM2|SYV_SPHAL
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 600	suboptimal_alignment_score: 564	strand: +	target_end: 598	query_end: 346
+
+target_name: sp|P26639|SYTC_HUMAN
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 601	suboptimal_alignment_score: 468	strand: +	target_end: 580	query_end: 346
+
+target_name: sp|Q8U7P1|NAPA_AGRFC
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 601	suboptimal_alignment_score: 522	strand: +	target_end: 733	query_end: 346
+
+target_name: sp|P49917|DNLI4_HUMAN
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 601	suboptimal_alignment_score: 531	strand: +	target_end: 859	query_end: 346
+
+target_name: sp|Q2N6X5|SYT_ERYLH
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 601	suboptimal_alignment_score: 533	strand: +	target_end: 563	query_end: 346
+
+target_name: sp|Q8UEN6|SYV_AGRFC
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 601	suboptimal_alignment_score: 569	strand: +	target_end: 569	query_end: 346
+
+target_name: sp|Q7MZ25|SYV_PHOLL
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 601	suboptimal_alignment_score: 571	strand: +	target_end: 947	query_end: 344
+
+target_name: sp|Q6D0C3|SYI_PECAS
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 601	suboptimal_alignment_score: 572	strand: +	target_end: 780	query_end: 346
+
+target_name: sp|A3CSI6|SYI_METMJ
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 601	suboptimal_alignment_score: 579	strand: +	target_end: 610	query_end: 346
+
+target_name: sp|Q48NK6|SYI_PSE14
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 601	suboptimal_alignment_score: 586	strand: +	target_end: 772	query_end: 342
+
+target_name: sp|Q3ZBV8|SYTC_BOVIN
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 602	suboptimal_alignment_score: 467	strand: +	target_end: 580	query_end: 346
+
+target_name: sp|O67323|SYA_AQUAE
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 602	suboptimal_alignment_score: 528	strand: +	target_end: 717	query_end: 346
+
+target_name: sp|A7E3Q8|PLST_BOVIN
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 602	suboptimal_alignment_score: 531	strand: +	target_end: 586	query_end: 345
+
+target_name: sp|Q970Z6|SYL2_SULTO
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 602	suboptimal_alignment_score: 532	strand: +	target_end: 905	query_end: 346
+
+target_name: sp|P39185|NAPA_CUPNH
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 602	suboptimal_alignment_score: 542	strand: +	target_end: 784	query_end: 346
+
+target_name: sp|Q4QNJ6|NAPA_HAEI8
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 602	suboptimal_alignment_score: 547	strand: +	target_end: 726	query_end: 346
+
+target_name: sp|A4VJ11|NAPA_PSEU5
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 602	suboptimal_alignment_score: 559	strand: +	target_end: 784	query_end: 346
+
+target_name: sp|Q3HS05|NAPA_PSEST
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 602	suboptimal_alignment_score: 559	strand: +	target_end: 784	query_end: 346
+
+target_name: sp|Q89DF8|SYI_BRADU
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 602	suboptimal_alignment_score: 562	strand: +	target_end: 716	query_end: 344
+
+target_name: sp|A1K4R7|SYI_AZOSB
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 602	suboptimal_alignment_score: 564	strand: +	target_end: 673	query_end: 345
+
+target_name: sp|C1DPH5|SYI_AZOVD
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 602	suboptimal_alignment_score: 586	strand: +	target_end: 770	query_end: 345
+
+target_name: sp|Q4ZYJ4|SYI_PSEU2
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 602	suboptimal_alignment_score: 598	strand: +	target_end: 606	query_end: 346
+
+target_name: sp|Q5XHY5|SYTC_RAT
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 603	suboptimal_alignment_score: 463	strand: +	target_end: 552	query_end: 346
+
+target_name: sp|B7EA73|PSA_ORYSJ
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 603	suboptimal_alignment_score: 524	strand: +	target_end: 447	query_end: 346
+
+target_name: sp|Q80XL6|ACD11_MOUSE
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 603	suboptimal_alignment_score: 561	strand: +	target_end: 456	query_end: 346
+
+target_name: sp|A3DJE3|PCKG_CLOTH
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 603	suboptimal_alignment_score: 584	strand: +	target_end: 431	query_end: 346
+
+target_name: sp|Q5R778|ACD11_PONAB
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 603	suboptimal_alignment_score: 586	strand: +	target_end: 371	query_end: 346
+
+target_name: sp|P21231|POLG_SBMVN
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 604	suboptimal_alignment_score: 549	strand: +	target_end: 2774	query_end: 345
+
+target_name: sp|Q4WT66|NRPS1_ASPFU
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 604	suboptimal_alignment_score: 559	strand: +	target_end: 5156	query_end: 346
+
+target_name: sp|Q02GB7|SYI_PSEAB
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 604	suboptimal_alignment_score: 570	strand: +	target_end: 770	query_end: 345
+
+target_name: sp|Q46CG5|SYE_METBF
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 605	suboptimal_alignment_score: 475	strand: +	target_end: 484	query_end: 343
+
+target_name: sp|Q21AR4|NAPA_RHOPB
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 605	suboptimal_alignment_score: 532	strand: +	target_end: 734	query_end: 346
+
+target_name: sp|B4S5G4|SYL_PROA2
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 605	suboptimal_alignment_score: 533	strand: +	target_end: 607	query_end: 346
+
+target_name: sp|Q2YTA0|SYV_STAAB
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 605	suboptimal_alignment_score: 541	strand: +	target_end: 656	query_end: 346
+
+target_name: sp|Q8L6J5|RPO1B_TOBAC
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 605	suboptimal_alignment_score: 545	strand: +	target_end: 752	query_end: 345
+
+target_name: sp|B7V0A3|SYI_PSEA8
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 605	suboptimal_alignment_score: 570	strand: +	target_end: 770	query_end: 345
+
+target_name: sp|Q9HVM4|SYI_PSEAE
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 605	suboptimal_alignment_score: 570	strand: +	target_end: 770	query_end: 345
+
+target_name: sp|Q889E4|SYI_PSESM
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 605	suboptimal_alignment_score: 589	strand: +	target_end: 770	query_end: 345
+
+target_name: sp|B1H224|MUM1_RAT
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 606	suboptimal_alignment_score: 441	strand: +	target_end: 622	query_end: 346
+
+target_name: sp|P59077|SYM_CHLTE
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 606	suboptimal_alignment_score: 511	strand: +	target_end: 586	query_end: 345
+
+target_name: sp|Q99K51|PLST_MOUSE
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 606	suboptimal_alignment_score: 521	strand: +	target_end: 586	query_end: 345
+
+target_name: sp|P0C2F6|RNHX1_ARATH
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 606	suboptimal_alignment_score: 525	strand: +	target_end: 535	query_end: 346
+
+target_name: sp|P13797|PLST_HUMAN
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 606	suboptimal_alignment_score: 531	strand: +	target_end: 586	query_end: 345
+
+target_name: sp|Q983N4|SYI_RHILO
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 606	suboptimal_alignment_score: 539	strand: +	target_end: 812	query_end: 344
+
+target_name: sp|Q8BI06|CEMIP_MOUSE
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 606	suboptimal_alignment_score: 544	strand: +	target_end: 1173	query_end: 346
+
+target_name: sp|Q6G4S5|SYI_BARHE
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 606	suboptimal_alignment_score: 558	strand: +	target_end: 764	query_end: 345
+
+target_name: sp|O29622|SYI_ARCFU
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 606	suboptimal_alignment_score: 561	strand: +	target_end: 696	query_end: 345
+
+target_name: sp|A6VBU7|SYI_PSEA7
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 606	suboptimal_alignment_score: 575	strand: +	target_end: 770	query_end: 345
+
+target_name: sp|B5Y235|SYI_KLEP3
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 606	suboptimal_alignment_score: 597	strand: +	target_end: 776	query_end: 346
+
+target_name: sp|B8DTM3|SYP_BIFA0
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 608	suboptimal_alignment_score: 454	strand: +	target_end: 527	query_end: 346
+
+target_name: sp|Q63598|PLST_RAT
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 608	suboptimal_alignment_score: 525	strand: +	target_end: 586	query_end: 345
+
+target_name: sp|B0UCB6|NAPA_METS4
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 609	suboptimal_alignment_score: 519	strand: +	target_end: 730	query_end: 346
+
+target_name: sp|A1SWQ0|NAPA_PSYIN
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 609	suboptimal_alignment_score: 534	strand: +	target_end: 730	query_end: 346
+
+target_name: sp|Q3K6L5|SYI_PSEPF
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 609	suboptimal_alignment_score: 597	strand: +	target_end: 770	query_end: 345
+
+target_name: sp|O88818|PLST_CRIGR
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 610	suboptimal_alignment_score: 525	strand: +	target_end: 586	query_end: 345
+
+target_name: sp|O88307|SORL_MOUSE
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 610	suboptimal_alignment_score: 539	strand: +	target_end: 1017	query_end: 346
+
+target_name: sp|Q90069|POLG_SBMVG
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 610	suboptimal_alignment_score: 550	strand: +	target_end: 2774	query_end: 345
+
+target_name: sp|P85097|NARG_BRASZ
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 611	suboptimal_alignment_score: 546	strand: +	target_end: 687	query_end: 346
+
+target_name: sp|C5B7M4|SYI_EDWI9
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 611	suboptimal_alignment_score: 556	strand: +	target_end: 787	query_end: 346
+
+target_name: sp|Q1I4S5|SYI_PSEE4
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 611	suboptimal_alignment_score: 586	strand: +	target_end: 770	query_end: 345
+
+target_name: sp|Q07017|OL56_STRAT
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 611	suboptimal_alignment_score: 596	strand: +	target_end: 2934	query_end: 346
+
+target_name: sp|Q9BW92|SYTM_HUMAN
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 612	suboptimal_alignment_score: 483	strand: +	target_end: 576	query_end: 346
+
+target_name: sp|A7H8E6|SECA_ANADF
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 612	suboptimal_alignment_score: 521	strand: +	target_end: 899	query_end: 346
+
+target_name: sp|P0A3V3|TR2M_RHIRD
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 612	suboptimal_alignment_score: 533	strand: +	target_end: 559	query_end: 346
+
+target_name: sp|P0A3V2|TR2M_AGRT4
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 612	suboptimal_alignment_score: 535	strand: +	target_end: 559	query_end: 346
+
+target_name: sp|A5ED21|NAPA_BRASB
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 612	suboptimal_alignment_score: 536	strand: +	target_end: 734	query_end: 346
+
+target_name: sp|Q487G4|NAPA_COLP3
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 612	suboptimal_alignment_score: 537	strand: +	target_end: 732	query_end: 346
+
+target_name: sp|C3KDX4|SYI_PSEFS
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 612	suboptimal_alignment_score: 594	strand: +	target_end: 770	query_end: 345
+
+target_name: sp|B3DMA2|ACD11_RAT
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 613	suboptimal_alignment_score: 603	strand: +	target_end: 378	query_end: 346
+
+target_name: sp|Q8WUJ3|CEMIP_HUMAN
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 614	suboptimal_alignment_score: 542	strand: +	target_end: 1173	query_end: 346
+
+target_name: sp|Q92Z36|NAPA_RHIME
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 614	suboptimal_alignment_score: 542	strand: +	target_end: 786	query_end: 346
+
+target_name: sp|A6USJ5|SYL_METVS
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 615	suboptimal_alignment_score: 543	strand: +	target_end: 916	query_end: 345
+
+target_name: sp|A2SPV6|SYI_METLZ
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 615	suboptimal_alignment_score: 559	strand: +	target_end: 637	query_end: 346
+
+target_name: sp|P04415|DPOL_BPT4
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 616	suboptimal_alignment_score: 523	strand: +	target_end: 753	query_end: 346
+
+target_name: sp|A4Z0A1|NAPA_BRASO
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 616	suboptimal_alignment_score: 531	strand: +	target_end: 734	query_end: 346
+
+target_name: sp|Q4K5U4|SYI_PSEF5
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 616	suboptimal_alignment_score: 613	strand: +	target_end: 606	query_end: 346
+
+target_name: sp|Q56350|NAPA_PARPN
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 617	suboptimal_alignment_score: 527	strand: +	target_end: 784	query_end: 346
+
+target_name: sp|B9L8L4|NAPA_NAUPA
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 617	suboptimal_alignment_score: 560	strand: +	target_end: 800	query_end: 345
+
+target_name: sp|B1JF83|SYI_PSEPW
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 618	suboptimal_alignment_score: 588	strand: +	target_end: 770	query_end: 345
+
+target_name: sp|Q05893|PCKG_ASCSU
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 619	suboptimal_alignment_score: 459	strand: +	target_end: 520	query_end: 346
+
+target_name: sp|Q6JQN1|ACD10_HUMAN
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 619	suboptimal_alignment_score: 553	strand: +	target_end: 712	query_end: 346
+
+target_name: sp|Q8EI02|OPGD_SHEON
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 620	suboptimal_alignment_score: 481	strand: +	target_end: 512	query_end: 346
+
+target_name: sp|Q9AAA5|SYI_CAUVC
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 620	suboptimal_alignment_score: 578	strand: +	target_end: 708	query_end: 346
+
+target_name: sp|A5VY52|SYI_PSEP1
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 620	suboptimal_alignment_score: 590	strand: +	target_end: 770	query_end: 345
+
+target_name: sp|Q8UBV2|SYL_AGRFC
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 622	suboptimal_alignment_score: 522	strand: +	target_end: 749	query_end: 346
+
+target_name: sp|Q8UHJ6|SYI_AGRFC
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 622	suboptimal_alignment_score: 544	strand: +	target_end: 790	query_end: 345
+
+target_name: sp|A6Q604|NAPA_NITSB
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 622	suboptimal_alignment_score: 553	strand: +	target_end: 836	query_end: 346
+
+target_name: sp|Q8B8X3|POL1_TBRVM
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 622	suboptimal_alignment_score: 564	strand: +	target_end: 2149	query_end: 346
+
+target_name: sp|Q5ZHT1|ACD11_CHICK
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 623	suboptimal_alignment_score: 576	strand: +	target_end: 406	query_end: 346
+
+target_name: sp|C0R112|SYI_BRAHW
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 626	suboptimal_alignment_score: 557	strand: +	target_end: 717	query_end: 344
+
+target_name: sp|B0KM84|SYI_PSEPG
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 626	suboptimal_alignment_score: 586	strand: +	target_end: 770	query_end: 345
+
+target_name: sp|Q0V9S0|SYTC2_XENTR
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 627	suboptimal_alignment_score: 553	strand: +	target_end: 736	query_end: 346
+
+target_name: sp|Q88Q92|SYI_PSEPK
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 630	suboptimal_alignment_score: 596	strand: +	target_end: 770	query_end: 345
+
+target_name: sp|P40872|PKSM_BACSU
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 631	suboptimal_alignment_score: 573	strand: +	target_end: 3739	query_end: 346
+
+target_name: sp|Q8K370|ACD10_MOUSE
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 632	suboptimal_alignment_score: 596	strand: +	target_end: 623	query_end: 346
+
+target_name: sp|Q8YB57|SYI_BRUME
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 642	suboptimal_alignment_score: 589	strand: +	target_end: 794	query_end: 343
+
+target_name: sp|P0C123|SYI_BRUAB
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 644	suboptimal_alignment_score: 589	strand: +	target_end: 794	query_end: 343
+
+target_name: sp|P0C124|SYI_BRUA2
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 644	suboptimal_alignment_score: 589	strand: +	target_end: 794	query_end: 343
+
+target_name: sp|Q8FX81|SYI_BRUSU
+query_name: tr|Q04QA6|Q04QA6_LEPBJ
+optimal_alignment_score: 644	suboptimal_alignment_score: 589	strand: +	target_end: 794	query_end: 343
