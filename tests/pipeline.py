@@ -92,12 +92,15 @@ class Pipeline:
       self.__import_format__(function_params["format"])
     if "application" in function_params:
       self.__import_application__(function_params["application"])
+    if function_params["file"] == "map":
+      self.__import_format__("pivot")
     function_module = self.__import_function__(function_params["file"])
     event = tutils.create_event_from_payload(self.database, payload, function_params)
     context = tutils.create_context({"timeout": 60})
     function_module.handler(event, context)
 
   def __clean_up__(self, token):
+    self.database.destroy()
     for i in range(len(self.params["pipeline"]) + 1):
       directory = "{0:d}/{1:s}".format(i, token)
       if os.path.isdir(directory):

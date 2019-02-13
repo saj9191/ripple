@@ -124,10 +124,6 @@ class TestDatabase(Database):
     if not os.path.isdir("/tmp/s3"):
       os.mkdir("/tmp/s3")
 
-  def __del__(self):
-    for table in self.tables.values():
-      table.destroy()
-
   def __download__(self, table_name: str, key: str, f: BinaryIO) -> int:
     return self.get_entry(table_name, key).download(f)
 
@@ -179,6 +175,10 @@ class TestDatabase(Database):
     table: TestTable = TestTable(table_name, self.statistics, None)
     self.tables[table_name] = table
     return table
+
+  def destroy(self):
+    for table in self.tables.values():
+      table.destroy()
 
   def get_entry(self, table_name: str, key: str) -> Optional[TestEntry]:
     table: TestTable = self.tables[table_name]
