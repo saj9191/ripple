@@ -26,12 +26,13 @@ class Bursty(Distribution):
     requests = []
     num_uniform = self.params["num_uniform"]
     cycle = num_uniform + 1
-    num_intervals = int(self.params["duration"] / (cycle * 60))
+    interval = self.params["interval"]
+    num_intervals = int(self.params["duration"] / (cycle * interval))
     for i in range(num_intervals):
       for j in range(num_uniform):
-        requests.append(self.params["start_offset"] + (num_intervals * cycle + j) * 60)
+        requests.append(self.params["start_offset"] + (i * cycle + j) * interval)
       for j in range(self.params["max_requests"]):
-        requests.append(self.params["start_offset"] + (num_intervals * cycle + num_uniform) * 60)
+        requests.append(self.params["start_offset"] + (i * cycle + num_uniform) * interval)
     return requests
 
 
@@ -93,6 +94,7 @@ class Request(threading.Thread):
         time_delta = now - self.start_time
         sleep = max(0, request_delta - time_delta)
         time.sleep(sleep)
+        print("Thread", self.thread_id, "Wakeup", request_date_time)
         upload.upload(self.params["bucket"], file_name, self.params["input_bucket"])
       except queue.Empty as e:
         pass
@@ -103,6 +105,8 @@ def create_requests(params):
     distribution = Uniform(params)
   elif params["distribution"] == "diurnal":
     distribution = Diurnal(params)
+  elif params["distribution"] == "bursty":
+    distribution = Bursty(params)
   else:
     raise Exception("Not implemented")
 
