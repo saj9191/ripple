@@ -2,7 +2,7 @@ import iterator
 import re
 import util
 from enum import Enum
-from iterator import Delimiter, DelimiterPosition, OffsetBounds, Optional
+from iterator import Delimiter, DelimiterPosition, OffsetBounds, Optional, Options
 from typing import Any, ClassVar
 
 
@@ -12,6 +12,7 @@ class Identifiers(Enum):
 
 class Iterator(iterator.Iterator[Identifiers]):
   delimiter: Delimiter = Delimiter(item_token="@cluster", offset_token="@cluster", position=DelimiterPosition.start)
+  options: ClassVar[Options] = Options(has_header = False)
   identifiers: Identifiers
   signature_length: ClassVar[int] = 8
 

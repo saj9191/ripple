@@ -11,15 +11,15 @@ class Iterator(iterator.Iterator[None]):
   identifiers: None
   increment: ClassVar[int] = 100  # TODO: Unhardcode
 
-  def __init__(self, obj: Any, offset_bounds: Optional[OffsetBounds] = None):
-    iterator.Iterator.__init__(self, Iterator, obj, offset_bounds)
+  def __init__(self, entry: Any, offset_bounds: Optional[OffsetBounds] = None):
+    iterator.Iterator.__init__(self, Iterator, entry, offset_bounds)
 
   @classmethod
   def combine(cls: Any, entries: List[Entry], f: BinaryIO, extra: Dict[str, Any]) -> Dict[str, str]:
     pivots: List[int] = []
     file_key: Optional[str] = None
-    for obj in objs:
-      content: str = obj.get_content()
+    for entry in entries:
+      content: str = entry.get_content()
       [file_bucket, file_key, pivot_content] = content.split("\n")
       pivot_content: str = pivot_content.strip()
       if len(pivot_content) > 0:

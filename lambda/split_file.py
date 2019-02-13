@@ -36,7 +36,7 @@ def split_file(d: Database, bucket_name: str, key: str, input_format: Dict[str, 
   client = params["client"] if "client" in params else boto3.client("lambda")
 
   if util.is_set(params, "ranges"):
-    [input_bucket, input_key, ranges] = pivot.get_pivot_ranges(bucket_name, key)
+    [input_bucket, input_key, ranges] = pivot.get_pivot_ranges(bucket_name, key, params)
   else:
     input_bucket = bucket_name
     input_key = key
