@@ -45,7 +45,7 @@ class Iterator(Generic[T]):
   adjust_chunk_size: ClassVar[int] = 300
   next_index: int = -1
   options: ClassVar[Options]
-  read_chunk_size: ClassVar[int] = 1000*1000
+  read_chunk_size: ClassVar[int] = 10*1000*1000
   delimiter: Delimiter
   identifiers: T
 

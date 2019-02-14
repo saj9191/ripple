@@ -31,7 +31,7 @@ class Tide(unittest.TestCase):
 
     entry: TestEntry = entries[-1]
     actual_output: List[str] = sorted(entry.get_content().split("\n"))
-    self.assertLessEqual(abs(len(expected_output) - len(actual_output)), 50)
+    self.assertLessEqual(float(abs(len(expected_output) - len(actual_output)))/len(expected_output), 0.05)
     pp.database.destroy()
 
 
