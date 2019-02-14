@@ -253,18 +253,27 @@ def clear_triggers(client, bucket, params):
   setup_notifications(client, bucket, {})
 
 
-def create_bucket(client, bucket_name, params):
+def bucket_exists(client, bucket_name):
   try:
-    client.create_bucket(
-      ACL="public-read-write",
-      Bucket=bucket_name,
-      CreateBucketConfiguration={
-        "LocationConstraint": params["region"],
-      }
-    )
+    client.head_bucket(Bucket=bucket_name)
+    return True
   except botocore.exceptions.ClientError as ex:
-    if "BucketAlreadyOwnedByYou" not in str(ex):
-      raise ex
+    return False
+
+
+def create_bucket(client, bucket_name, params):
+  if not bucket_exists(client, bucket_name):
+    try:
+      client.create_bucket(
+        ACL="public-read-write",
+        Bucket=bucket_name,
+        CreateBucketConfiguration={
+          "LocationConstraint": params["region"],
+        }
+      )
+    except botocore.exceptions.ClientError as ex:
+      if "BucketAlreadyOwnedByYou" not in str(ex):
+        raise ex
 
   client.put_bucket_tagging(
     Bucket=bucket_name,
