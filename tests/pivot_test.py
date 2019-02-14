@@ -2,12 +2,13 @@ import inspect
 import os
 import sys
 import unittest
-from iterator import OffsetBounds
-from tutils import TestDatabase, TestEntry, TestTable
 from typing import Any, ClassVar, Optional
 
 currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
 parentdir = os.path.dirname(currentdir)
+sys.path.insert(0, parentdir)
+from iterator import OffsetBounds
+from tutils import TestDatabase, TestEntry, TestTable
 sys.path.insert(0, parentdir + "/formats")
 import pivot
 
@@ -58,7 +59,7 @@ class PivotMethods(unittest.TestCase):
     # *             *              *           *
     it = TestIterator(entry1, None, increment=7)
     with open(temp_name, "wb+") as f:
-      it.combine(entries, f)
+      it.combine(entries, f, {})
 
     with open(temp_name) as f:
       self.assertEqual(f.read(), "{0:s}\nkey3\n1.0\t40.0\t60.0\t81.0".format(table1.name))
@@ -66,7 +67,7 @@ class PivotMethods(unittest.TestCase):
     # 1 10 12 20 25 40 40 41 42 50 60 61 63 80 81
     # *                                        *
     with open(temp_name, "wb+") as f:
-      pivot.Iterator.combine(entries, f)
+      pivot.Iterator.combine(entries, f, {})
 
     with open(temp_name) as f:
       self.assertEqual(f.read(), "{0:s}\nkey3\n1.0\t81.0".format(table1.name))
@@ -90,7 +91,7 @@ class PivotMethods(unittest.TestCase):
     temp_name = "/tmp/ripple_test"
     it = TestIterator(entry1, None, increment=4)
     with open(temp_name, "wb+") as f:
-      it.combine(entries, f)
+      it.combine(entries, f, {})
 
     with open(temp_name) as f:
       self.assertEqual(f.read(), "bucket1\nkey3\n1.0\t25.0\t42.0\t61.0\t81.0")
