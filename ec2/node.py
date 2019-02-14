@@ -134,7 +134,8 @@ class Task(threading.Thread):
 
   def run(self):
     start_time: float = time.time()
-    c = "sudo docker run --name {0:d} -m {1:d} --cpu-shares {2:d} app python3 main.py {3:s}".format(self.nonce, self.memory, self.cpu, self.task.key)
+    c: str = "sudo docker run --name {0:d} -m {1:d} --cpu-shares {2:d} -v /home/ubuntu/Docker/app:/home/ubuntu/app app ".format(self.nonce, self.memory, self.cpu)
+    c += "python3 main.py --key {0:s}".format(self.task.key)
     code, output, err = self.client.exec_command(c)
     end_time: float = time.time()
     if code != 0:
@@ -318,12 +319,10 @@ class Node:
 
     i = 0
     while i < len(self.tasks):
-      print("Checking task", self.tasks[i].nonce, "Running", self.tasks[i].running())
       if not self.tasks[i].running():
         if self.tasks[i].error is not None:
           print(self.node.instance_id, "ERROR", self.tasks[i].error)
           self.error = self.tasks[i].error
-#        self.tasks[i].join()
         self.tasks.pop(i)
       else:
         i += 1
