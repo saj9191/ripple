@@ -1,10 +1,12 @@
+import boto3
 import json
-import matplotlib.pyplot as plt
 import os
 import random
 import re
 import time
-import util
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
 
 SOLUTION_REGEX = re.compile("([A-Za-z0-9_]+),([0-9]+),\"POLYGON \(([0-9\-\.\, \(\)]+)\).*")
 POLYGON_REGEX = re.compile("([0-9\.]+) ([-0-9\.]+) ([0-9]+)")
@@ -100,63 +102,58 @@ def create_classifications(s3, folder, image_name, polygons, border, inside, out
     for x in range(width):
       [r, g, b] = im[y, x]
       if len(polygons) == 0:
-        outside.append("{r} {g} {b} {c}\n".format(r=r, g=g, b=b, c=OUTSIDE))
+        outside.add("{r} {g} {b} {c}\n".format(r=r, g=g, b=b, c=OUTSIDE))
       else:
         found = False
         for polygon in polygons:
           if on_border(polygon, x, y):
-            border.append("{r} {g} {b} {c}\n".format(r=r, g=g, b=b, c=BORDER))
+            border.add("{r} {g} {b} {c}\n".format(r=r, g=g, b=b, c=BORDER))
             found = True
             break
           elif in_polygon(polygon, x, y):
-            inside.append("{r} {g} {b} {c}\n".format(r=r, g=g, b=b, c=INSIDE))
+            inside.add("{r} {g} {b} {c}\n".format(r=r, g=g, b=b, c=INSIDE))
             found = True
         if not found:
-          outside.append("{r} {g} {b} {c}\n".format(r=r, g=g, b=b, c=OUTSIDE))
+          outside.add("{r} {g} {b} {c}\n".format(r=r, g=g, b=b, c=OUTSIDE))
 
 
 def process_images(folder, solutions, params):
-  s3 = util.s3(params)
   image_names = [f for f in os.listdir(folder) if os.path.isfile(os.path.join(folder, f))]
   random.shuffle(image_names)
   image_names = image_names[:100]
-  border = list()
-  inside = list()
-  outside = list()
-  num_items_per_file = 100 * 1000
-  third = int(num_items_per_file / 3)
-  file_id = 1
+  border = set()
+  inside = set()
+  outside = set()
+  s3 = boto3.resource("s3")
 
   i = 0
   for image_name in image_names:
     print(time.time(), i, image_name)
     name = image_name.replace("3band_", "").replace(".tif", "")
     solution = solutions[name]
-    create_classifications(s3, folder, image_name, solution, border, inside, outside)
     print("Before", "Border", len(border), "Inside", len(inside), "Outside", len(outside))
-    if len(border) > third and len(inside) > third and len(outside) > third:
-      random.shuffle(border)
-      random.shuffle(inside)
-      random.shuffle(outside)
-      print("Creating file", file_id)
-      key = "classification-{0:d}.classification".format(file_id)
-      temp_name = "/tmp/{0:s}".format(key)
-      with open(temp_name, "w+") as f:
-        items = []
-        t = [border[:third], inside[:third], outside[:third]]
-        for j in range(third):
-          for k in range(3):
-            items.append(t[k][j])
-        border = border[third:]
-        inside = inside[third:]
-        outside = []
-        write_classification(f, items)
-        file_id += 1
-      s3.Object(params["bucket"], key).put(Body=open(temp_name, "rb"))
+    create_classifications(s3, folder, image_name, solution, border, inside, outside)
     print("After", "Border", len(border), "Inside", len(inside), "Outside", len(outside))
-    i += 1
+#    if len(border) > third and len(inside) > third and len(outside) > third:
+
+  border = list(border)
+  inside = list(inside)
+  outside = list(outside)
+  num_points = min([len(border), len(inside), len(outside)])
+  random.shuffle(border)
+  random.shuffle(inside)
+  random.shuffle(outside)
+  print("Num points", num_points)
+  classifications = border[:num_points] + inside[:num_points] + outside[:num_points]
+  random.shuffle(classifications)
+  key = "train.classification"
+  temp_name = "/tmp/{0:s}".format(key)
+  with open(temp_name, "w+") as f:
+    write_classification(f, classifications)
+  s3.Object(params["bucket"], key).put(Body=open(temp_name, "rb"))
+  print("Final", "Border", len(border), "Inside", len(inside), "Outside", len(outside))
 
 
-solutions = parse_solutions("competition1/spacenet_TrainData/vectordata/summarydata/AOI_1_RIO_polygons_solution_3band.csv")
-params = json.loads(open("json/spacenet-classification.json").read())
-process_images("competition1/spacenet_TrainData/3band", solutions, params)
+solutions = parse_solutions("../spacenet_data/vector_data/summarydata/AOI_1_RIO_polygons_solution_3band.csv")
+params = json.loads(open("../json/spacenet-classification.json").read())
+process_images("../spacenet_data/train_data/3band", solutions, params)
