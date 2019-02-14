@@ -13,23 +13,16 @@ NODE_START_REGEX = re.compile("NODE START TIME: ([0-9\.]+)")
 NODE_END_REGEX = re.compile("NODE END TIME: ([0-9\.]+)")
 
 
-def graph(subfolder, node_results, node_color, max_y_height, task_results, task_colors, task_labels):
+def graph(subfolder, numbers, colors, labels):
   fig, ax = plt.subplots()
-  y_values = list(map(lambda r: r % max_y_height, range(len(task_results))))
-  offsets = list(map(lambda r: 0.0, task_results))
-  handles = []
-  for i in range(len(task_results[0]) - 1):
-    for j in range(len(offsets)):
-      offsets[j] += task_results[j][i]
-    x_values = list(map(lambda r: r[i + 1], task_results))
-    handles.append(ax.barh(y_values, x_values, left=offsets, color=task_colors[i]))
-
-  timestamps = list(map(lambda r: r[0], node_results))
-  num_nodes = list(map(lambda r: r[1], node_results))
-  plt.plot(timestamps, num_nodes, color=node_color)
+  for i in range(len(numbers)):
+    num = numbers[i]
+    timestamps = list(map(lambda r: r[0], num))
+    total = list(map(lambda r: r[1], num))
+    plt.plot(timestamps, total, color=colors[i], label=labels[i])
 
   plt.xlabel("Time (Seconds)")
-  plt.legend(handles, task_labels)
+  ax.legend()
   plot_name = subfolder + "/simulation.png"
   print("Plot", plot_name)
   fig.savefig(plot_name)
@@ -60,9 +53,31 @@ def process_tasks(start_time, subfolder):
   for file in files:
     results.append(process_data(folder + file, regex))
 
-  results = list(map(lambda r: format_data(r, start_time), results))
-  results = sorted(results, key=lambda r: r[0])
-  return results
+  total_ranges = []
+  active_ranges = []
+  pending_ranges = []
+  for i in range(len(results)):
+    total_ranges.append([results[i][0] - start_time, 1])
+    total_ranges.append([results[i][2] - start_time, -1])
+    pending_ranges.append([results[i][0] - start_time, 1])
+    pending_ranges.append([results[i][1] - start_time, -1])
+    active_ranges.append([results[i][1] - start_time, 1])
+    active_ranges.append([results[i][2] - start_time, -1])
+
+  ranges = [active_ranges, pending_ranges, total_ranges]
+  for i in range(len(ranges)):
+    ranges[i] = sorted(ranges[i], key=lambda r: r[0])
+
+  tasks = list(map(lambda r: [], ranges))
+  for i in range(len(ranges)):
+    num = 0
+    for j in range(len(ranges[i])):
+      [timestamp, increment] = ranges[i][j]
+      tasks[i].append([timestamp - 1, num])
+      num += increment
+      tasks[i].append([timestamp, num])
+
+  return tasks
 
 
 def process_nodes(subfolder):
@@ -70,8 +85,6 @@ def process_nodes(subfolder):
   folder = subfolder + "/nodes/"
   regex = [NODE_START_REGEX, NODE_END_REGEX]
   files = os.listdir(folder)
-  print(folder)
-  print(files)
   for file in files:
     node_times.append(process_data(folder + file, regex))
 
@@ -96,13 +109,13 @@ def main():
   parser = argparse.ArgumentParser()
   parser.add_argument("--subfolder", type=str, required=True, help="Folder containing data to graph")
   args = parser.parse_args()
-  [start_time, node_results] = process_nodes(args.subfolder)
-  task_results = process_tasks(start_time, args.subfolder)
-  colors = ["gray", "blue"]
-  labels = ["Idle", "Tide"]
-  node_color = "red"
-  max_y_height = 100
-  graph(args.subfolder,node_results, node_color, max_y_height, task_results, colors, labels)
+  [start_time, num_nodes] = process_nodes(args.subfolder)
+  [active_tasks, pending_tasks, total_tasks] = process_tasks(start_time, args.subfolder)
+
+  numbers = [num_nodes, active_tasks, pending_tasks, total_tasks]
+  colors = ["red", "blue", "gray", "purple"]
+  labels = ["Number of Servers", "Number of Running Jobs", "Number of Pending Jobs", "Number of Total Jobs"]
+  graph(args.subfolder, numbers, colors, labels)
 
 
 if __name__ == "__main__":
