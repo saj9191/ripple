@@ -27,8 +27,10 @@ def main():
 
   if not os.path.isdir(args.result_folder):
     os.mkdir(args.result_folder)
-    os.mkdir(args.result_folder + "/tasks")
-    os.mkdir(args.result_folder + "/nodes")
+    if not os.path.isdir(args.result_folder + "/tasks"):
+      os.mkdir(args.result_folder + "/tasks")
+    if not os.path.isdir(args.result_folder + "/nodes"):
+      os.mkdir(args.result_folder + "/nodes")
   shutil.copyfile(args.parameters, args.result_folder + "/" + args.parameters.split("/")[-1])
   m = master.Master(args.s3_application_url, args.result_folder, params)
   m.setup()
