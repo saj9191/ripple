@@ -202,7 +202,7 @@ class S3(Database):
       except Exception as e:
         time.sleep(1)
 
-    objects = list(map(lambda obj: Object(obj.key, obj, self.statistics), objects))
+    objects = list(map(lambda obj: Object(obj.key, self.s3.Object(table_name, obj.key), self.statistics), objects))
     return objects
 
   def __put__(self, table_name: str, key: str, content: BinaryIO, metadata: Dict[str, str]):
