@@ -1,9 +1,9 @@
+import argparse
 import boto3
-import json
+import numpy as np
 import os
 import random
 import re
-import time
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
@@ -47,6 +47,9 @@ def on_border(polygon, x, y):
     j = (i + 1) % len(polygon)
     [ix, iy] = polygon[i]
     [jx, jy] = polygon[j]
+    if (x == ix and y == iy) or (x == jx and y == jy):
+      return True
+
     cross_prod = (y - iy) * (jx - ix) - (x - ix) * (jy - iy)
     if abs(cross_prod) > 10:
       continue
@@ -94,30 +97,45 @@ def write_classification(f, pixels):
     f.write(p)
 
 
-def create_classifications(s3, folder, image_name, polygons, border, inside, outside):
+def create_window(im, x, y, window_width, window_height, width, height):
+  window = np.zeros([2 * window_height + 1, 2 * window_width + 1, 3])
+  for index_y in range(2 * window_height + 1):
+    window_y = y - window_height + index_y
+    if 0 <= window_y and window_y < height:
+      for index_x in range(2 * window_width + 1):
+        window_x = x - window_width + index_x
+        if 0 <= window_x and window_x < width:
+          window[index_y][index_x] = im[window_y, window_x]
+
+  return window
+
+
+def create_classifications(s3, folder, image_name, polygons, border, inside, outside, window_width, window_height):
   im = plt.imread(folder + "/" + image_name)
   [height, width, dim] = im.shape
 
   for y in range(height):
     for x in range(width):
       [r, g, b] = im[y, x]
+      window = create_window(im, x, y, window_width, window_height, width, height)
+
       if len(polygons) == 0:
-        outside.add("{r} {g} {b} {c}\n".format(r=r, g=g, b=b, c=OUTSIDE))
+        outside.add("{s} {c}\n".format(s=np.array_str(window), c=OUTSIDE))
       else:
         found = False
         for polygon in polygons:
           if on_border(polygon, x, y):
-            border.add("{r} {g} {b} {c}\n".format(r=r, g=g, b=b, c=BORDER))
+            border.add("{s} {c}\n".format(s=np.array_str(window), c=BORDER))
             found = True
             break
           elif in_polygon(polygon, x, y):
-            inside.add("{r} {g} {b} {c}\n".format(r=r, g=g, b=b, c=INSIDE))
+            inside.add("{s} {c}\n".format(s=np.array_str(window), c=INSIDE))
             found = True
         if not found:
-          outside.add("{r} {g} {b} {c}\n".format(r=r, g=g, b=b, c=OUTSIDE))
+          outside.add("{s} {c}\n".format(s=np.array_str(window), c=OUTSIDE))
 
 
-def process_images(folder, solutions, params):
+def process_images(folder, solutions, bucket, width, height):
   image_names = [f for f in os.listdir(folder) if os.path.isfile(os.path.join(folder, f))]
   random.shuffle(image_names)
   image_names = image_names[:100]
@@ -126,15 +144,12 @@ def process_images(folder, solutions, params):
   outside = set()
   s3 = boto3.resource("s3")
 
-  i = 0
-  for image_name in image_names:
-    print(time.time(), i, image_name)
+  for i in range(len(image_names)):
+    print(i + 1, "/", len(image_names), "B", len(border), "I", len(inside), "O", len(outside))
+    image_name = image_names[i]
     name = image_name.replace("3band_", "").replace(".tif", "")
     solution = solutions[name]
-    print("Before", "Border", len(border), "Inside", len(inside), "Outside", len(outside))
-    create_classifications(s3, folder, image_name, solution, border, inside, outside)
-    print("After", "Border", len(border), "Inside", len(inside), "Outside", len(outside))
-#    if len(border) > third and len(inside) > third and len(outside) > third:
+    create_classifications(s3, folder, image_name, solution, border, inside, outside, width, height)
 
   border = list(border)
   inside = list(inside)
@@ -146,14 +161,23 @@ def process_images(folder, solutions, params):
   print("Num points", num_points)
   classifications = border[:num_points] + inside[:num_points] + outside[:num_points]
   random.shuffle(classifications)
-  key = "train.classification"
+  key = "train.classification.w{w}-h{h}".format(w=width, h=height)
   temp_name = "/tmp/{0:s}".format(key)
   with open(temp_name, "w+") as f:
     write_classification(f, classifications)
-  s3.Object(params["bucket"], key).put(Body=open(temp_name, "rb"))
+  s3.Object(bucket, key).put(Body=open(temp_name, "rb"))
   print("Final", "Border", len(border), "Inside", len(inside), "Outside", len(outside))
 
 
-solutions = parse_solutions("../spacenet_data/vector_data/summarydata/AOI_1_RIO_polygons_solution_3band.csv")
-params = json.loads(open("../json/spacenet-classification.json").read())
-process_images("../spacenet_data/train_data/3band", solutions, params)
+def main():
+  parser = argparse.ArgumentParser()
+  parser.add_argument("--bucket", type=str, required=True, help="Bucket to upload results")
+  parser.add_argument("--width", type=int, required=True, help="Window width")
+  parser.add_argument("--height", type=int, required=True, help="Window height")
+  args = parser.parse_args()
+
+  solutions = parse_solutions("../spacenet_data/vector_data/summarydata/AOI_1_RIO_polygons_solution_3band.csv")
+  process_images("../spacenet_data/train_data/3band", solutions, args.bucket, args.width, args.height)
+
+
+main()
