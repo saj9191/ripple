@@ -95,6 +95,7 @@ class TestEntry(Entry):
 
 class TestTable(Table):
   entries: Dict[str, TestEntry]
+
   def __init__(self, name: str, statistics: database.Statistics, resources: Any):
     Table.__init__(self, name, statistics, resources)
     self.entries = {}
@@ -125,7 +126,9 @@ class TestDatabase(Database):
       os.mkdir("/tmp/s3")
 
   def __download__(self, table_name: str, key: str, f: BinaryIO) -> int:
-    return self.get_entry(table_name, key).download(f)
+    entry: TestEntry = self.get_entry(table_name, key)
+    assert(entry is not None)
+    return entry.download(f)
 
   def __get_content__(self, table_name: str, key: str, start_byte: int, end_byte: int) -> str:
     content: str = self.get_object(table_name, key).content
@@ -154,16 +157,18 @@ class TestDatabase(Database):
               "name": table_name
             },
             "object": {
-            "key": key
+              "key": key
             }
           }
         }]
       })
 
   def add_entry(self, table_name: str, key: str, content: bytes):
-    self.tables[table_name].add_entry(key, content.decode("utf-8"))
+    self.tables[table_name].add_entry(key, content)
 
   def add_table(self, table_name: str) -> Table:
+    if table_name in self.tables:
+      raise Exception("Table", table_name, "already exists")
     table: Table = TestTable(table_name, self.statistics, None)
     self.tables[table_name] = table
     return table
@@ -215,6 +220,7 @@ class Client:
       }
     }
 
+
 def create_event_from_payload(database: Database, payload: Dict[str, Any], params: Dict[str, Any]):
   def load():
     return params
@@ -227,6 +233,7 @@ def create_event_from_payload(database: Database, payload: Dict[str, Any], param
   }
 
   return {**base, **payload}
+
 
 def create_event(database: Database, table_name: str, key: str, params: Dict[str, Any], offsets=None):
   return create_event_from_payload(database, create_payload(table_name, key, int(key.split("/")[0]), offsets=offsets), params)
