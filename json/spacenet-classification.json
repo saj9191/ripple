@@ -1,73 +1,74 @@
 {
-	"input_name": "3band_AOI_1_RIO_img5792.tif",
-	"bucket": "knn",
-	"credential_profile": "add-credentials-here",
-	"folder": "knn",
-	"log": "log",
-	"num_bins": 18,
-	"model": "lambda",
-	"scheduler": false,
-	"iterations": 1,
-	"region": "us-east-1",
+	"bucket": "maccoss-tide",
+	"log": "maccoss-log",
+	"region": "us-west-2",
 	"role": "service-role/lambdaFullAccessRole",
 	"storage_class": "STANDARD",
-	"tag": "tide",
+	"folder": "hello",
+	"tag": "spacenet",
 	"timeout": 300,
-	"stats": true,
-	"setup": true,
 	"dependencies": {
 		"formats": {
 			"classification": [
+				"formats/knn.py",
+				"formats/pixel.py",
 				"formats/new_line.py"
 			],
 			"knn": [
 				"formats/new_line.py"
+			],
+			"pixel": [
+				"formats/new_line.py"
 			]
-		}
+		},
+		"libraries": "knn_libraries"
 	},
 	"functions": {
 		"convert-to-pixels": {
-			"file": "application",
 			"application": "convert_to_pixels",
-			"batch_size": 10000,
-			"memory_size": 128
-		},
-		"map-spacenet": {
-			"file": "map",
-		  "map_bucket": "spacenet",
+			"file": "application",
 			"memory_size": 128,
-		  "input_key_value": "key",
-		  "bucket_key_value": "train", 
-		  "output_function": "knn",
-		  "directories": false,
-		  "ranges": false
+		  "pixels_per_bin": 10000
+		},
+		"pair-train": {
+			"application": "pair",
+		  "file": "application",
+			"memory_size": 128,
+			"split_size": 200000
 		},
 		"knn": {
+			"application": "run_knn",
 		  "file": "application",
 			"format": "classification",
-			"application": "run_knn",
 			"memory_size": 3008,
-			"train_bucket": "-spacenet-east-1",
-			"n": 100
+			"k": 100
 		},
 		"combine-knn-files": {
 			"file": "combine_files",
 			"format": "knn",
 			"memory_size": 3008,
-			"n": 100
+			"k": 100
+		},
+		"draw-borders": {
+			"application": "draw_borders",
+			"file": "application",
+			"format": "knn",
+			"memory_size": 1024
 		}
 	},
 	"pipeline": [{
-	  "name": "convert-to-pixels"
+	  "name": "convert-to-pixels",
+	  "output": "pixel"
 	}, {
-	  "name": "map-spacenet"
+	  "name": "pair-train"
 	}, {
-	  "name": "knn" 
+	  "name": "knn",
+		"input": "pixel"
 	}, {
 	  "name": "combine-knn-files",
-		"num_bins": 43
+		"sort": true
 	}, {
 	  "name": "combine-knn-files",
-		"num_bins": 1
+		"sort": false
 	}]
 }

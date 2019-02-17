@@ -1,40 +1,36 @@
-from PIL import Image
-import os
 import util
+from database import Database
+from PIL import Image
+from typing import List
 
 
-def setup_file(bin_id, output_format, output_files):
-  output_format["bin"] = bin_id
-  temp_file = "/tmp/{0:s}".format(util.file_name(output_format))
-  dir_name = os.path.dirname(temp_file)
-  if not os.path.exists(dir_name):
-    os.makedirs(dir_name)
-  output_files.append(temp_file)
-  f = open(temp_file, "w+")
+def make_file(output_format, output_files):
+  output_format["bin"] += 1
+  output_file = "/tmp/{0:s}".format(util.file_name(output_format))
+  util.make_folder(output_format)
+  f = open(output_file, "w+")
+  output_files.append(output_file)
   return f
 
-
-def run(file, params, input_format, output_format, offsets):
-  im = Image.open(file)
+def run(database: Database, key: str, params, input_format, output_format, offsets: List[int]):
+  im = Image.open(key)
   px = im.load()
   width, height = im.size
   output_format["ext"] = "pixel"
 
-  bin_id = output_format["bin"]
-  count = 0
+  num_bins = int((width * height + params["pixels_per_bin"] - 1) / params["pixels_per_bin"])
+  output_format["bin"] = 0
+  output_format["num_bins"] = num_bins
   output_files = []
-  f = setup_file(bin_id, output_format, output_files)
+  f = make_file(output_format, output_files)
 
   for y in range(height):
     for x in range(width):
-      pixel = px[x, y]
-      f.write("{x} {y} {r} {g} {b}\n".format(x=x, y=y, r=pixel[0], g=pixel[1], b=pixel[2]))
-      count += 1
-      if count == params["batch_size"]:
+      [r, g, b] = px[x, y]
+      f.write("{x} {y} {r} {g} {b}\n".format(x=x, y=y, r=r, g=g, b=b))
+      if (y * height + x) % params["pixels_per_bin"] == params["pixels_per_bin"] - 1:
         f.close()
-        bin_id += 1
-        f = setup_file(bin_id, output_format, output_files)
-        count = 0
-
+        f = make_file(output_format, output_files)
   f.close()
+
   return output_files
