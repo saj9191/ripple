@@ -18,7 +18,6 @@ def run(database: Database, file: str, params, input_format, output_format, offs
     for (root, dirs, files) in os.walk(dir_path, topdown=True):
         for ele in files:
             ele = ''.join(ele)
-            print(ele)
             subprocess.call("chmod 755 "+ dir_path +ele,shell = True)
 
 
