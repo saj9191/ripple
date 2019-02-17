@@ -21,3 +21,7 @@ scripts/crux-output*
 scripts/*.index
 scripts/*.csv
 scripts/*.mzML
+tests/fastore
+tests/ssw
+tests/tide
+tests/spacenet
