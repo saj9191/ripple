@@ -1,21 +1,44 @@
 import iterator
 import new_line
-import util
+from database import Entry
+from iterator import OffsetBounds, Optional
+from typing import Any, BinaryIO, Dict, Iterable, List, Tuple
+
+
+# CLASSIFICATION ITERATOR
+# Currently, just supports RGA like values.
+# Expects files to put of the format
+# r1 g1 b1 classification1
+# r2 g2 b2 classification2
+#         *
+#         *
+#         *
+# rn gn bn classification
+
+
+Classification = Tuple[int, int, int, int]
+
+
+def __to_classification__(item: str) -> Classification:
+  parts: List[int] = list(map(lambda i: int(i), item.split(" ")))
+  assert(len(parts) == 4)
+  return (parts[0], parts[1], parts[2], parts[3])
 
 
 class Iterator(new_line.Iterator):
-  def __init__(self, obj, chunk_size, offsets={}):
-    self.identifier = new_line.Iterator.IDENTIFIER
-    iterator.Iterator.__init__(self, Iterator, obj, chunk_size)
-    iterator.Iterator.__setup__(self, offsets)
+  identifiers = None
 
-  def from_array(obj, items, offsets):
-    assert(len(offsets["offsets"]) == 0)
-    return new_line.Iterator.IDENTIFIER.join(list(map(lambda i: " ".join(i), items)))
+  def __init__(self, obj: Entry, offset_bounds: Optional[OffsetBounds] = None):
+    iterator.Iterator.__init__(self, Iterator, obj, offset_bounds)
 
-  def get(obj, start_byte, end_byte, identifier):
-    content = util.read(obj, start_byte, end_byte)
-    lines = content.split(new_line.Iterator.IDENTIFIER)
-    lines = list(filter(lambda line: len(line) > 0, lines))
-    classifications = list(map(lambda line: list(map(lambda x: float(x), line.split(" "))), lines))
-    return classifications
+  @classmethod
+  def from_array(cls: Any, items: List[Classification], f: Optional[BinaryIO], extra: Dict[str, Any]) -> Tuple[str, Dict[str, str]]:
+    content: str = cls.delimiter.item_token.join(list(map(lambda i: " ".join(list(map(lambda j: str(j), i))), items)))
+    if f:
+      f.write(str.encode(content))
+    return (content, {})
+
+  @classmethod
+  def to_array(cls: Any, content: str) -> Iterable[Classification]:
+    items = filter(lambda item: len(item.strip()) > 0, content.split(cls.delimiter.item_token))
+    return map(lambda item: __to_classification__(item), items)
