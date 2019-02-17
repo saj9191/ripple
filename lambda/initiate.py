@@ -1,23 +1,18 @@
 import boto3
-import json
 import util
+from database import Database
+from typing import Any, Dict, List
 
 
-def initiate(bucket_name, key, input_format, output_format, offsets, params):
-  util.print_read(input_format, key, params)
-  input_format["prefix"] = params["input_prefix"]
-  prefix = util.key_prefix(util.file_name(input_format))
-  objects = util.get_objects(params["bucket"], prefix, params)
-  assert(len(objects) == 1)
-
+def initiate(d: Database, bucket_name: str, key: str, input_format: Dict[str, Any], output_format: Dict[str, Any], offsets: List[int], params: Dict[str, Any]):
   payload = {
     "Records": [{
       "s3": {
         "bucket": {
-          "name": params["bucket"],
+          "name": params["trigger_bucket"],
         },
         "object": {
-          "key": objects[0].key,
+          "key": params["trigger_key"],
         },
         "extra_params": {
           "prefix": output_format["prefix"],
@@ -27,14 +22,7 @@ def initiate(bucket_name, key, input_format, output_format, offsets, params):
   }
 
   client = boto3.client("lambda")
-  response = client.invoke(
-    FunctionName=params["output_function"],
-    InvocationType="Event",
-    Payload=json.JSONEncoder().encode(payload)
-  )
-  assert(response["ResponseMetadata"]["HTTPStatusCode"] == 202)
-
-  return []
+  d.invoke(client, params["output_function"], params, payload)
 
 
 def handler(event, context):
