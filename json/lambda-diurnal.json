@@ -8,7 +8,7 @@
 	"input_prefix": "DIA-Files",
 	"interval": 1800,
 	"num_interval_requests": 15,
-	"num_threads": 5,
+	"num_threads": 20,
 	"region": "us-west-2",
 	"start_offset": 0
 }

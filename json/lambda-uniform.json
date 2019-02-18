@@ -5,9 +5,9 @@
 	"duration": 3600,
 	"input_bucket": "tide-source-data",
 	"input_prefix": "DIA-Files",
-	"interval": 60,
-	"num_interval_requests": 5,
-	"num_threads": 5,
+	"interval": 10,
+	"num_interval_requests": 1,
+	"num_threads": 10,
 	"region": "us-west-2",
 	"start_offset": 0
 }
