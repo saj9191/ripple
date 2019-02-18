@@ -46,10 +46,10 @@ class Entry:
   def __download__(self, f: BinaryIO) -> int:
     raise Exception("Entry::__download__ not implemented")
 
-  def __get_content__(self) -> str:
+  def __get_content__(self) -> bytes:
     raise Exception("Entry::__get_content__ not implemented")
 
-  def __get_range__(self, start_index: int, end_index: int) -> str:
+  def __get_range__(self, start_index: int, end_index: int) -> bytes:
     raise Exception("Entry::get_range not implemented")
 
   def content_length(self) -> int:
@@ -60,14 +60,14 @@ class Entry:
     content_length: int = self.__download__(f)
     return content_length
 
-  def get_content(self) -> str:
+  def get_content(self) -> bytes:
     self.statistics.read_count += 1
     return self.__get_content__()
 
   def get_metadata(self) -> Dict[str, str]:
     raise Exception("Entry::get_metadata not implemented")
 
-  def get_range(self, start_index: int, end_index: int) -> str:
+  def get_range(self, start_index: int, end_index: int) -> bytes:
     self.statistics.read_count += 1
     return self.__get_range__(start_index, end_index)
 
@@ -132,9 +132,9 @@ class Database:
     self.statistics.write_byte_count += os.path.getsize(content.name)
     self.__put__(table_name, key, content, metadata)
 
-  def read(self, table_name: str, key: str) -> str:
+  def read(self, table_name: str, key: str) -> bytes:
     self.statistics.read_count += 1
-    content: str = self.__read__(table_name, key)
+    content: bytes = self.__read__(table_name, key)
     self.statistics.read_byte_count += len(content)
     return content
 
@@ -152,11 +152,11 @@ class Object(Entry):
     self.resources.download_fileobj(f)
     return f.tell()
 
-  def __get_content__(self) -> str:
-    return self.resources.get()["Body"].read().decode("utf-8")
+  def __get_content__(self) -> bytes:
+    return self.resources.get()["Body"].read()
 
-  def __get_range__(self, start_index: int, end_index: int) -> str:
-    return self.resources.get(Range="bytes={0:d}-{1:d}".format(start_index, end_index))["Body"].read().decode("utf-8")
+  def __get_range__(self, start_index: int, end_index: int) -> bytes:
+    return self.resources.get(Range="bytes={0:d}-{1:d}".format(start_index, end_index))["Body"].read()
 
   def content_length(self) -> int:
     return self.resources.content_length
@@ -184,10 +184,9 @@ class S3(Database):
     bucket.download_fileobj(key, f)
     return f.tell()
 
-  def __get_content__(self, table_name: str, key: str, start_byte: int, end_byte: int) -> str:
+  def __get_content__(self, table_name: str, key: str, start_byte: int, end_byte: int) -> bytes:
     obj = self.s3.Object(table_name, key)
-    content = obj.get(Range="bytes={0:d}-{1:d}".format(start_byte, end_byte))["Body"].read()
-    return content.decode("utf-8")
+    return obj.get(Range="bytes={0:d}-{1:d}".format(start_byte, end_byte))["Body"].read()
 
   def __get_entries__(self, table_name: str, prefix: Optional[str]=None) -> List[Entry]:
     done = False
@@ -208,10 +207,10 @@ class S3(Database):
   def __put__(self, table_name: str, key: str, content: BinaryIO, metadata: Dict[str, str]):
     self.__s3_write__(table_name, key, content, metadata)
 
-  def __read__(self, table_name: str, key: str) -> str:
+  def __read__(self, table_name: str, key: str) -> bytes:
     obj = self.s3.Object(table_name, key)
     content = obj.get()["Body"].read()
-    return content.decode("utf-8")
+    return content
 
   def __write__(self, table_name: str, key: str, content: bytes, metadata: Dict[str, str]):
     self.__s3_write__(table_name, key, content, metadata)

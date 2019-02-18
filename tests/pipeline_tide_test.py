@@ -22,7 +22,7 @@ class Tide(unittest.TestCase):
 
     entries: List[TestEntry] = pp.database.get_entries(pp.table.name)
     entry: TestEntry = entries[-2]
-    actual_output: List[str] = sorted(entry.get_content().split("\n"))
+    actual_output: List[str] = sorted(entry.get_content().decode("utf-8").split("\n"))
     self.assertCountEqual(expected_output, actual_output)
     self.assertListEqual(expected_output, actual_output)
 
@@ -30,7 +30,7 @@ class Tide(unittest.TestCase):
       expected_output: List[str] = sorted(f.read().split("\n"))
 
     entry: TestEntry = entries[-1]
-    actual_output: List[str] = sorted(entry.get_content().split("\n"))
+    actual_output: List[str] = sorted(entry.get_content().decode("utf-8").split("\n"))
     self.assertLessEqual(float(abs(len(expected_output) - len(actual_output)))/len(expected_output), 0.05)
     pp.database.destroy()
 

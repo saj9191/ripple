@@ -98,8 +98,9 @@ class Iterator(Generic[T]):
         if end != cls.delimiter.item_token:
           f.write(str.encode(cls.delimiter.item_token))
       if cls.options.has_header and i > 0:
-        lines = entry.get_content().split(cls.delimiter.item_token)[1:]
-        f.write(str.encode(cls.delimiter.item_token.join(lines)))
+        lines = entry.get_content().split(str.encode(cls.delimiter.item_token))[1:]
+        content = str.encode(cls.delimiter.item_token).join(lines)
+        f.write(content)
       else:
         entry.download(f)
 
@@ -118,7 +119,7 @@ class Iterator(Generic[T]):
     return (content, metadata)
 
   @classmethod
-  def to_array(cls: Any, content: str) -> Iterable[Any]:
+  def to_array(cls: Any, content: bytes) -> Iterable[Any]:
     items: Iterable[str] = filter(lambda item: len(item.strip()) > 0, content.split(cls.delimiter.item_token))
     if cls.delimiter.position == DelimiterPosition.start:
       items = map(lambda item: cls.delimiter.item_token + item, items)

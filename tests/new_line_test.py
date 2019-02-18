@@ -115,7 +115,7 @@ class IteratorMethods(unittest.TestCase):
       new_line.Iterator.combine(entries, f, {})
 
     with open(temp_name) as f:
-      self.assertEqual(f.read(), "".join(list(map(lambda entry: entry.get_content(), entries))))
+      self.assertEqual(f.read(), "".join(list(map(lambda entry: entry.get_content().decode("utf-8"), entries))))
     os.remove(temp_name)
 
 

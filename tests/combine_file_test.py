@@ -40,7 +40,7 @@ class CombineFunction(unittest.TestCase):
     self.assertEqual(len(entries), 3)
     combined_entry = entries[-1]
     self.assertEqual(combined_entry.key, "1/123.400000-13/1-1/1-1-1-suffix.new")
-    self.assertEqual(combined_entry.get_content(), "A B C\nD E F\nG H I\nJ K L\n")
+    self.assertEqual(combined_entry.get_content().decode("utf-8"), "A B C\nD E F\nG H I\nJ K L\n")
 
   def test_batches(self):
     database: TestDatabase = TestDatabase()
@@ -72,7 +72,7 @@ class CombineFunction(unittest.TestCase):
     self.assertEqual(len(entries), 4)
     combined_entry = entries[-1]
     self.assertEqual(combined_entry.key, "1/123.400000-13/1-1/2-1-2-suffix.new")
-    self.assertEqual(combined_entry.get_content(), "M N O\bP Q R\n")
+    self.assertEqual(combined_entry.get_content().decode("utf-8"), "M N O\bP Q R\n")
 
     event = tutils.create_event(database, table1.name, entry2.key, params)
     combine_files.handler(event, context)
@@ -80,7 +80,7 @@ class CombineFunction(unittest.TestCase):
     self.assertEqual(len(entries), 5)
     combined_entry = entries[-2]
     self.assertEqual(combined_entry.key, "1/123.400000-13/1-1/1-1-2-suffix.new")
-    self.assertEqual(combined_entry.get_content(), "A B C\nD E F\nG H I\nJ K L\n")
+    self.assertEqual(combined_entry.get_content().decode("utf-8"), "A B C\nD E F\nG H I\nJ K L\n")
 
 
 if __name__ == "__main__":

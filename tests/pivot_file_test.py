@@ -57,7 +57,7 @@ optimal_alignment_score: 193 suboptimal_alignment_score: 48""")
     pivot_file.handler(event, context)
     entries = database.get_entries(table1.name)
     self.assertEqual(len(entries), 2)
-    self.assertEqual(entries[1].get_content(), "{0:s}\n{1:s}\n2009.0\t290321.0\t540010.0".format(table1.name, entry1.key))
+    self.assertEqual(entries[1].get_content().decode("utf-8"), "{0:s}\n{1:s}\n2009.0\t290321.0\t540010.0".format(table1.name, entry1.key))
 
   def test_offsets(self):
     database: TestDatabase = TestDatabase()
@@ -102,7 +102,7 @@ optimal_alignment_score: 193 suboptimal_alignment_score: 48""")
     pivot_file.handler(event, context)
     entries = database.get_entries(table1.name)
     self.assertEqual(len(entries), 2)
-    self.assertEqual(entries[1].get_content(), "{0:s}\n{1:s}\n2009.0\t290321.0\t540010.0".format(table1.name, entry1.key))
+    self.assertEqual(entries[1].get_content().decode("utf-8"), "{0:s}\n{1:s}\n2009.0\t290321.0\t540010.0".format(table1.name, entry1.key))
 
 
 if __name__ == "__main__":

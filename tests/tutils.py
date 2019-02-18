@@ -42,8 +42,6 @@ def create_payload(table_name: str, key: str, prefix: int, file_id: Optional[int
 
 
 class TestEntry(Entry):
-  content: str
-
   def __init__(self, key: str, content: Optional[Union[str, bytes]], statistics: Optional[database.Statistics]=None):
     self.file_name = key.replace("/tmp/s3/", "")
     self.file_name = key.replace("/tmp/", "")
@@ -70,11 +68,11 @@ class TestEntry(Entry):
       f.write(g.read())
     return self.length
 
-  def __get_content__(self) -> str:
-    with open(self.file_name) as f:
+  def __get_content__(self) -> bytes:
+    with open(self.file_name, "rb") as f:
       return f.read()
 
-  def __get_range__(self, start_index: int, end_index: int) -> str:
+  def __get_range__(self, start_index: int, end_index: int) -> bytes:
     with open(self.file_name) as f:
       f.seek(start_index)
       return f.read(end_index - start_index + 1)
@@ -130,8 +128,8 @@ class TestDatabase(Database):
     assert(entry is not None)
     return entry.download(f)
 
-  def __get_content__(self, table_name: str, key: str, start_byte: int, end_byte: int) -> str:
-    content: str = self.get_object(table_name, key).content
+  def __get_content__(self, table_name: str, key: str, start_byte: int, end_byte: int) -> bytes:
+    content: str = self.get_entry(table_name, key).content
     return content[start_byte:end_byte]
 
   def __get_entries__(self, table_name: str, prefix: Optional[str]=None) -> List[TestEntry]:
@@ -145,7 +143,7 @@ class TestDatabase(Database):
     self.__write__(table_name, key, f.read(), metadata)
 
   def __read__(self, table_name: str, key: str) -> str:
-    return self.get_object(table_name, key).content
+    return self.get_entry(table_name, key).content
 
   def __write__(self, table_name: str, key: str, content: bytes, metadata: Dict[str, str]):
     self.add_entry(table_name, key, content)

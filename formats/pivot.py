@@ -19,7 +19,7 @@ class Iterator(iterator.Iterator[None]):
     pivots: List[int] = []
     file_key: Optional[str] = None
     for entry in entries:
-      content: str = entry.get_content()
+      content: str = entry.get_content().decode("utf-8")
       [file_bucket, file_key, pivot_content] = content.split("\n")
       pivot_content: str = pivot_content.strip()
       if len(pivot_content) > 0:
@@ -49,7 +49,7 @@ class Iterator(iterator.Iterator[None]):
 def get_pivot_ranges(bucket_name, key, params={}):
   ranges = []
 
-  content: str = params["s3"].get_entry(bucket_name, key).get_content()
+  content: str = params["s3"].get_entry(bucket_name, key).get_content().decode("utf-8")
   [file_bucket, file_key, pivot_content] = content.split("\n")
   pivots = list(map(lambda p: float(p), pivot_content.split("\t")))
 

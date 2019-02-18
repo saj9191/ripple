@@ -13,7 +13,6 @@ from tutils import TestDatabase, TestEntry, TestTable
 
 class Pipeline:
   database: TestDatabase
-  dir_name: str
   log: TestTable
   log_name: str
   params: Dict[str, Any]
@@ -27,7 +26,6 @@ class Pipeline:
       self.params = json.loads(f.read())
 
     self.stage = -1
-    self.dir_name = "test-{0:f}".format(time.time())
     self.setup = self.__import_base__("setup")
     self.util = self.__import_base__("util")
     self.setup.process_functions(self.params)
@@ -38,10 +36,6 @@ class Pipeline:
     self.database = TestDatabase()
     self.table = self.database.add_table(self.table_name)
     self.log = self.database.add_table(self.log_name)
-    os.mkdir(self.dir_name)
-
-  def __del__(self):
-    shutil.rmtree(self.dir_name)
 
   def __get_stage__(self, payload: Dict[str, Any]) -> int:
     s3 = payload["Records"][0]["s3"]
@@ -114,8 +108,8 @@ class Pipeline:
   # Okay so we need to look at payloads instead
   # So it may be better to try to create the S3 wrapper first.
   def run(self, key: str, file: str):
-    with open(self.dir_path + "/" + file) as f:
-      content: str = f.read()
+    with open(self.dir_path + "/" + file, "rb") as f:
+      content: bytes = f.read()
     token: str = key.split("/")[1]
     entry: TestEntry = self.table.add_entry(key, content)
     self.database.payloads.append(tutils.create_payload(self.table_name, key, 0))

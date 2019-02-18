@@ -20,7 +20,7 @@ class SmithWaterman(unittest.TestCase):
 
     entries: List[TestEntry] = pp.database.get_entries(pp.table.name)
     entry: TestEntry = entries[-1]
-    actual_output: List[str] = filter(lambda item: len(item.strip()) > 0, entry.get_content().split("\n\n"))
+    actual_output: List[str] = filter(lambda item: len(item.strip()) > 0, entry.get_content().decode("utf-8").split("\n\n"))
     blast = pp.__import_format__("blast")
     actual_output = sorted(actual_output, key=lambda item: [blast.Iterator.get_identifier_value(item, blast.Identifiers.score), item])
 
