@@ -170,7 +170,8 @@ class Iterator(Generic[T]):
       self.remainder = b''
       more = False
     else:
-      index: int = stream.rindex(str.encode(self.delimiter.offset_token)) if self.delimiter.offset_token in stream else -1
+      token = str.encode(self.delimiter.offset_token)
+      index: int = stream.rindex(token) if token in stream else -1
       if index != -1:
         if self.delimiter.position == DelimiterPosition.inbetween:
           index += 1
