@@ -173,32 +173,29 @@ def handle(event, context, func):
   params = load_parameters(s3_dict, input_format, start_time, event)
 
   if run_function(params, input_format):
-    [output_format, bucket_format] = get_formats(input_format, params)
-    if not duplicate_execution(bucket_format, params):
+    [output_format, log_format] = get_formats(input_format, params)
+    if not duplicate_execution(log_format, params):
       if not is_set(event, "test"):
         clear_tmp(params)
       make_folder(output_format)
       func(params["s3"], bucket_name, key, input_format, output_format, params["offsets"], params)
 
-      show_duration(context, input_format, bucket_format, params)
+      show_duration(context, input_format, log_format, params)
 
 
 def get_formats(input_format, params):
   output_format = dict(input_format)
   output_format["prefix"] = params["prefix"] + 1
 
-  for key in ["file_id", "num_files"]:
+  for key in ["file_id", "num_files", "bin", "num_bins"]:
     if key in params:
       output_format[key] = params[key]
 
-  if params["file"] in ["combine_files", "split_file"]:
-    bucket_format = dict(input_format)
-  else:
-    bucket_format = dict(output_format)
+  log_format = dict(output_format)
+  log_format["prefix"] -= 1
 
-  bucket_format["ext"] = "log"
-  bucket_format["prefix"] = output_format["prefix"]
-  return [output_format, bucket_format]
+  log_format["ext"] = "log"
+  return [output_format, log_format]
 
 
 def run_function(params, m):
