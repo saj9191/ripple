@@ -1,28 +1,32 @@
 import iterator
 import new_line
+import numpy as np
 from database import Entry
 from iterator import OffsetBounds, Optional
-from typing import Any, BinaryIO, Dict, Iterable, List, Tuple
+from typing import Any, BinaryIO, Dict, Iterable, List, Tuple, Union
 
 
 # CLASSIFICATION ITERATOR
 # Currently, just supports RGA like values.
 # Expects files to put of the format
-# r1 g1 b1 classification1
-# r2 g2 b2 classification2
+# nparray(f11 f12 ... f1m) classification1
+# nparray(f21 f22 ... f2m) classification2
 #         *
 #         *
 #         *
-# rn gn bn classification
+# nparray(fn1 fn2 ... fnm) classification
 
 
-Classification = Tuple[int, int, int, int]
+Classification = Tuple[List[int], int]
 
 
-def __to_classification__(item: str) -> Classification:
-  parts: List[int] = list(map(lambda i: int(i), item.split(" ")))
-  assert(len(parts) == 4)
-  return (parts[0], parts[1], parts[2], parts[3])
+def __to_classification__(item: bytes) -> Classification:
+  [features, classification] = item.split(b' ')
+  return (np.frombuffer(features, dtype=int), int(classification))
+
+
+def __from_classification__(c: Classification) -> bytes:
+  return c[0].tostring() + str.encode(" {c}".format(c=c[1]))
 
 
 class Iterator(new_line.Iterator):
@@ -32,13 +36,13 @@ class Iterator(new_line.Iterator):
     iterator.Iterator.__init__(self, Iterator, obj, offset_bounds)
 
   @classmethod
-  def from_array(cls: Any, items: List[Classification], f: Optional[BinaryIO], extra: Dict[str, Any]) -> Tuple[str, Dict[str, str]]:
-    content: str = cls.delimiter.item_token.join(list(map(lambda i: " ".join(list(map(lambda j: str(j), i))), items)))
+  def from_array(cls: Any, items: List[Classification], f: Optional[BinaryIO], extra: Dict[str, Any]) -> Tuple[Union[bytes, str], Dict[str, str]]:
+    content: bytes = str.encode(cls.delimiter.item_token).join(list(map(lambda item: __from_classification__(item), items)))
     if f:
-      f.write(str.encode(content))
+      f.write(content)
     return (content, {})
 
   @classmethod
-  def to_array(cls: Any, content: str) -> Iterable[Classification]:
-    items = filter(lambda item: len(item.strip()) > 0, content.split(cls.delimiter.item_token))
+  def to_array(cls: Any, content: Union[bytes, str]) -> Iterable[Classification]:
+    items = filter(lambda item: len(item.strip()) > 0, content.split(str.encode(cls.delimiter.item_token)))
     return map(lambda item: __to_classification__(item), items)
