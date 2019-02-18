@@ -13,7 +13,6 @@ class Indices(Enum):
   outside = 2
 
 
-
 def run(database: Database, key: str, params, input_format, output_format, offsets: List[int]):
   entries = database.get_entries(params["bucket"], str(params["input_prefix"]) + "/")
   assert(len(entries) == 1)
@@ -28,14 +27,13 @@ def run(database: Database, key: str, params, input_format, output_format, offse
   width, height = im.size
 
   classifications = np.empty([height, width], dtype=int)
-  new_image = np.empty([height, width, 3])
   it = knn.Iterator(database.get_entry(params["bucket"], key.replace("/tmp/", "")))
   more = True
   while more:
     [items, _, more] = it.next()
     # Currently, evaluating using majority rules
     for [point, neighbors] in items:
-      [x, y] = list(map(lambda p: int(p), point.split(" ")))
+      [x, y] = list(map(lambda p: int(p), point.split(b' ')))
       scores = [0, 0, 0]
       neighbors = sorted(neighbors, key=lambda n: n[0])
       d1 = neighbors[0][0]
@@ -49,6 +47,8 @@ def run(database: Database, key: str, params, input_format, output_format, offse
       if len(top) == 1:
         if top[0] == Indices.border.value:
           im.putpixel((x, y), (255, 0, 0))
+        elif top[0] == Indices.inside.value:
+          im.putpixel((x, y), (255, 255, 0))
         classifications[y][x] = top[0]
       else:
         classifications[y][x] = Indices.outside.value

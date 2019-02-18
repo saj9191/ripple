@@ -55,13 +55,14 @@ class Iterator(Generic[T]):
     self.entry = entry
     self.offset_bounds = offset_bounds
     self.offsets: List[int] = []
-    self.remainder: str = ""
+    self.remainder: bytes = b''
     self.__setup__()
 
   def __adjust__(self, end_index: int, token: str) -> int:
-    content: str = self.entry.get_range(max(end_index - self.adjust_chunk_size, 0), end_index)
+    content: bytes = self.entry.get_range(max(end_index - self.adjust_chunk_size, 0), end_index)
     last_byte: int = len(content) - 1
-    offset_index: int = last_byte - content.rindex(token)
+    index = content.rindex(str.encode(token))
+    offset_index: int = last_byte - content.rindex(str.encode(token))
     assert(offset_index >= 0)
     return offset_index
 
@@ -102,7 +103,10 @@ class Iterator(Generic[T]):
         content = str.encode(cls.delimiter.item_token).join(lines)
         f.write(content)
       else:
-        entry.download(f)
+        # TODO: There seems to be a bug where if I do entry.download(f), it's not guaranteed
+        # the entire file will write at the end. I need to figure out why because downloading,
+        # loading into memory and then writing to disk is slower.
+        f.write(entry.get_content())
 
     return metadata
 
@@ -159,15 +163,14 @@ class Iterator(Generic[T]):
     next_start_index: int = self.next_index
     next_end_index: int = min(next_start_index + self.read_chunk_size, self.get_offset_end_index())
     more: bool = True
-    stream: str = self.entry.get_range(next_start_index, next_end_index)
+    stream: bytes = self.entry.get_range(next_start_index, next_end_index)
     stream = self.remainder + stream
-
     if next_end_index == self.get_offset_end_index():
       next_start_index -= len(self.remainder)
-      self.remainder = ""
+      self.remainder = b''
       more = False
     else:
-      index: int = stream.rindex(self.delimiter.offset_token) if self.delimiter.offset_token in stream else -1
+      index: int = stream.rindex(str.encode(self.delimiter.offset_token)) if self.delimiter.offset_token in stream else -1
       if index != -1:
         if self.delimiter.position == DelimiterPosition.inbetween:
           index += 1

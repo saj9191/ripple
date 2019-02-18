@@ -197,11 +197,11 @@ class S3(Database):
           objects = bucket.objects.filter(Prefix=prefix)
         else:
           objects = bucket.objects.all()
+        objects = list(map(lambda obj: Object(obj.key, self.s3.Object(table_name, obj.key), self.statistics), objects))
         done = True
       except Exception as e:
         time.sleep(1)
 
-    objects = list(map(lambda obj: Object(obj.key, self.s3.Object(table_name, obj.key), self.statistics), objects))
     return objects
 
   def __put__(self, table_name: str, key: str, content: BinaryIO, metadata: Dict[str, str]):

@@ -98,7 +98,7 @@ def write_classification(f, pixels):
 
 
 def create_window(im, x, y, window_width, window_height, width, height):
-  window = np.zeros([2 * window_height + 1, 2 * window_width + 1, 3])
+  window = np.zeros([2 * window_height + 1, 2 * window_width + 1, 3], dtype=int)
   for index_y in range(2 * window_height + 1):
     window_y = y - window_height + index_y
     if 0 <= window_y and window_y < height:
@@ -110,6 +110,11 @@ def create_window(im, x, y, window_width, window_height, width, height):
   return window
 
 
+def write(pixels, window, clz):
+  s = window.tostring()
+  pixels.add(s + str.encode(" {c}\n\n".format(c=clz)))
+
+
 def create_classifications(s3, folder, image_name, polygons, border, inside, outside, window_width, window_height):
   im = plt.imread(folder + "/" + image_name)
   [height, width, dim] = im.shape
@@ -118,27 +123,26 @@ def create_classifications(s3, folder, image_name, polygons, border, inside, out
     for x in range(width):
       [r, g, b] = im[y, x]
       window = create_window(im, x, y, window_width, window_height, width, height)
-
       if len(polygons) == 0:
-        outside.add("{s} {c}\n".format(s=np.array_str(window), c=OUTSIDE))
+        write(outside, window, OUTSIDE)
       else:
         found = False
         for polygon in polygons:
           if on_border(polygon, x, y):
-            border.add("{s} {c}\n".format(s=np.array_str(window), c=BORDER))
+            write(border, window, BORDER)
             found = True
             break
           elif in_polygon(polygon, x, y):
-            inside.add("{s} {c}\n".format(s=np.array_str(window), c=INSIDE))
+            write(inside, window, INSIDE)
             found = True
         if not found:
-          outside.add("{s} {c}\n".format(s=np.array_str(window), c=OUTSIDE))
+          write(outside, window, OUTSIDE)
 
 
 def process_images(folder, solutions, bucket, width, height):
   image_names = [f for f in os.listdir(folder) if os.path.isfile(os.path.join(folder, f))]
   random.shuffle(image_names)
-  image_names = image_names[:100]
+  image_names = image_names[:500]
   border = set()
   inside = set()
   outside = set()
@@ -163,7 +167,7 @@ def process_images(folder, solutions, bucket, width, height):
   random.shuffle(classifications)
   key = "train.classification.w{w}-h{h}".format(w=width, h=height)
   temp_name = "/tmp/{0:s}".format(key)
-  with open(temp_name, "w+") as f:
+  with open(temp_name, "wb+") as f:
     write_classification(f, classifications)
   s3.Object(bucket, key).put(Body=open(temp_name, "rb"))
   print("Final", "Border", len(border), "Inside", len(inside), "Outside", len(outside))

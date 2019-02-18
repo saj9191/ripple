@@ -4,7 +4,8 @@ from typing import List
 
 
 def run(database: Database, key: str, params, input_format, output_format, offsets: List[int]):
-  obj = database.get_entry("maccoss-spacenet", "train.classification")
+  train_key = "train.classification.w1-h1"
+  obj = database.get_entry("maccoss-spacenet", train_key)
   client = params["client"] if "client" in params else boto3.client("lambda")
   content_length: int = obj.content_length()
   split_size = params["split_size"]
@@ -28,7 +29,7 @@ def run(database: Database, key: str, params, input_format, output_format, offse
             "num_files": num_files,
             "bin": output_format["bin"],
             "num_bins": output_format["num_bins"],
-            "train_key": "train.classification",
+            "train_key": train_key,
             "prefix": output_format["prefix"],
             "train_offsets": offsets,
           }

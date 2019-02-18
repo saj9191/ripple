@@ -2,8 +2,8 @@ import iterator
 import new_line
 import numpy as np
 from database import Entry
-from iterator import OffsetBounds, Optional
-from typing import Any, BinaryIO, Dict, Iterable, List, Tuple, Union
+from iterator import Delimiter, DelimiterPosition, OffsetBounds, Options
+from typing import Any, BinaryIO, ClassVar, Dict, Generic, Iterable, List, Optional, Tuple, TypeVar, Union
 
 
 # CLASSIFICATION ITERATOR
@@ -18,19 +18,23 @@ from typing import Any, BinaryIO, Dict, Iterable, List, Tuple, Union
 
 
 Classification = Tuple[List[int], int]
+T = TypeVar("T")
 
 
 def __to_classification__(item: bytes) -> Classification:
-  [features, classification] = item.split(b' ')
-  return (np.frombuffer(features, dtype=int), int(classification))
+  parts = item.split(b' ')
+  classification = int(parts[-1])
+  features = np.frombuffer(b' '.join(parts[:-1]), dtype=int)
+  return (features, classification)
 
 
 def __from_classification__(c: Classification) -> bytes:
   return c[0].tostring() + str.encode(" {c}".format(c=c[1]))
 
 
-class Iterator(new_line.Iterator):
-  identifiers = None
+class Iterator(Generic[T], iterator.Iterator[T]):
+  delimiter: Delimiter = Delimiter(item_token="\n\n", offset_token="\n\n", position=DelimiterPosition.inbetween)
+  options: ClassVar[Options] = Options(has_header=False)
 
   def __init__(self, obj: Entry, offset_bounds: Optional[OffsetBounds] = None):
     iterator.Iterator.__init__(self, Iterator, obj, offset_bounds)

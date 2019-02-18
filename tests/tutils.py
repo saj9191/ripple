@@ -73,7 +73,7 @@ class TestEntry(Entry):
       return f.read()
 
   def __get_range__(self, start_index: int, end_index: int) -> bytes:
-    with open(self.file_name) as f:
+    with open(self.file_name, "rb") as f:
       f.seek(start_index)
       return f.read(end_index - start_index + 1)
 

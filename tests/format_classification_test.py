@@ -27,7 +27,7 @@ class IteratorMethods(unittest.TestCase):
     table1: TestTable = database.create_table("table1")
 
     zeros = np.zeros([3, 3, 3], dtype=int)
-    content: bytes = zeros.tostring() + str.encode(" 1\n")
+    content: bytes = zeros.tostring() + str.encode(" 1\n\n")
     nonzeros = np.copy(zeros)
     nonzeros[0][0] = [255, 255, 255]
     nonzeros[1][1] = [1, 2, 3]

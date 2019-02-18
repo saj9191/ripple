@@ -1,6 +1,7 @@
 import heapq
 import iterator
 import new_line
+import util
 from database import Entry
 from iterator import OffsetBounds, Optional, Options
 from typing import Any, BinaryIO, ClassVar, Dict, Iterable, List, Tuple
@@ -17,28 +18,30 @@ from typing import Any, BinaryIO, ClassVar, Dict, Iterable, List, Tuple
 #         *
 # xn yn,dn1 cn1,dn2 cn2...dnk cnk
 
-Neighbors = Tuple[str, List[Tuple[float, int]]]
+Neighbors = Tuple[bytes, List[Tuple[float, int]]]
 
 
-def __neighbor_from_str__(item: str) -> Tuple[float, int]:
-  [distance, classification] = item.split(" ")
+def __neighbor_from_bytes__(item: bytes) -> Tuple[float, int]:
+  [distance, classification] = item.split(b' ')
   return (float(distance), int(classification))
 
 
-def __neighbor_to_str__(n: Tuple[float, int]) -> str:
-  return "{0:f} {1:d}".format(n[0], n[1])
+def __neighbor_to_bytes__(n: Tuple[float, int]) -> bytes:
+  return str.encode("{0:f} {1:d}".format(n[0], n[1]))
 
 
-def __neighbors_from_str__(line: str) -> Neighbors:
-  items = line.split(",")
-  neighbors: List[Tuple[float, int]] = list(map(lambda item: __neighbor_from_str__(item), items[1:]))
+def __neighbors_from_bytes__(line: bytes) -> Neighbors:
+  items = line.split(b',')
+  neighbors: List[Tuple[float, int]] = list(map(lambda item: __neighbor_from_bytes__(item), items[1:]))
+  assert(len(items[0].strip()) > 0)
   return (items[0], neighbors)
 
 
-def __neighbors_to_str__(n: Neighbors) -> str:
+def __neighbors_to_bytes__(n: Neighbors) -> bytes:
   (point, neighbors) = n
-  neighbors = list(map(lambda i: __neighbor_to_str__(i), neighbors))
-  return point + "," + ",".join(neighbors)
+  assert(len(point.strip()) > 0)
+  neighbors = list(map(lambda i: __neighbor_to_bytes__(i), neighbors))
+  return point + b',' + b','.join(neighbors)
 
 
 class Iterator(new_line.Iterator):
@@ -49,10 +52,10 @@ class Iterator(new_line.Iterator):
 
   @classmethod
   def from_array(cls: Any, items: List[Neighbors], f: Optional[BinaryIO], extra: Dict[str, Any]) -> Tuple[str, Dict[str, str]]:
-    content = cls.delimiter.item_token.join(list(map(lambda n: __neighbors_to_str__(n), items)))
+    content = str.encode(cls.delimiter.item_token).join(list(map(lambda n: __neighbors_to_bytes__(n), items)))
 
     if f:
-      f.write(str.encode(content))
+      f.write(content)
     return (content, {})
 
   @classmethod
@@ -63,13 +66,13 @@ class Iterator(new_line.Iterator):
     return float(x + "." + y)
 
   @classmethod
-  def to_array(cls: Any, content: str) -> Iterable[Neighbors]:
-    items = filter(lambda item: len(item.strip()) > 0, content.split(cls.delimiter.item_token))
-    return map(lambda n: __neighbors_from_str__(n), items)
+  def to_array(cls: Any, content: bytes) -> Iterable[Neighbors]:
+    items = filter(lambda item: len(item.strip()) > 0, content.split(str.encode(cls.delimiter.item_token)))
+    return map(lambda n: __neighbors_from_bytes__(n), items)
 
   @classmethod
   def combine(cls: Any, entries: List[Entry], f: BinaryIO, extra: Dict[str, Any]) -> Dict[str, str]:
-    if not extra["sort"]:
+    if not util.is_set(extra, "sort"):
       return new_line.Iterator.combine(entries, f, extra)
 
     top_scores = {}
@@ -88,9 +91,13 @@ class Iterator(new_line.Iterator):
             if len(top_scores[s]) > extra["k"]:
               heapq.heappop(top_scores[s])
 
-    for s in top_scores.keys():
+    keys = list(top_scores.keys())
+    for i in range(len(keys)):
+      if i > 0:
+        f.write(b'\n')
+      s = keys[i]
       line = s
       for [score, c] in top_scores[s]:
-        line += ",{0:f} {1:d}".format(-1 * score, c)
-      f.write(str.encode("{0:s}\n".format(line)))
+        line += str.encode(",{0:f} {1:d}".format(-1 * score, c))
+      f.write(line)
     return {}
