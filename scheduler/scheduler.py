@@ -40,13 +40,13 @@ class Task(threading.Thread):
     self.payloads = {key: []}
     self.processed = set()
     self.running = True
-    self.stage = 1
+    self.stage = 0
     self.timeout = timeout
     self.token = key.split("/")[1]
-    self.client = util.setup_client("lambda", self.params)
+    self.__setup_client__()
 
-  def __get_children_payloads__(self, s3, object_key):
-    obj = s3.Object(self.params["log"], object_key)
+  def __get_children_payloads__(self, object_key):
+    obj = self.s3.Object(self.params["log"], object_key)
     content = obj.get()["Body"].read()
     params = json.loads(content.decode("utf-8"))
     return params["payloads"]
@@ -59,6 +59,9 @@ class Task(threading.Thread):
       expected_num_objs = m["num_bins"] * m["num_files"]
     return expected_num_objs
 
+  def __get_objects__(self):
+    return list(map(lambda o: o.key, self.bucket.objects.filter(Prefix=str(self.stage) + "/" + self.token)))
+
   def __get_output_key__(self, prefix, payload):
     s3_payload = payload["Records"][0]["s3"]
     object_key = s3_payload["object"]["key"]
@@ -70,35 +73,43 @@ class Task(threading.Thread):
     params["prefix"] = prefix
     name = self.params["pipeline"][prefix]["name"]
     params["file"] = self.params["functions"][name]["file"]
-    [output_format, bucket_format] = util.get_formats(input_format, params)
-    return util.file_name(bucket_format)
+    [output_format, log_format] = util.get_formats(input_format, params)
+    return util.file_name(log_format)
 
   def __invoke__(self, name, payload):
-    self.params["s3"].invoke(self.client, name, self.params, payload)
+    response = self.client.invoke(
+      FunctionName=name,
+      InvocationType="Event",
+      Payload=json.JSONEncoder().encode(payload)
+    )
+    assert(response["ResponseMetadata"]["HTTPStatusCode"] == 202)
 
-  def __process_object__(self, s3, obj):
+  def __process_object__(self, obj):
     if obj not in self.processed:
-      for payload in self.__get_children_payloads__(s3, obj):
-        self.payloads[self.__get_output_key__(self.stage, payload)] = payload
+      payloads = self.__get_children_payloads__(obj)
+      for payload in payloads:
+        key = self.__get_output_key__(self.stage, payload)
+        self.payloads[key] = payload
       self.processed.add(obj)
+
+  def __setup_client__(self):
+    self.s3 = boto3.resource("s3")
+    self.bucket = self.s3.Bucket(self.bucket_name)
+    self.client = util.setup_client("lambda", self.params)
 
   def run(self):
     print("Processing", self.key)
-    s3 = boto3.resource("s3")
-    bucket = s3.Bucket(self.bucket_name)
-
-    while self.stage <= len(self.params["pipeline"]):
-      objs = list(map(lambda o: o.key, bucket.objects.filter(Prefix=str(self.stage) + "/" + self.token)))
+    self.payloads[self.key] = []
+    while self.stage < len(self.params["pipeline"]):
+      objs = self.__get_objects__()
       expected_num_objs = self.__expected_num_objects__(objs)
 
-      if self.stage < len(self.params["pipeline"]):
-        for obj in objs:
-          self.__process_object__(s3, obj)
+      for obj in objs:
+        self.__process_object__(obj)
 
       if len(objs) == expected_num_objs:
-        for obj in objs:
-          del self.payloads[obj]
         self.stage += 1
+        print("Starting stage", self.stage)
         self.check_time = time.time()
       else:
         if time.time() - self.check_time > self.timeout:
@@ -108,16 +119,17 @@ class Task(threading.Thread):
             if m["bin"] not in found:
               found[m["bin"]] = set()
             found[m["bin"]].add(m["file_id"])
-          for bin_id in range(1, m["num_bins"] + 1):
-            for file_id in range(1, m["num_files"] + 1):
-              if bin_id not in found or file_id not in found[bin_id]:
-                m["bin"] = bin_id
-                m["file_id"] = file_id
-                name = self.params["pipeline"][m["prefix"] - 1]["name"]
-                key = util.file_name(m)
-                print("Cannot find", key, "Reinvoking", name)
-                print(self.payloads[key])
-                self.__invoke__(name, key)
+
+          if len(objs) > 0:
+            for bin_id in range(1, m["num_bins"] + 1):
+              for file_id in range(1, m["num_files"] + 1):
+                if bin_id not in found or file_id not in found[bin_id]:
+                  m["bin"] = bin_id
+                  m["file_id"] = file_id
+                  name = self.params["pipeline"][m["prefix"]]["name"]
+                  key = util.file_name(m)
+                  print("Cannot find", key, "Reinvoking", name)
+                  self.__invoke__(name, key)
           self.check_time = time.time()
 
     print("Done processing", self.key)
@@ -131,7 +143,6 @@ class Scheduler:
     self.params = params
     self.policy = policy
     self.running = True
-    self.running_tasks = {}
     self.__setup__()
     self.tasks = []
     self.timeout = timeout
@@ -154,14 +165,17 @@ class Scheduler:
     name = "sqs-" + bucket_name
     response = client.list_queues(QueueNamePrefix=name)
     urls = response["QueueUrls"] if "QueueUrls" in response else []
-    assert(len(urls) <= 1)
+    urls = list(map(lambda url: url == name, urls))
     sqs = boto3.resource("sqs")
     if len(urls) == 0:
-      queue = sqs.create_queue(QueueName=name, Attributes={"DelaySeconds": "5"})
+      print("Creating queue", name, "in", self.params["region"])
+      response = sqs.create_queue(QueueName=name, Attributes={"DelaySeconds": "5"})
+      print(response)
+      queue = sqs.get_queue_by_name(QueueName=name)
     else:
       queue = sqs.get_queue_by_name(QueueName=name)
-    # Remove stale SQS messages
-    client.purge_queue(QueueUrl=queue.url)
+      # Remove stale SQS messages
+      client.purge_queue(QueueUrl=queue.url)
 
     policy = {
       "Statement": [{
@@ -202,20 +216,36 @@ class Scheduler:
     return queue
 
   def __setup_sqs_queues__(self):
-    self.log_queue = self.__setup_sqs_queue__(self.params["log"], filter_prefix="1/")
-#   self.bucket_queue = self.__setup_sqs_queue__(self.params["bucket"], filter_prefix="0/")
+    self.log_queue = self.__setup_sqs_queue__(self.params["log"], filter_prefix="0/")
+    self.sqs = boto3.client("sqs", region_name=self.params["region"])
 
   def __aws_connections__(self):
     self.s3 = boto3.resource("s3")
-    #self.client = util.setup_client("lambda", self.params)
 
-  def add(self, priority, deadline, payload, prefix=0):
-    item = priority_queue.Item(priority, prefix, self.next_job_id, deadline, payload, self.params)
-    self.next_job_id += 1
-    self.queue.put(item)
+  def __add_task__(self, key):
+    self.tasks.append(Task(self.params["log"], key, self.timeout, self.params))
 
-  def __object_exists__(self, object_key):
-    return util.object_exists(self.s3, self.params["log"], object_key)
+  def __check_tasks__(self):
+    messages = self.__get_messages__(self.log_queue)
+    for message in messages:
+      body = json.loads(message["Body"])
+      if "Records" in body:
+        for record in body["Records"]:
+          key = record["s3"]["object"]["key"]
+          self.__add_task__(key)
+          self.tasks[-1].start()
+      self.__delete_message__(self.log_queue, message)
+
+    i = 0
+    while i < len(self.tasks):
+      if not self.tasks[i].running:
+        self.tasks[i].join()
+        self.tasks.pop(i)
+      else:
+        i += 1
+
+  def __delete_message__(self, queue, message):
+    self.sqs.delete_message(QueueUrl=self.log_queue.url, ReceiptHandle=message["ReceiptHandle"])
 
   def __get_messages__(self, queue):
     sqs = boto3.client("sqs", region_name=self.params["region"])
@@ -228,32 +258,22 @@ class Scheduler:
     messages = response["Messages"] if "Messages" in response else []
     return messages
 
-  def __check_tasks__(self):
-    messages = self.__get_messages__(self.log_queue)
-    sqs = boto3.client("sqs", region_name=self.params["region"])
-    for message in messages:
-      body = json.loads(message["Body"])
-      if "Records" in body:
-        for record in body["Records"]:
-          key = record["s3"]["object"]["key"]
-          self.tasks.append(Task(self.params["log"], key, self.timeout, self.params))
-          self.tasks[-1].start()
-      sqs.delete_message(QueueUrl=self.log_queue.url, ReceiptHandle=message["ReceiptHandle"])
-
-    i = 0
-    while i < len(self.tasks):
-      if not self.tasks[i].running:
-        self.tasks[i].join()
-        self.tasks.pop(i)
-      else:
-        i += 1
+  def __object_exists__(self, object_key):
+    return util.object_exists(self.s3, self.params["log"], object_key)
 
   def __running__(self):
     return self.running
 
+  def add(self, priority, deadline, payload, prefix=0):
+    item = priority_queue.Item(priority, prefix, self.next_job_id, deadline, payload, self.params)
+    self.next_job_id += 1
+    self.queue.put(item)
+
   def listen(self):
     while self.__running__():
       self.__check_tasks__()
+    for task in self.tasks:
+      task.join()
 
 
 def run(policy, timeout, params):
