@@ -1,12 +1,14 @@
 import argparse
 import boto3
+import math
 import numpy as np
 import os
 import random
 import re
 import matplotlib
 matplotlib.use('Agg')
-import matplotlib.pyplot as plt
+from PIL import Image
+from PIL import ImageFilter
 
 SOLUTION_REGEX = re.compile("([A-Za-z0-9_]+),([0-9]+),\"POLYGON \(([0-9\-\.\, \(\)]+)\).*")
 POLYGON_REGEX = re.compile("([0-9\.]+) ([-0-9\.]+) ([0-9]+)")
@@ -97,7 +99,7 @@ def write_classification(f, pixels):
     f.write(p)
 
 
-def create_window(im, x, y, window_width, window_height, width, height):
+def create_window(px, x, y, window_width, window_height, width, height):
   window = np.zeros([2 * window_height + 1, 2 * window_width + 1, 3], dtype=int)
   for index_y in range(2 * window_height + 1):
     window_y = y - window_height + index_y
@@ -105,44 +107,50 @@ def create_window(im, x, y, window_width, window_height, width, height):
       for index_x in range(2 * window_width + 1):
         window_x = x - window_width + index_x
         if 0 <= window_x and window_x < width:
-          window[index_y][index_x] = im[window_y, window_x]
+          window[index_y][index_x] = px[window_x, window_y]
 
   return window
 
 
 def write(pixels, window, clz):
   s = window.tostring()
-  pixels.add(s + str.encode(" {c}\n\n".format(c=clz)))
+  pixels.add(s + str.encode(" {c}\r\n".format(c=clz)))
 
 
 def create_classifications(s3, folder, image_name, polygons, border, inside, outside, window_width, window_height):
-  im = plt.imread(folder + "/" + image_name)
-  [height, width, dim] = im.shape
+  im = Image.open(folder + "/" + image_name)
+  im = im.filter(ImageFilter.BoxBlur(1))
+  px = im.load()
+  width, height = im.size
+  dim = len(px[0, 0])
+  assert(dim == 3)
+  increment = 5 # Don't need to use every pixel
 
-  for y in range(height):
-    for x in range(width):
-      [r, g, b] = im[y, x]
-      window = create_window(im, x, y, window_width, window_height, width, height)
-      if len(polygons) == 0:
+  for i in range(0, height * width, increment):
+    y = math.floor(i / width)
+    x = i % width
+    [r, g, b] = px[x, y]
+    window = create_window(px, x, y, window_width, window_height, width, height)
+    if len(polygons) == 0:
+      write(outside, window, OUTSIDE)
+    else:
+      found = False
+      for polygon in polygons:
+        if on_border(polygon, x, y):
+          write(border, window, BORDER)
+          found = True
+          break
+        elif in_polygon(polygon, x, y):
+          write(inside, window, INSIDE)
+          found = True
+      if not found:
         write(outside, window, OUTSIDE)
-      else:
-        found = False
-        for polygon in polygons:
-          if on_border(polygon, x, y):
-            write(border, window, BORDER)
-            found = True
-            break
-          elif in_polygon(polygon, x, y):
-            write(inside, window, INSIDE)
-            found = True
-        if not found:
-          write(outside, window, OUTSIDE)
 
 
 def process_images(folder, solutions, bucket, width, height):
   image_names = [f for f in os.listdir(folder) if os.path.isfile(os.path.join(folder, f))]
   random.shuffle(image_names)
-  image_names = image_names[:500]
+  image_names = image_names[:700]
   border = set()
   inside = set()
   outside = set()
@@ -159,11 +167,11 @@ def process_images(folder, solutions, bucket, width, height):
   inside = list(inside)
   outside = list(outside)
   num_points = min([len(border), len(inside), len(outside)])
-  random.shuffle(border)
-  random.shuffle(inside)
-  random.shuffle(outside)
+#  random.shuffle(border)
+#  random.shuffle(inside)
+#  random.shuffle(outside)
   print("Num points", num_points)
-  classifications = border[:num_points] + inside[:num_points] + outside[:num_points]
+  classifications = border + inside + outside#border[:num_points] + inside[:num_points] + outside[:num_points]
   random.shuffle(classifications)
   key = "train.classification.w{w}-h{h}".format(w=width, h=height)
   temp_name = "/tmp/{0:s}".format(key)

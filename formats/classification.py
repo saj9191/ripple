@@ -33,7 +33,7 @@ def __from_classification__(c: Classification) -> bytes:
 
 
 class Iterator(Generic[T], iterator.Iterator[T]):
-  delimiter: Delimiter = Delimiter(item_token="\n\n", offset_token="\n\n", position=DelimiterPosition.inbetween)
+  delimiter: Delimiter = Delimiter(item_token="\r\n", offset_token="\r\n", position=DelimiterPosition.inbetween)
   options: ClassVar[Options] = Options(has_header=False)
 
   def __init__(self, obj: Entry, offset_bounds: Optional[OffsetBounds] = None):
