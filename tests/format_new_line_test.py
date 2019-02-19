@@ -27,14 +27,14 @@ class IteratorMethods(unittest.TestCase):
     entry1: TestEntry = table1.add_entry("test.new_line", "A B C\na b c\n1 2 3\nD E F\nd e f\n")
     it = TestIterator(entry1, OffsetBounds(8, 13), 10, 10)
     [items, offset_bounds, more] = it.next()
-    self.assertEqual(list(items), ["a b c"])
+    self.assertEqual(list(items), [b"a b c"])
     self.assertEqual(offset_bounds, OffsetBounds(6, 11))
     self.assertFalse(more)
 
     # No adjustment needed
     it = TestIterator(entry1, OffsetBounds(6, 11), 10, 10)
     [items, offset_bounds, more] = it.next()
-    self.assertEqual(list(items), ["a b c"])
+    self.assertEqual(list(items), [b"a b c"])
     self.assertEqual(offset_bounds, OffsetBounds(6, 11))
     self.assertFalse(more)
 
@@ -42,13 +42,13 @@ class IteratorMethods(unittest.TestCase):
     it = TestIterator(entry1, OffsetBounds(0, 7), 10, 10)
     [items, offset_bounds, more] = it.next()
     self.assertFalse(more)
-    self.assertEqual(list(items), ["A B C"])
+    self.assertEqual(list(items), [b"A B C"])
 
     # Beginning of content
     it = TestIterator(entry1, OffsetBounds(26, entry1.content_length() - 1), 10, 10)
     [items, offset_bounds, more] = it.next()
     self.assertFalse(more)
-    self.assertEqual(list(items), ["d e f"])
+    self.assertEqual(list(items), [b"d e f"])
 
   def test_next(self):
     database: TestDatabase = TestDatabase()
@@ -61,11 +61,11 @@ class IteratorMethods(unittest.TestCase):
     [items, offset_bounds, more] = it.next()
     self.assertTrue(more)
     self.assertEqual(OffsetBounds(0, 11), offset_bounds)
-    self.assertEqual(list(items), ["A B C", "a b c"])
+    self.assertEqual(list(items), [b"A B C", b"a b c"])
 
     [items, offset_bounds, more] = it.next()
     self.assertFalse(more)
-    self.assertEqual(list(items), ["1 2 3"])
+    self.assertEqual(list(items), [b"1 2 3"])
 
   def test_overflow(self):
     database: TestDatabase = TestDatabase()
@@ -81,12 +81,12 @@ class IteratorMethods(unittest.TestCase):
     self.assertTrue(more)
 
     [items, offset_bounds, more] = it.next()
-    self.assertEqual(list(items), ["A B C D E F G H"])
+    self.assertEqual(list(items), [b"A B C D E F G H"])
     self.assertEqual(offset_bounds, OffsetBounds(0, 15))
     self.assertTrue(more)
 
     [items, offset_bounds, more] = it.next()
-    self.assertEqual(list(items), ["a b c d e f g h"])
+    self.assertEqual(list(items), [b"a b c d e f g h"])
     self.assertEqual(offset_bounds, OffsetBounds(16, 31))
     self.assertTrue(more)
 
@@ -96,7 +96,7 @@ class IteratorMethods(unittest.TestCase):
     self.assertTrue(more)
 
     [items, offset_bounds, more] = it.next()
-    self.assertEqual(list(items), ["1 2 3 4 5 6 7 8 9"])
+    self.assertEqual(list(items), [b"1 2 3 4 5 6 7 8 9"])
     self.assertEqual(offset_bounds, OffsetBounds(32, 49))
     self.assertFalse(more)
 

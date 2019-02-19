@@ -124,11 +124,12 @@ class Iterator(Generic[T]):
 
   @classmethod
   def to_array(cls: Any, content: bytes) -> Iterable[Any]:
-    items: Iterable[str] = filter(lambda item: len(item.strip()) > 0, content.split(cls.delimiter.item_token))
+    token = str.encode(cls.delimiter.item_token)
+    items: Iterable[str] = filter(lambda item: len(item.strip()) > 0, content.split(token))
     if cls.delimiter.position == DelimiterPosition.start:
-      items = map(lambda item: cls.delimiter.item_token + item, items)
+      items = map(lambda item: token + item, items)
     elif cls.delimiter.position == DelimiterPosition.end:
-      items = map(lambda item: item + cls.delimiter.item_token, items)
+      items = map(lambda item: item + token, items)
     return items
 
   @classmethod
@@ -193,5 +194,5 @@ class Iterator(Generic[T]):
     [stream, offset_bounds] = self.transform(stream, offset_bounds)
     return (self.to_array(stream), offset_bounds, more)
 
-  def transform(self, stream: str, offset_bounds: Optional[OffsetBounds]) -> Tuple[str, Optional[OffsetBounds]]:
+  def transform(self, stream: bytes, offset_bounds: Optional[OffsetBounds]) -> Tuple[bytes, Optional[OffsetBounds]]:
     return (stream, offset_bounds)

@@ -28,24 +28,24 @@ class IteratorMethods(unittest.TestCase):
     # Read everything in one pass
     it = TestIterator(entry1, None, 30, 30)
     [items, offset_bounds, more] = it.next()
-    self.assertEqual(list(items), [">A\tB\tC\n", ">a\tb\tc\n", ">1\t2\t3\n"])
+    self.assertEqual(list(items), [b">A\tB\tC\n", b">a\tb\tc\n", b">1\t2\t3\n"])
     self.assertEqual(offset_bounds, OffsetBounds(0, 20))
     self.assertFalse(more)
 
     # Requires multiple passes
     it = TestIterator(entry1, None, 8, 8)
     [items, offset_bounds, more] = it.next()
-    self.assertEqual(list(items), [">A\tB\tC\n"])
+    self.assertEqual(list(items), [b">A\tB\tC\n"])
     self.assertEqual(offset_bounds, OffsetBounds(0, 6))
     self.assertTrue(more)
 
     [items, offset_bounds, more] = it.next()
-    self.assertEqual(list(items), [">a\tb\tc\n"])
+    self.assertEqual(list(items), [b">a\tb\tc\n"])
     self.assertEqual(offset_bounds, OffsetBounds(7, 13))
     self.assertTrue(more)
 
     [items, offset_bounds, more] = it.next()
-    self.assertEqual(list(items), [">1\t2\t3\n"])
+    self.assertEqual(list(items), [b">1\t2\t3\n"])
     self.assertEqual(offset_bounds, OffsetBounds(14, 20))
     self.assertFalse(more)
 

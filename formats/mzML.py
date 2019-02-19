@@ -314,7 +314,7 @@ class Iterator(iterator.Iterator[Identifiers]):
     if "num_spectra" in metadata:
       self.num_spectra = int(metadata["num_spectra"])
     else:
-      stream = self.entry.get_range(0, self.header_end_index)
+      stream = self.entry.get_range(0, self.header_end_index).decode("utf-8")
       m = self.spectrum_list_count_regex.search(stream)
       assert(m is not None)
       self.num_spectra = int(m.group(1))
@@ -338,17 +338,18 @@ class Iterator(iterator.Iterator[Identifiers]):
     root = ET.fromstring(content)
     return root.iter("spectrum")
 
-  def transform(self, stream: str, offset_bounds: Optional[OffsetBounds]) -> Tuple[str, Optional[OffsetBounds]]:
+  def transform(self, stream: bytes, offset_bounds: Optional[OffsetBounds]) -> Tuple[bytes, Optional[OffsetBounds]]:
     start_index: int
     end_index: int
     if not offset_bounds:
       start_index = self.spectra_start_index
       end_index = self.spectra_end_index
     else:
-      offsets: List[int] = list(map(lambda r: int(r.group(1)), self.offset_regex.finditer(stream)))
+      s: str = stream.decode("utf-8")
+      offsets: List[int] = list(map(lambda r: int(r.group(1)), self.offset_regex.finditer(s)))
       assert(len(offsets) > 0)
-      stream = self.entry.get_range(offset_bounds.end_index, offset_bounds.end_index + self.read_chunk_size)
-      next_offsets: List[int] = list(map(lambda r: int(r.group(1)), self.offset_regex.finditer(stream)))
+      s = self.entry.get_range(offset_bounds.end_index, offset_bounds.end_index + self.read_chunk_size).decode("utf-8")
+      next_offsets: List[int] = list(map(lambda r: int(r.group(1)), self.offset_regex.finditer(s)))
       offset_bounds.start_index = offsets[0]
       if len(next_offsets) > 0:
         offset_bounds.end_index = next_offsets[0] - 1
