@@ -1,0 +1,13 @@
+{
+	"bucket": "maccoss-tide",
+  "distribution": "bursty",
+	"duration": 14400,
+	"input_bucket": "tide-source-data",
+	"input_prefix": "DIA-Files",
+	"interval": 60,
+	"max_requests": 100,
+	"num_threads": 25,
+	"num_uniform": 30,
+	"region": "us-west-2",
+	"start_offset": 0
+}

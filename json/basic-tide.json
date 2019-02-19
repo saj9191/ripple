@@ -4,7 +4,7 @@
 	"iterations": 1,
 	"region": "us-west-2",
 	"folder": "tide",
-	"tag": "tide",
+	"tag": "tide-simulation",
 	"timeout": 600,
 	"num_bins": 50,
 	"bucket": "maccoss-tide",
@@ -30,7 +30,6 @@
 	"functions": {
 		"split-mzML": {
 			"split_size": 100000000,
-			"format": "mzML",
 			"file": "split_file",
 			"memory_size": 128
 		},

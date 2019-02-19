@@ -6,7 +6,7 @@
 	"storage_class": "STANDARD",
 	"folder": "hello",
 	"tag": "spacenet",
-	"timeout": 300,
+	"timeout": 600,
 	"dependencies": {
 		"formats": {
 			"classification": [
@@ -28,13 +28,13 @@
 			"application": "convert_to_pixels",
 			"file": "application",
 			"memory_size": 128,
-		  "pixels_per_bin": 10000
+		  "pixels_per_bin": 1000
 		},
 		"pair-train": {
 			"application": "pair",
 		  "file": "application",
 			"memory_size": 128,
-			"split_size": 200000
+			"split_size": 10000000
 		},
 		"knn": {
 			"application": "run_knn",
@@ -70,5 +70,8 @@
 	}, {
 	  "name": "combine-knn-files",
 		"sort": false
+	}, {
+    "name": "draw-borders",
+		"input": "input"
 	}]
 }
