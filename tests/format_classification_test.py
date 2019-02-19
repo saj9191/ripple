@@ -45,6 +45,27 @@ class IteratorMethods(unittest.TestCase):
     [actual_content, metadata] = classification.Iterator.from_array(items, None, {})
     self.assertSequenceEqual(actual_content, content)
 
+  def test_next(self):
+    database: TestDatabase = TestDatabase()
+    table1: TestTable = database.create_table("table1")
+
+    zeros = np.zeros([3, 3, 3], dtype=int)
+    content: bytes = zeros.tostring() + str.encode(" 1\n\n")
+    nonzeros = np.copy(zeros)
+    nonzeros[0][0] = [255, 255, 255]
+    nonzeros[1][1] = [1, 2, 3]
+    content += nonzeros.tostring() + str.encode(" 0")
+    entry1: TestEntry = table1.add_entry("test.classification", content)
+
+    it: TestIterator = TestIterator(entry1, None, 300, 300)
+    [items, bounds, more] = it.next()
+    self.assertTrue(more)
+    self.assertEqual(len(list(items)), 1)
+
+    [items, bounds, more] = it.next()
+    self.assertFalse(more)
+    self.assertEqual(len(list(items)), 1)
+
 
 if __name__ == "__main__":
   unittest.main()

@@ -174,7 +174,7 @@ class Iterator(Generic[T]):
       index: int = stream.rindex(token) if token in stream else -1
       if index != -1:
         if self.delimiter.position == DelimiterPosition.inbetween:
-          index += 1
+          index += len(self.delimiter.offset_token)
         next_end_index -= (len(stream) - index)
         next_start_index -= len(self.remainder)
         self.remainder = stream[index:]
@@ -182,7 +182,7 @@ class Iterator(Generic[T]):
       else:
         self.remainder = stream
         next_end_index -= len(self.remainder)
-        stream = ""
+        stream = b''
     self.next_index = min(next_end_index + len(self.remainder) + 1, self.get_offset_end_index())
     offset_bounds: Optional[OffsetBounds]
     if len(stream) == 0:
