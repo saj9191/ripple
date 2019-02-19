@@ -31,50 +31,59 @@ def payload(bucket, key):
 
 
 class Task(threading.Thread):
-  def __init__(self, bucket_name, key, timeout, params):
+  def __init__(self, bucket_name, token, messages, timeout, params):
     super(Task, self).__init__()
     self.bucket_name = bucket_name
+    self.key_to_payload = {}
     self.check_time = time.time()
-    self.key = key
+    self.messages = messages
     self.params = params
-    self.payloads = {key: []}
     self.processed = set()
     self.running = True
     self.stage = 0
     self.timeout = timeout
-    self.token = key.split("/")[1]
+    self.token = token
     self.__setup_client__()
 
-  def __get_children_payloads__(self, object_key):
-    obj = self.s3.Object(self.params["log"], object_key)
-    content = obj.get()["Body"].read()
-    params = json.loads(content.decode("utf-8"))
-    return params["payloads"]
+  def __current_logs__(self, payloads):
+    logs = set()
+    for payload in payloads:
+      logs.add(self.__get_key__(payload))
+    return logs
 
-  def __expected_num_objects__(self, objs):
-    if len(objs) == 0:
-      expected_num_objs = 1
-    else:
-      m = util.parse_file_name(objs[0])
-      expected_num_objs = m["num_bins"] * m["num_files"]
-    return expected_num_objs
+  def __get_children_payloads__(self, stage, payloads):
+    if stage == -1:
+      return set([(0, 1, 1)])
 
-  def __get_objects__(self):
-    return list(map(lambda o: o.key, self.bucket.objects.filter(Prefix=str(self.stage) + "/" + self.token)))
+    if len(payloads) == 0:
+      return set()
 
-  def __get_output_key__(self, prefix, payload):
-    s3_payload = payload["Records"][0]["s3"]
-    object_key = s3_payload["object"]["key"]
-    input_format = util.parse_file_name(object_key)
-    params = {**self.params, **s3_payload}
-    if "extra_params" in s3_payload:
-      params = {**params, **s3_payload["extra_params"]}
+    logs = set()
+    for payload in payloads:
+      key = payload["Records"][0]["s3"]["object"]["key"]
+      if key not in self.processed:
+        self.processed.add(key)
+        body = self.__get_object__(key)
+        for p in body["payloads"]:
+          key = self.__get_key__(p)
+          logs.add(key)
+          self.key_to_payload[key] = payload
+    return logs
 
-    params["prefix"] = prefix
-    name = self.params["pipeline"][prefix]["name"]
-    params["file"] = self.params["functions"][name]["file"]
-    [output_format, log_format] = util.get_formats(input_format, params)
-    return util.file_name(log_format)
+  def __get_key__(self, payload):
+    m = util.parse_file_name(payload["Records"][0]["s3"]["object"]["key"])
+    if "extra_params" in payload["Records"][0]["s3"]:
+      m = {**m, **payload["Records"][0]["s3"]["extra_params"]}
+    return (m["prefix"], m["bin"], m["file_id"])
+
+  def __get_object__(self, key):
+    return json.load(self.s3.Object(self.params["log"], key).get()["Body"].read().decode("utf-8"))
+
+  def __get_payloads__(self, stage):
+    if stage in self.messages:
+      if self.token in self.messages[stage]:
+        return self.messages[stage][self.token]
+    return []
 
   def __invoke__(self, name, payload):
     response = self.client.invoke(
@@ -84,13 +93,8 @@ class Task(threading.Thread):
     )
     assert(response["ResponseMetadata"]["HTTPStatusCode"] == 202)
 
-  def __process_object__(self, obj):
-    if obj not in self.processed:
-      payloads = self.__get_children_payloads__(obj)
-      for payload in payloads:
-        key = self.__get_output_key__(self.stage, payload)
-        self.payloads[key] = payload
-      self.processed.add(obj)
+  def __running__(self):
+    return True
 
   def __setup_client__(self):
     self.s3 = boto3.resource("s3")
@@ -98,47 +102,36 @@ class Task(threading.Thread):
     self.client = util.setup_client("lambda", self.params)
 
   def run(self):
-    print("Processing", self.key)
-    self.payloads[self.key] = []
-    while self.stage < len(self.params["pipeline"]):
-      objs = self.__get_objects__()
-      expected_num_objs = self.__expected_num_objects__(objs)
+    expected_logs = None
+    print("Starting stage", self.stage)
+    while self.__running__() and self.stage < len(self.params["pipeline"]):
+      actual_logs = self.__current_logs__(self.__get_payloads__(self.stage))
+      if expected_logs is None:
+        expected_logs = self.__get_children_payloads__(self.stage - 1, self.__get_payloads__(self.stage - 1))
 
-      for obj in objs:
-        self.__process_object__(obj)
-
-      if len(objs) == expected_num_objs:
+      if len(actual_logs) == len(expected_logs):
+        # We have all the payloads for this stage
         self.stage += 1
         print("Starting stage", self.stage)
-        self.check_time = time.time()
+        expected_logs = None
       else:
+        assert(len(actual_logs) < len(expected_logs))
         if time.time() - self.check_time > self.timeout:
-          found = {}
-          for obj in objs:
-            m = util.parse_file_name(obj)
-            if m["bin"] not in found:
-              found[m["bin"]] = set()
-            found[m["bin"]].add(m["file_id"])
-
-          if len(objs) > 0:
-            for bin_id in range(1, m["num_bins"] + 1):
-              for file_id in range(1, m["num_files"] + 1):
-                if bin_id not in found or file_id not in found[bin_id]:
-                  m["bin"] = bin_id
-                  m["file_id"] = file_id
-                  name = self.params["pipeline"][m["prefix"]]["name"]
-                  key = util.file_name(m)
-                  print("Cannot find", key, "Reinvoking", name)
-                  self.__invoke__(name, key)
+          missing_logs = expected_logs.difference(actual_logs)
+          for log in missing_logs:
+            name = self.params["pipeline"][self.stage]["name"]
+            print("Cannot find", log, "Reinvoking", name)
+            self.__invoke__(name, self.key_to_payload[log])
           self.check_time = time.time()
 
-    print("Done processing", self.key)
-    self.running = False
+    print("Done processing", self.token)
+    self.running = (self.stage < len(self.params["pipeline"]))
 
 
 class Scheduler:
   def __init__(self, policy, timeout, params):
     self.max_tasks = 1000
+    self.messages = {0: {}}
     self.next_job_id = 0
     self.params = params
     self.policy = policy
@@ -146,6 +139,63 @@ class Scheduler:
     self.__setup__()
     self.tasks = []
     self.timeout = timeout
+    self.tokens = set()
+
+  def __aws_connections__(self):
+    self.s3 = boto3.resource("s3")
+
+  def __add_task__(self, token):
+    self.tasks.append(Task(self.params["log"], token, self.messages, self.timeout, self.params))
+
+  def __check_tasks__(self):
+    self.__get_messages__(self.log_queue)
+    for token in self.messages[0].keys():
+      if token not in self.tokens:
+        self.__add_task__(token)
+        self.tasks[-1].start()
+        self.tokens.add(token)
+
+    i = 0
+    while i < len(self.tasks):
+      if not self.tasks[i].running:
+        self.tasks[i].join()
+        self.tasks.pop(i)
+      else:
+        i += 1
+
+  def __delete_message__(self, queue, message):
+    self.sqs.delete_message(QueueUrl=self.log_queue.url, ReceiptHandle=message["ReceiptHandle"])
+
+  def __get_messages__(self, queue):
+    messages = self.__fetch_messages__(self.log_queue)
+    for message in messages:
+      body = json.loads(message["Body"])
+      if "Records" in body:
+        for record in body["Records"]:
+          key = record["s3"]["object"]["key"]
+          parts = key.split("/")
+          prefix = int(parts[0])
+          token = parts[1]
+          if prefix not in self.messages:
+            self.messages[prefix] = {}
+          if token not in self.messages[prefix]:
+            self.messages[prefix][token] = []
+          self.messages[prefix][token].append(body)
+      self.__delete_message__(self.log_queue, message)
+
+  def __fetch_messages__(self, queue):
+    sqs = boto3.client("sqs", region_name=self.params["region"])
+    response = sqs.receive_message(
+      AttributeNames=["SentTimestamp"],
+      MaxNumberOfMessages=100,
+      QueueUrl=queue.url,
+      WaitTimeSeconds=1,
+    )
+    messages = response["Messages"] if "Messages" in response else []
+    return messages
+
+  def __running__(self):
+    return self.running
 
   def __setup__(self):
     if self.policy == "fifo":
@@ -216,53 +266,8 @@ class Scheduler:
     return queue
 
   def __setup_sqs_queues__(self):
-    self.log_queue = self.__setup_sqs_queue__(self.params["log"], filter_prefix="0/")
+    self.log_queue = self.__setup_sqs_queue__(self.params["log"])
     self.sqs = boto3.client("sqs", region_name=self.params["region"])
-
-  def __aws_connections__(self):
-    self.s3 = boto3.resource("s3")
-
-  def __add_task__(self, key):
-    self.tasks.append(Task(self.params["log"], key, self.timeout, self.params))
-
-  def __check_tasks__(self):
-    messages = self.__get_messages__(self.log_queue)
-    for message in messages:
-      body = json.loads(message["Body"])
-      if "Records" in body:
-        for record in body["Records"]:
-          key = record["s3"]["object"]["key"]
-          self.__add_task__(key)
-          self.tasks[-1].start()
-      self.__delete_message__(self.log_queue, message)
-
-    i = 0
-    while i < len(self.tasks):
-      if not self.tasks[i].running:
-        self.tasks[i].join()
-        self.tasks.pop(i)
-      else:
-        i += 1
-
-  def __delete_message__(self, queue, message):
-    self.sqs.delete_message(QueueUrl=self.log_queue.url, ReceiptHandle=message["ReceiptHandle"])
-
-  def __get_messages__(self, queue):
-    sqs = boto3.client("sqs", region_name=self.params["region"])
-    response = sqs.receive_message(
-      AttributeNames=["SentTimestamp"],
-      MaxNumberOfMessages=10,
-      QueueUrl=queue.url,
-      WaitTimeSeconds=1,
-    )
-    messages = response["Messages"] if "Messages" in response else []
-    return messages
-
-  def __object_exists__(self, object_key):
-    return util.object_exists(self.s3, self.params["log"], object_key)
-
-  def __running__(self):
-    return self.running
 
   def add(self, priority, deadline, payload, prefix=0):
     item = priority_queue.Item(priority, prefix, self.next_job_id, deadline, payload, self.params)
