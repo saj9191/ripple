@@ -5,7 +5,7 @@ from database import Database
 from typing import Any, Dict, List, Optional
 
 
-def create_payload(bucket: str, key: str, offsets: List[int], prefix: int, file_id: Optional[int]=None, num_files: Optional[int]=None):
+def create_payload(bucket: str, key: str, offsets: List[int], prefix: int, input_format, file_id: Optional[int]=None, num_files: Optional[int]=None):
   payload = {
     "Records": [{
       "s3": {
@@ -16,6 +16,8 @@ def create_payload(bucket: str, key: str, offsets: List[int], prefix: int, file_
           "key": key,
         },
         "extra_params": {
+          "bin": input_format["bin"],
+          "num_bins": input_format["num_bins"],
           "prefix": prefix,
           "offsets": offsets,
         }
@@ -50,7 +52,7 @@ def split_file(d: Database, bucket_name: str, key: str, input_format: Dict[str, 
 
   while file_id <= num_files:
     offsets = [(file_id - 1) * split_size, min(content_length, (file_id) * split_size) - 1]
-    payload = create_payload(input_bucket, input_key, offsets, output_format["prefix"], file_id, num_files)
+    payload = create_payload(input_bucket, input_key, offsets, output_format["prefix"], input_format, file_id, num_files)
 
     s3_params = payload["Records"][0]["s3"]
 
