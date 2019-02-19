@@ -1,2 +1,8 @@
 #!/bin/bash
-python3.6 -m unittest discover -s tests -p "*_test.py"
+
+if [ "$1" == "format" ]; then
+  pattern="format_*_test.py"
+else
+	pattern="*_test.py"
+fi
+python3.6 -m unittest discover -s tests -p $pattern
