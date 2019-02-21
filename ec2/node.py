@@ -92,14 +92,14 @@ class Task(threading.Thread):
   task: ec2_util.Task
   timeout: int
 
-  def __init__(self, results_folder: str, node_ip: str, key: str, folder: str, pending_queue: collections.deque, timeout: int):
+  def __init__(self, results_folder: str, node_ip: str, key: str, folder: str, pending_queue: collections.deque, timeout: int, memory: int):
     super(Task, self).__init__()
     self.cpu = 170
     self.error = None
     self.task = pending_queue.popleft()
     self.folder = folder
     self.lock = threading.Lock()
-    self.memory = 2*1024*1024*1024
+    self.memory = memory*1024*1024*1024
     self.node_ip = node_ip
     self.nonce = random.randint(1, 100*1000)
     self.pending_queue = pending_queue
@@ -133,10 +133,12 @@ class Task(threading.Thread):
     return not done
 
   def run(self):
+    print("RUNNING", self.task.key)
     start_time: float = time.time()
     c: str = "sudo docker run --name {0:d} -m {1:d} --cpu-shares {2:d} -v /home/ubuntu/Docker/app:/home/ubuntu/app app ".format(self.nonce, self.memory, self.cpu)
     c += "python3 main.py --key {0:s}".format(self.task.key)
     code, output, err = self.client.exec_command(c)
+    print(code, output, err)
     end_time: float = time.time()
     if code != 0:
       if code not in [PROCESS_OUT_OF_SPACE_CODE, CONTAINER_OUT_OF_SPACE_CODE]:
@@ -275,7 +277,7 @@ class Node:
 
   def add_tasks(self):
     if len(self.pending_queue) > 0:
-      self.tasks.append(Task(self.results_folder, self.node.public_ip_address, self.params["key"], self.folder, self.pending_queue, self.params["timeout"]))
+      self.tasks.append(Task(self.results_folder, self.node.public_ip_address, self.params["key"], self.folder, self.pending_queue, self.params["timeout"]), self.params["memory"])
       self.tasks[-1].start()
     self.num_tasks = len(self.tasks)
 
