@@ -1,3 +1,4 @@
+ec2/lambda_simulations
 ec2/simulations
 ec2/spacenet
 ec2/ssw
@@ -5,6 +6,7 @@ ec2/tide
 lambda/*.zip
 lambda/*.json
 .mypy_cache
+nature_results
 paper/*.aux
 paper/*.bbl
 paper/*.blg
@@ -20,10 +22,13 @@ jupyter
 json/private*
 json/ec2*
 nature_results/ChorusAccessLog.csv
+results
 scripts/crux-output*
+scripts/data_counts
 scripts/*.index
 scripts/*.csv
 scripts/*.mzML
+spacenet_data
 tests/fastore
 tests/ssw
 tests/tide
