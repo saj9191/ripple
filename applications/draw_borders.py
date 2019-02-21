@@ -32,7 +32,18 @@ def flood(classifications, x, y, visited, width, height, cl):
     if classifications[y][x] == Indices.border.value:
       continue
 
-    classifications[y][x] = cl
+    counts = [0, 0, 0]
+    total = 0
+    for dy in range(-1, 2):
+      for dx in range(-1, 2):
+        iy = y + dy
+        ix = x + dx
+        if (0 <= iy and iy < height) and (0 <= ix and ix < width):
+          counts[classifications[iy][ix]] += 1
+          total += 1
+
+    if counts[cl] > (3 * total / 4.0):
+      classifications[y][x] = cl
     stack.append((x - 1, y - 1))
     stack.append((x - 1, y))
     stack.append((x - 1, y + 1))
@@ -44,7 +55,8 @@ def flood(classifications, x, y, visited, width, height, cl):
 
 
 def run(database: Database, key: str, params, input_format, output_format, offsets: List[int]):
-  entries = database.get_entries(params["bucket"], str(params["input_prefix"]) + "/")
+  prefix = "{0:d}/{1:f}-{2:d}/".format(params["input_prefix"], input_format["timestamp"], input_format["nonce"])
+  entries = database.get_entries(params["bucket"], prefix)
   assert(len(entries) == 1)
   entry = entries[0]
 
@@ -92,31 +104,31 @@ def run(database: Database, key: str, params, input_format, output_format, offse
         if counts[Indices.border.value] <= 1:
           classifications[y][x] = Indices.outside.value
 
-  visited = {}
-  for y in range(height):
-    for x in range(width):
-      if x in visited and y in visited[x]:
-        continue
-
-      if classifications[y][x] == Indices.outside.value:
-        counts = [0, 0, 0]
-        total = 0
-        for dy in range(-1, 2):
-          for dx in range(-1, 2):
-            iy = y + dy
-            ix = x + dx
-            if (0 <= iy and iy < height) and (0 <= ix and ix < width):
-              counts[classifications[iy][ix]] += 1
-            total += 1
-        if counts[Indices.outside.value] == total:
-          flood(classifications, x, y, visited, width, height, Indices.outside.value)
+#  visited = {}
+#  for y in range(height):
+#    for x in range(width):
+#      if x in visited and y in visited[x]:
+#        continue
+#
+#      if classifications[y][x] == Indices.outside.value:
+#        counts = [0, 0, 0]
+#        total = 0
+#        for dy in range(-1, 2):
+#          for dx in range(-1, 2):
+#            iy = y + dy
+#            ix = x + dx
+#            if (0 <= iy and iy < height) and (0 <= ix and ix < width):
+#              counts[classifications[iy][ix]] += 1
+#            total += 1
+#        if counts[Indices.outside.value] == total:
+#          flood(classifications, x, y, visited, width, height, Indices.outside.value)
 
   for y in range(height):
     for x in range(width):
       if classifications[y][x] == Indices.border.value:
         im.putpixel((x, y), (255, 0, 0))
-      elif classifications[y][x] == Indices.inside.value:
-        im.putpixel((x, y), (255, 255, 0))
+#      elif classifications[y][x] == Indices.inside.value:
+#        im.putpixel((x, y), (255, 255, 0))
 
   im.save(output_file)
 
