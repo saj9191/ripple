@@ -1,7 +1,10 @@
+ec2/simulations
+ec2/spacenet
 ec2/ssw
 ec2/tide
 lambda/*.zip
 lambda/*.json
+.mypy_cache
 paper/*.aux
 paper/*.bbl
 paper/*.blg
