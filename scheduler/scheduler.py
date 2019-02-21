@@ -31,12 +31,12 @@ def payload(bucket, key):
 
 
 class Task(threading.Thread):
-  def __init__(self, bucket_name, token, messages, timeout, params):
+  def __init__(self, bucket_name, token, timeout, params):
     super(Task, self).__init__()
     self.bucket_name = bucket_name
     self.key_to_payload = {}
     self.check_time = time.time()
-    self.messages = messages
+    self.found = {}
     self.params = params
     self.processed = set()
     self.running = True
@@ -45,29 +45,33 @@ class Task(threading.Thread):
     self.token = token
     self.__setup_client__()
 
-  def __current_logs__(self, payloads):
+  def __current_logs__(self, objs):
     logs = set()
-    for payload in payloads:
-      logs.add(self.__get_key__(payload))
-    return logs
+    max_bin = None
+    max_file = None
+    m = {}
+    for obj in objs:
+      m = util.parse_file_name(obj.key)
+      logs.add((m["prefix"], m["bin"], m["file_id"]))
+      max_bin = m["num_bins"]
+      max_file = m["num_files"]
+    mx = m["num_bins"] * m["num_files"] if max_bin and max_file else None
+    return [logs, max_bin, max_file, mx]
 
-  def __get_children_payloads__(self, stage, payloads):
+  def __get_children_payloads__(self, stage, objs):
     if stage == -1:
       return set([(0, 1, 1)])
 
-    if len(payloads) == 0:
-      return set()
-
     logs = set()
-    for payload in payloads:
-      key = payload["Records"][0]["s3"]["object"]["key"]
+    for obj in objs:
+      key = obj.key
       if key not in self.processed:
         self.processed.add(key)
         body = self.__get_object__(key)
         for p in body["payloads"]:
           key = self.__get_key__(p)
           logs.add(key)
-          self.key_to_payload[key] = payload
+          self.key_to_payload[key] = p
     return logs
 
   def __get_key__(self, payload):
@@ -77,13 +81,13 @@ class Task(threading.Thread):
     return (m["prefix"], m["bin"], m["file_id"])
 
   def __get_object__(self, key):
-    return json.load(self.s3.Object(self.params["log"], key).get()["Body"].read().decode("utf-8"))
+    obj = self.s3.Object(self.params["log"], key)
+    content = obj.get()["Body"].read().decode("utf-8")
+    return json.loads(content)
 
-  def __get_payloads__(self, stage):
-    if stage in self.messages:
-      if self.token in self.messages[stage]:
-        return self.messages[stage][self.token]
-    return []
+  def __get_objects__(self, stage):
+    objs = self.bucket.objects.filter(Prefix=str(stage) + "/" + self.token)
+    return objs
 
   def __invoke__(self, name, payload):
     response = self.client.invoke(
@@ -100,29 +104,79 @@ class Task(threading.Thread):
     self.s3 = boto3.resource("s3")
     self.bucket = self.s3.Bucket(self.bucket_name)
     self.client = util.setup_client("lambda", self.params)
+    self.log = self.s3.Bucket(self.params["log"])
+
+  def __find_payloads__(self, actual_logs, max_bin, max_file):
+    missing = set()
+    parent_logs = self.found[self.stage - 1]
+    parent_obj = list(self.__get_objects__(self.stage - 1))[0]
+    m = util.parse_file_name(parent_obj.key)
+    if len(actual_logs) > 0:
+      sibling_objs = list(self.__get_objects__(self.stage))
+      m = {**m, **util.parse_file_name(sibling_objs[0].key)}
+
+    max_parent_bin = max(list(map(lambda l: l[1], parent_logs)))
+    max_parent_file = max(list(map(lambda l: l[2], parent_logs)))
+
+    if max_bin is None:
+      # If we have 0 files, we're going to assume for now the num bins / files
+      # is the same as the parents
+      max_bin = max_parent_bin
+      max_file = max_parent_file
+
+    for bin_id in range(1, max_bin + 1):
+      for file_id in range(1, max_file + 1):
+        ll = (self.stage, bin_id, file_id)
+        if ll not in actual_logs:
+          missing.add(ll)
+
+    payloads = []
+    m["timestamp"] = float(self.token.split("-")[0])
+    m["nonce"] = int(self.token.split("-")[1])
+    for (s, b, f) in missing:
+      print("Cannot find", (s, b, f))
+      if (s-1, b, f) in parent_logs:
+        # First case. The parent only has one child and the same bin and file id
+        m["prefix"] = self.stage - 1
+        m["bin"] = b
+        m["num_bins"] = max_parent_bin
+        m["file_id"] = f
+        m["num_files"] = max_parent_file
+        body = self.__get_object__(util.file_name(m))
+        payloads += body["payloads"]
+      else:
+        assert((s-1, 1, 1) in parent_logs)
+        assert(max_parent_bin == 1)
+        assert(max_parent_file == 1)
+        # Third case. The child is the result of some split variation. So the max file ID
+        # of the parent must be 1.
+        m["prefix"] = self.stage - 1
+        m["bin"] = 1
+        m["num_bins"] = 1
+        m["file_id"] = 1
+        m["num_files"] = 1
+        body = self.__get_object__(util.file_name(m))
+        payloads += body["payloads"]
+      return payloads
 
   def run(self):
-    expected_logs = None
-    print("Starting stage", self.stage)
+    print(self.token, "Starting stage", self.stage)
     while self.__running__() and self.stage < len(self.params["pipeline"]):
-      actual_logs = self.__current_logs__(self.__get_payloads__(self.stage))
-      if expected_logs is None:
-        expected_logs = self.__get_children_payloads__(self.stage - 1, self.__get_payloads__(self.stage - 1))
-
-      if len(actual_logs) == len(expected_logs):
+      [actual_logs, max_bin, max_file, expected_num_bins] = self.__current_logs__(self.__get_objects__(self.stage))
+      self.found[self.stage] = actual_logs
+      if len(actual_logs) == expected_num_bins:
         # We have all the payloads for this stage
         self.stage += 1
-        print("Starting stage", self.stage)
-        expected_logs = None
+        print(self.token, "Starting stage", self.stage)
       else:
-        assert(len(actual_logs) < len(expected_logs))
         if time.time() - self.check_time > self.timeout:
-          missing_logs = expected_logs.difference(actual_logs)
-          for log in missing_logs:
+          payloads = self.__find_payloads__(actual_logs, max_bin, max_file)
+          for payload in payloads:
             name = self.params["pipeline"][self.stage]["name"]
-            print("Cannot find", log, "Reinvoking", name)
-            self.__invoke__(name, self.key_to_payload[log])
+            print(self.token, "Cannot find", payload, "Reinvoking", name)
+            self.__invoke__(name, payload)
           self.check_time = time.time()
+      time.sleep(5)
 
     print("Done processing", self.token)
     self.running = (self.stage < len(self.params["pipeline"]))
@@ -131,10 +185,11 @@ class Task(threading.Thread):
 class Scheduler:
   def __init__(self, policy, timeout, params):
     self.max_tasks = 1000
-    self.messages = {0: {}}
+    self.messages = {}
     self.next_job_id = 0
     self.params = params
     self.policy = policy
+    self.prefixes = set()
     self.running = True
     self.__setup__()
     self.tasks = []
@@ -145,11 +200,12 @@ class Scheduler:
     self.s3 = boto3.resource("s3")
 
   def __add_task__(self, token):
-    self.tasks.append(Task(self.params["log"], token, self.messages, self.timeout, self.params))
+    self.tasks.append(Task(self.params["log"], token, self.timeout, self.params))
 
   def __check_tasks__(self):
     self.__get_messages__(self.log_queue)
-    for token in self.messages[0].keys():
+    tokens = self.messages[0].keys() if 0 in self.messages else []
+    for token in tokens:
       if token not in self.tokens:
         self.__add_task__(token)
         self.tasks[-1].start()
@@ -176,10 +232,13 @@ class Scheduler:
           parts = key.split("/")
           prefix = int(parts[0])
           token = parts[1]
+          self.prefixes.add(prefix)
           if prefix not in self.messages:
             self.messages[prefix] = {}
           if token not in self.messages[prefix]:
             self.messages[prefix][token] = []
+          assert(prefix in self.messages)
+          assert(prefix in self.prefixes)
           self.messages[prefix][token].append(body)
       self.__delete_message__(self.log_queue, message)
 
@@ -187,7 +246,7 @@ class Scheduler:
     sqs = boto3.client("sqs", region_name=self.params["region"])
     response = sqs.receive_message(
       AttributeNames=["SentTimestamp"],
-      MaxNumberOfMessages=100,
+      MaxNumberOfMessages=10,
       QueueUrl=queue.url,
       WaitTimeSeconds=1,
     )
@@ -266,7 +325,7 @@ class Scheduler:
     return queue
 
   def __setup_sqs_queues__(self):
-    self.log_queue = self.__setup_sqs_queue__(self.params["log"])
+    self.log_queue = self.__setup_sqs_queue__(self.params["log"], "0/")
     self.sqs = boto3.client("sqs", region_name=self.params["region"])
 
   def add(self, priority, deadline, payload, prefix=0):
@@ -275,8 +334,10 @@ class Scheduler:
     self.queue.put(item)
 
   def listen(self):
+    print("Listening")
     while self.__running__():
       self.__check_tasks__()
+    print("Done Listening")
     for task in self.tasks:
       task.join()
 
