@@ -150,7 +150,7 @@ def create_classifications(s3, folder, image_name, polygons, border, inside, out
 def process_images(folder, solutions, bucket, width, height):
   image_names = [f for f in os.listdir(folder) if os.path.isfile(os.path.join(folder, f))]
   random.shuffle(image_names)
-  image_names = image_names[:700]
+  image_names = image_names[:1000]
   border = set()
   inside = set()
   outside = set()
@@ -167,11 +167,11 @@ def process_images(folder, solutions, bucket, width, height):
   inside = list(inside)
   outside = list(outside)
   num_points = min([len(border), len(inside), len(outside)])
-#  random.shuffle(border)
-#  random.shuffle(inside)
-#  random.shuffle(outside)
+  random.shuffle(border)
+  random.shuffle(inside)
+  random.shuffle(outside)
   print("Num points", num_points)
-  classifications = border + inside + outside#border[:num_points] + inside[:num_points] + outside[:num_points]
+  classifications = border[:num_points] + inside[:num_points] + outside[:num_points]
   random.shuffle(classifications)
   key = "train.classification.w{w}-h{h}".format(w=width, h=height)
   temp_name = "/tmp/{0:s}".format(key)
