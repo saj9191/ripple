@@ -58,7 +58,6 @@ def upload_function_code(client, zip_file, name, p, create):
 
 
 def create_parameter_files(zip_directory, function_name, params):
-  files = []
   for i in range(len(params["pipeline"])):
     pparams = params["pipeline"][i]
     if pparams["name"] == function_name:
@@ -72,8 +71,6 @@ def create_parameter_files(zip_directory, function_name, params):
       f = open(json_path, "w")
       f.write(json.dumps(p))
       f.close()
-      files.append(name)
-  return files
 
 
 def copy_file(directory, file_path):
@@ -83,42 +80,29 @@ def copy_file(directory, file_path):
   return file_name
 
 
-def zip_libraries(zip_directory):
-  files = []
-  for folder, subdir, ff in os.walk("libraries"):
-    if folder.count("/") == 0:
-      for d in subdir:
-        shutil.copytree("libraries/" + d, zip_directory + "/" + d)
-        files.append(d)
-  return files
+def zip_libraries(zip_directory, dependencies):
+  shutil.copytree(dependencies, zip_directory)
 
 
 def zip_formats(zip_directory, fparams, params):
-  files = []
   if "format" in fparams:
     form = fparams["format"]
     if "dependencies" in params and form in params["dependencies"]["formats"]:
       for file in params["dependencies"]["formats"][form]:
-        files.append(copy_file(zip_directory, file))
-    files.append(copy_file(zip_directory, "formats/{0:s}.py".format(form)))
-  return files
+        copy_file(zip_directory, file)
+    copy_file(zip_directory, "formats/{0:s}.py".format(form))
 
 
 def zip_application(zip_directory, fparams):
-  files = []
   if "application" in fparams:
-    files.append(copy_file(zip_directory, "applications/{0:s}.py".format(fparams["application"])))
-  return files
+    copy_file(zip_directory, "applications/{0:s}.py".format(fparams["application"]))
 
 
 def zip_ripple_file(zip_directory, fparams):
-  files = []
   file = "{0:s}.py".format(fparams["file"])
   shutil.copyfile("lambda/{0:s}".format(file), "{0:s}/{1:s}".format(zip_directory, file))
-  files.append(file)
   for file in ["formats/iterator.py", "formats/pivot.py", "database.py", "util.py"]:
-    files.append(copy_file(zip_directory, file))
-  return files
+    copy_file(zip_directory, file)
 
 
 def upload_function(client, name, functions, params):
@@ -129,20 +113,18 @@ def upload_function(client, name, functions, params):
     shutil.rmtree(zip_directory)
 
   fparams = params["functions"][name]
-  files = []
-  os.makedirs(zip_directory)
-  if "knn" in params["folder"]:
-    raise Exception("Unhardcode")
-    files += zip_libraries(zip_directory)
+  if "dependencies" in fparams:
+    zip_libraries(zip_directory, fparams["dependencies"])
+  else:
+    os.makedirs(zip_directory)
 
-  files += zip_ripple_file(zip_directory, fparams)
-  files += zip_application(zip_directory, fparams)
-  files += zip_formats(zip_directory, fparams, params)
-  files += create_parameter_files(zip_directory, name, params)
+  zip_ripple_file(zip_directory, fparams)
+  zip_application(zip_directory, fparams)
+  zip_formats(zip_directory, fparams, params)
+  create_parameter_files(zip_directory, name, params)
   os.chdir(zip_directory)
-  subprocess.call("zip -r ../{0:s} {1:s}".format(zip_file, " ".join(files)), shell=True)
+  subprocess.call("zip -r9 ../{0:s} .".format(zip_file), shell=True)
   os.chdir("..")
-
   upload_function_code(client, zip_file, name, params, name not in functions)
   os.remove(zip_file)
   shutil.rmtree(zip_directory)
@@ -159,7 +141,6 @@ def add_sort_pipeline(sort_params):
       raise Exception("Cannot add sort pipeline. Function with name " + name + " already exists")
 
     function_params["memory_size"] = 1024
-    function_params["chunk_size"] = sort_params["chunk_size"]
     functions[name] = function_params
     pipeline_params["name"] = name
     pipeline.append(pipeline_params)
@@ -185,49 +166,63 @@ def add_sort_pipeline(sort_params):
     "sort": True,
   }, {})
 
-  pipeline.append({
-    "name": "split-" + fformat,
-    "ranges": True,
-     "output_function": "sort-" + fformat
-  })
+  name = "split-" + fformat
+  if name in functions:
+    pipeline.append({
+      "name": name,
+      "file": "split_file",
+      "ranges": True,
+      "output_function": "sort-" + fformat
+    })
+  else:
+    add_function(name, {
+      "file": "split_file",
+      "format": fformat,
+      "split_size": sort_params["chunk_size"],
+      "output_function": "pivot-" + fformat,
+    }, {
+      "ranges": True,
+    })
 
   add_function("sort-" + fformat, {
     "format": fformat,
     "file": "sort",
-    "identifier": sort_params["identifier"]
+    "identifier": sort_params["identifier"],
   }, {})
 
   add_function("combine-" + fformat, {
-    "file": "combine_files",
     "format": fformat,
+    "file": "combine_files",
     "sort": False,
-  }, {})
+    "k": 100,
+  }, {"k": 100})
 
   return functions, pipeline
 
 
 def process_functions(params):
   pipeline = params["pipeline"]
-  variable_to_step = { "input": 0 }
+  variable_to_step = {"input": 0}
   i = 0
   while i < len(pipeline):
     name = pipeline[i]["name"]
-    if i != len(pipeline) - 1:
-      pipeline[i]["output_function"] = pipeline[i + 1]["name"]
-
     fn_params = params["functions"][name]
-    if "output" in fn_params:
-      variable_to_step[fn_params["output"]] = i + 1
-    if "input" in fn_params:
-      fn_params["input_prefix"] = variable_to_step[fn_params["input"]]
+    if "output" in pipeline[i]:
+      variable_to_step[pipeline[i]["output"]] = i + 1
+    if "input" in pipeline[i]:
+      pipeline[i]["input_prefix"] = variable_to_step[pipeline[i]["input"]]
     if params["functions"][name]["file"] == "sort":
       del params["functions"][name]
       sort_functions, sort_pipeline = add_sort_pipeline(fn_params)
       pipeline = pipeline[:i] + sort_pipeline + pipeline[i+1:]
-      params["functions"] = { **params["functions"], **sort_functions }
+      params["functions"] = {**params["functions"], **sort_functions}
+      for j in range(len(sort_pipeline)):
+        pipeline[i + j - 1]["output_function"] = pipeline[i + j]["name"]
       i += len(sort_pipeline)
     else:
       i += 1
+    if i - 1 != len(pipeline) - 1:
+      pipeline[i - 1]["output_function"] = pipeline[i]["name"]
 
   params["pipeline"] = pipeline
 
@@ -362,7 +357,6 @@ def main():
   parser.add_argument('--parameters', type=str, required=True, help="File containing parameters")
   args = parser.parse_args()
   params = json.loads(open(args.parameters).read())
-  process_functions(params)
   [access_key, secret_key] = util.get_credentials("default")
   params["access_key"] = access_key
   params["secret_key"] = secret_key
