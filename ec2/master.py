@@ -124,7 +124,7 @@ class Master:
     print("Number of Starting Nodes", len(self.starting_nodes))
     print("Number of Terminating Nodes", len(self.terminating_nodes))
     print("")
-    return (cpu_average, num_tasks, num_tasks_average)
+    return (max(cpu_average, mem_average), num_tasks, num_tasks_average)
 
   def __create_node__(self):
     self.starting_nodes.append(node.Node(self.total_node_count, self.s3_application_url, self.pending_tasks, self.results_folder, self.params))
@@ -143,15 +143,17 @@ class Master:
 
     if len(self.terminating_nodes) == 0 and len(self.running_nodes) > 0:
       if cpu_average <= self.params["scale_down_utilization"]:
-        self.running_nodes = sorted(self.running_nodes, key=lambda n: n.cpu_utilization)
-        if self.scale_down_start_time is None:
-          self.scale_down_start_time = time.time()
-        now = time.time()
-        print("High load for", now - self.scale_down_start_time)
-        if now - self.scale_down_start_time > self.params["scale_time"]:
-          if len(self.running_nodes) > 1 or len(self.pending_tasks) == 0:
-            self.__terminate_node__()
+        if len(self.running_nodes) > 1 or len(self.running_nodes[0].tasks) == 0:
+          self.running_nodes = sorted(self.running_nodes, key=lambda n: n.cpu_utilization)
+          if self.scale_down_start_time is None:
             self.scale_down_start_time = time.time()
+          now = time.time()
+          if now - self.scale_down_start_time > self.params["scale_time"]:
+            if len(self.running_nodes) > 1 or len(self.pending_tasks) == 0:
+              self.__terminate_node__()
+              self.scale_down_start_time = time.time()
+        else:
+          self.scale_down_start_time = None
       else:
         self.scale_down_start_time = None
 
