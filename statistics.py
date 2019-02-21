@@ -7,7 +7,11 @@ import util
 
 def process_objects(s3, bucket_name, objects, params):
   costs = {-1: 0}
+  duration_cost = {-1: 0}
   durations = {-1: [sys.maxsize, 0]}
+  list_count = {-1: 0}
+  read_count = {-1: 0}
+  write_count = {-1: 0}
   memory_parameters = json.loads(open("../json/memory.json").read())
   statistics = []
 
@@ -24,11 +28,19 @@ def process_objects(s3, bucket_name, objects, params):
     for prefix in [-1, stage]:
       if prefix not in costs:
         costs[prefix] = 0
+        list_count[prefix] = 0
+        write_count[prefix] = 0
+        read_count[prefix] = 0
+        duration_cost[prefix] = 0
         durations[prefix] = [sys.maxsize, 0]
+      list_count[prefix] += body["list_count"]
+      read_count[prefix] += body["read_count"]
+      write_count[prefix] += body["write_count"]
       costs[prefix] += (body["write_count"] + body["list_count"]) / 1000.0 * 0.005
       costs[prefix] += body["read_count"] / 1000.0 * 0.0004
       memory_size = str(params["functions"][body["name"]]["memory_size"])
-      costs[prefix] += memory_parameters["lambda"][memory_size] * int((duration + 99) / 100)
+      costs[prefix] += memory_parameters["lambda"][memory_size] * int(float(duration + 99) / 100)
+      duration_cost[prefix] += memory_parameters["lambda"][memory_size] * int(float(duration + 99) / 100)
       start_time = body["start_time"]
       end_time = start_time + body["duration"] / 1000.0
 
@@ -38,6 +50,10 @@ def process_objects(s3, bucket_name, objects, params):
 
     statistics[stage]["messages"].append(body)
 
+  print("Write count", write_count[-1])
+  print("Read count", read_count[-1])
+  print("List count", list_count[-1])
+  print("Duration cost", duration_cost[-1])
   return [statistics, costs, durations]
 
 
