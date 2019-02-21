@@ -1,0 +1,13 @@
+{
+	"agg_period": 5,
+	"bucket": "maccoss-tide",
+  "distribution": "uniform",
+	"duration": 3600,
+	"input_bucket": "maccoss-spacenet-log",
+	"input_prefix": "",
+	"interval": 300,
+	"num_interval_requests": 1,
+	"num_threads": 10,
+	"region": "us-west-2",
+	"start_offset": 0
+}
