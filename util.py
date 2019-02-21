@@ -202,7 +202,10 @@ def run_function(params, m):
   # The execute variable is for priority scheduling simulation.
   # We set it to false if we want to simulate the Lambda function
   # not executing due to a higher priority job.
-  return is_set(params, "execute") or is_set(m, "execute")
+  # TODO: For now, we will also run the function if the key doesn't match
+  # the standardized input. We need a better to handle if we have to
+  # trigger a function using data already uploaded to S3.
+  return "execute" not in m or is_set(params, "execute") or is_set(m, "execute")
 
 
 def duplicate_execution(bucket_format, params):
