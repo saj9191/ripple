@@ -10,11 +10,12 @@ parentdir = os.path.dirname(currentdir)
 sys.path.insert(0, parentdir)
 import statistics
 
-def download(subfolder):
+
+def download(subfolder, param_file):
   s3 = boto3.resource("s3")
   bucket = s3.Bucket("maccoss-log")
   objSums = bucket.objects.filter(Prefix="1/")
-  params = json.loads(open("../json/basic-tide.json").read())
+  params = json.loads(open(param_file).read())
 
   total_cost = 0.0
   for objSum in objSums:
@@ -69,8 +70,9 @@ def process(subfolder):
 def main():
   parser = argparse.ArgumentParser()
   parser.add_argument("--subfolder", type=str, required=True, help="Subfolder to download results in")
+  parser.add_argument("--parameters", type=str, required=True, help="Location of JSON parameter file")
   args = parser.parse_args()
-  download(args.subfolder)
+  download(args.subfolder, args.parameters)
   numbers = process(args.subfolder)
   colors = ["red", "blue"]
   labels = ["Number of Lambdas", "Number of Running Jobs"]
