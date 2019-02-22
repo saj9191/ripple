@@ -277,7 +277,7 @@ class Node:
 
   def add_tasks(self):
     if len(self.pending_queue) > 0:
-      self.tasks.append(Task(self.results_folder, self.node.public_ip_address, self.params["key"], self.folder, self.pending_queue, self.params["timeout"]), self.params["memory"])
+      self.tasks.append(Task(self.results_folder, self.node.public_ip_address, self.params["key"], self.folder, self.pending_queue, self.params["timeout"], self.params["memory"]))
       self.tasks[-1].start()
     self.num_tasks = len(self.tasks)
 
