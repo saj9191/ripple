@@ -29,7 +29,7 @@ def write_binned_input(d: Database, binned_input: List[Any], bin_ranges: List[Di
     output_format["bin"] = bin_ranges[i]["bin"]
     output_format["num_bins"] = len(bin_ranges)
     bin_key = util.file_name(output_format)
-    d.write(params["bucket"], bin_key, str.encode(content), metadata)
+    d.write(params["bucket"], bin_key, content, metadata)
 
 
 def handle_sort(d: Database, table_name: str, key: str, input_format: Dict[str, Any], output_format: Dict[str, Any], offsets: List[int], params: Dict[str, Any]):
