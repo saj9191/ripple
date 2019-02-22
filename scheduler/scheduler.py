@@ -3,15 +3,16 @@ import boto3
 import inspect
 import json
 import os
-import priority_queue
 import sys
 import threading
 import time
+from typing import List, Tuple
 currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
 parentdir = os.path.dirname(currentdir)
 sys.path.insert(0, parentdir)
 import database
 import setup
+import upload
 import util
 
 
@@ -30,19 +31,34 @@ def payload(bucket, key):
   }
 
 
+class Job:
+  def __init__(self, source_bucket, destination_bucket, key, start_time, deadline=None, upload=False):
+    self.deadline = deadline if deadline else sys.maxsize
+    self.destination_bucket = destination_bucket
+    self.key = key
+    self.pause = [-1.0, -1.0]
+    self.source_bucket = source_bucket
+    self.start_time = start_time
+    self.upload = upload
+
+  def __repr__(self):
+    return "Job[start_time: {0:f}, deadline: {1:f}, pause: ({2:f},{3:f})]".format(self.start_time, self.deadline, self.pause[0], self.pause[1])
+
+
 class Task(threading.Thread):
-  def __init__(self, bucket_name, token, timeout, params):
+  def __init__(self, bucket_name, job, timeout, params):
     super(Task, self).__init__()
     self.bucket_name = bucket_name
     self.key_to_payload = {}
     self.check_time = time.time()
     self.found = {}
+    self.job = job
     self.params = params
     self.processed = set()
     self.running = True
     self.stage = 0
     self.timeout = timeout
-    self.token = token
+    self.token = job.key
     self.__setup_client__()
 
   def __current_logs__(self, objs):
@@ -133,33 +149,33 @@ class Task(threading.Thread):
     payloads = []
     m["timestamp"] = float(self.token.split("-")[0])
     m["nonce"] = int(self.token.split("-")[1])
+    m["prefix"] = self.stage - 1
     for (s, b, f) in missing:
       print("Cannot find", (s, b, f))
       if (s-1, b, f) in parent_logs:
         # First case. The parent only has one child and the same bin and file id
-        m["prefix"] = self.stage - 1
         m["bin"] = b
         m["num_bins"] = max_parent_bin
         m["file_id"] = f
         m["num_files"] = max_parent_file
-        body = self.__get_object__(util.file_name(m))
-        payloads += body["payloads"]
       else:
         assert((s-1, 1, 1) in parent_logs)
         assert(max_parent_bin == 1)
         assert(max_parent_file == 1)
-        # Third case. The child is the result of some split variation. So the max file ID
+        # Second case. The child is the result of some split variation. So the max file ID
         # of the parent must be 1.
-        m["prefix"] = self.stage - 1
         m["bin"] = 1
         m["num_bins"] = 1
         m["file_id"] = 1
         m["num_files"] = 1
-        body = self.__get_object__(util.file_name(m))
-        payloads += body["payloads"]
+      body = self.__get_object__(util.file_name(m))
+      payloads += body["payloads"]
       return payloads
 
   def run(self):
+    sleep = self.job.start_time - time.time()
+    if sleep > 0:
+      time.sleep(sleep)
     print(self.token, "Starting stage", self.stage)
     while self.__running__() and self.stage < len(self.params["pipeline"]):
       [actual_logs, max_bin, max_file, expected_num_bins] = self.__current_logs__(self.__get_objects__(self.stage))
@@ -169,9 +185,13 @@ class Task(threading.Thread):
         self.stage += 1
         print(self.token, "Starting stage", self.stage)
       else:
-        if time.time() - self.check_time > self.timeout:
+        ctime = time.time()
+        print(self.job.pause, ctime)
+        if ctime - self.check_time > self.timeout and (self.job.pause[0] == -1 or ctime < self.job.pause[0] or ctime >= self.job.pause[1]):
           payloads = self.__find_payloads__(actual_logs, max_bin, max_file)
           for payload in payloads:
+            if self.job.pause[1] != -1 and time >= self.job.pause[1]:
+              payloads["execute"] = True
             name = self.params["pipeline"][self.stage]["name"]
             print(self.token, "Cannot find", payload, "Reinvoking", name)
             self.__invoke__(name, payload)
@@ -199,15 +219,16 @@ class Scheduler:
   def __aws_connections__(self):
     self.s3 = boto3.resource("s3")
 
-  def __add_task__(self, token):
-    self.tasks.append(Task(self.params["log"], token, self.timeout, self.params))
+  def __add_task__(self, job):
+    self.tasks.append(Task(self.params["log"], job, self.timeout, self.params))
 
   def __check_tasks__(self):
     self.__get_messages__(self.log_queue)
     tokens = self.messages[0].keys() if 0 in self.messages else []
     for token in tokens:
       if token not in self.tokens:
-        self.__add_task__(token)
+        job = Job("", self.params["bucket"], token, float(token.split("-")[0]))
+        self.__add_task__(job)
         self.tasks[-1].start()
         self.tokens.add(token)
 
@@ -257,15 +278,6 @@ class Scheduler:
     return self.running
 
   def __setup__(self):
-    if self.policy == "fifo":
-      self.queue = priority_queue.Fifo()
-    elif self.policy == "robin":
-      self.queue = priority_queue.Robin()
-    elif self.policy == "deadline":
-      self.queue = priority_queue.Deadline()
-    else:
-      raise Exception("Unknown scheduling policy", self.policy)
-
     self.__setup_sqs_queues__()
     self.__aws_connections__()
 
@@ -328,10 +340,11 @@ class Scheduler:
     self.log_queue = self.__setup_sqs_queue__(self.params["log"], "0/")
     self.sqs = boto3.client("sqs", region_name=self.params["region"])
 
-  def add(self, priority, deadline, payload, prefix=0):
-    item = priority_queue.Item(priority, prefix, self.next_job_id, deadline, payload, self.params)
-    self.next_job_id += 1
-    self.queue.put(item)
+  def add_jobs(self, jobs):
+    for job in jobs:
+      job.upload = True
+      self.__add_task__(job)
+      self.tasks[-1].start()
 
   def listen(self):
     print("Listening")
@@ -346,6 +359,73 @@ def run(policy, timeout, params):
   scheduler = Scheduler(policy, timeout, params)
   scheduler.listen()
 
+
+Order = Tuple[Job, float]
+
+def simulation_order(jobs: List[Job], policy: str, expected_job_duration: float, max_num_jobs: int):
+  orders: List[Order] = []
+  if policy == "fifo":
+    jobs = sorted(jobs, key=lambda job: job.start_time)
+    orders = list(map(lambda job: (job, job.start_time), jobs))
+  elif policy == "robin":
+    # We assume all jobs come in at the same time to simulate round robin
+    for i in range(len(jobs)):
+      orders.append((jobs[i], 2*i))
+  elif policy == "deadline":
+    timestamps = []
+    for i in range(len(jobs)):
+      start_time = min(jobs[i].start_time, jobs[i].deadline - expected_job_duration)
+      end_time = min(jobs[i].deadline, start_time + expected_job_duration)
+      timestamps.append((start_time, i, jobs[i], 1))
+      timestamps.append((end_time, i, jobs[i], -1))
+    timestamps = sorted(timestamps, key=lambda t: t[0])
+
+    running = {}
+    paused = {}
+    i = 0
+    while i < len(timestamps):
+      timestamp = timestamps[i]
+      if timestamp[1] in paused:
+        # We can't finish the task. It's paused.
+        assert(timestamp[3] == -1)
+        timestamps.pop(i)
+      else:
+        if timestamp[3] == 1:
+          if len(running) >= max_num_jobs:
+            # We hit max number of current jobs. Pause the one that has to finish last.
+            running_keys = sorted(list(running.keys()), key=lambda k: running[k][2].deadline)
+            last_key = running_keys[-1]
+            last_job = running[last_key][2]
+            last_job.pause[0] = timestamp[0]
+            paused[last_key] = running[last_key]
+          running[timestamp[1]] = timestamp
+        else:
+          del running[timestamp[1]]
+          if len(paused) > 0:
+            # We have room to resume old jobs. Pick the one that needs to finish first.
+            paused_keys = sorted(list(paused.keys()), key=lambda k: paused[k][2].deadline)
+            first_key = paused_keys[-1]
+            first_job = paused[first_key][2]
+            first_job.pause[1] = timestamp[0]
+            del paused[first_key]
+            running[first_key] = first_job
+            paused_time = first_job.pause[1] - first_job.pause[0]
+            end_time = min(first_job.deadline, first_job.start_time + expected_job_duration) + paused_time
+            timestamp = (end_time, first_key, first_job, -1)
+            assert(end_time >= timestamp[0])
+            timestamps.append(timestamp)
+            timestamps = sorted(timestamps, key=lambda t: t[0])
+        i += 1
+      
+    orders = list(map(lambda job: (job, job.start_time), jobs))
+    print(orders)
+  else:
+    raise Exception("Policy", policy, "not implemented")
+  
+  for i in range(len(orders)):
+    print("Job", i, "Start Time", orders[i][1], orders[i][0])
+  return orders
+    
 
 def main():
   parser = argparse.ArgumentParser()

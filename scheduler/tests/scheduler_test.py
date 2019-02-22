@@ -2,6 +2,7 @@ import inspect
 import json
 import os
 import sys
+import time
 import unittest
 currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
 parentdir = os.path.dirname(currentdir)
@@ -15,8 +16,8 @@ class MockObject:
 
 
 class MockTask(scheduler.Task):
-  def __init__(self, bucket_name, token, timeout, params, objects, queue, max_iterations):
-    scheduler.Task.__init__(self, bucket_name, token, timeout, params)
+  def __init__(self, bucket_name, job, timeout, params, objects, queue, max_iterations):
+    scheduler.Task.__init__(self, bucket_name, job, timeout, params)
     self.current_iteration = 0
     self.max_iterations = max_iterations
     self.invokes = []
@@ -51,8 +52,8 @@ class MockScheduler(scheduler.Scheduler):
     self.objects = {}
     self.queue = {}
 
-  def __add_task__(self, token):
-    self.tasks.append(MockTask(self.params["log"], token, self.timeout, self.params, self.objects, self.queue, self.max_iterations))
+  def __add_task__(self, job):
+    self.tasks.append(MockTask(self.params["log"], job, self.timeout, self.params, self.objects, self.queue, self.max_iterations))
 
   def __aws_connections__(self):
     pass
@@ -195,6 +196,40 @@ class SchedulerTests(unittest.TestCase):
       self.assertEqual(mock.tasks[0].invokes[i]["Records"][0]["s3"]["object"]["key"], "1/123.400000-13/1-1/{0:d}-1-3-suffix.new".format(i + 1))
     self.assertTrue(mock.tasks[0].running)
 
+  def test_pause(self):
+    params = {
+      "bucket": "bucket",
+      "log": "log",
+      "functions": {
+        "step": {
+          "file": "application"
+        }
+      },
+      "pipeline": [{
+        "name": "step",
+      }, {
+        "name": "step",
+      }]
+    }
+    mock = MockScheduler("fifo", params, 0, 2)
+    key = "0/123.400000-13/1-1/1-1-1-suffix.new"
+    log = "0/123.400000-13/1-1/1-1-1-suffix.log"
+    ctime = time.time()
+    job = scheduler.Job("source_bucket", "destination_bucket", key, ctime - 2)
+    job.pause = [ctime, job.start_time + 10]
+    mock.add_jobs([job])
+    time.sleep(2)
+    children = []
+
+    for i in range(1, 4):
+      bucket_key = "1/123.400000-13/1-1/{0:d}-1-3-suffix.new".format(i)
+      children.append(scheduler.payload(params["bucket"], bucket_key))
+
+    mock.add_children_payloads(log, children)
+    mock.listen()
+    self.assertEqual(len(mock.tasks[0].invokes), 0)
+
+
   def test_combine_retrigger(self):
     params = {
       "bucket": "bucket",
@@ -245,6 +280,41 @@ class SchedulerTests(unittest.TestCase):
     self.assertEqual(mock.tasks[0].invokes[0]["Records"][0]["s3"]["object"]["key"], "2/123.400000-13/1-3/1-1-2-suffix.new")
     self.assertTrue(mock.tasks[0].running)
 
+class SimulationOrderTests(unittest.TestCase):
+  def test_fifo(self):
+    job1 = scheduler.Job("source_bucket", "destination_bucket", "key1", 10)
+    job2 = scheduler.Job("source_bucket", "destination_bucket", "key2", 0)
+    job3 = scheduler.Job("source_bucket", "destination_bucket", "key3", 20)
+
+    orders = scheduler.simulation_order([job1, job2, job3], "fifo", 0.0, 3)
+    expected = [job2, job1, job3]
+    for i in range(len(expected)):
+      self.assertEqual(orders[i][1], expected[i].start_time)
+      self.assertEqual(orders[i][0], expected[i])
+
+  def test_robin(self):
+    job1 = scheduler.Job("source_bucket", "destination_bucket", "key1", 0)
+    job2 = scheduler.Job("source_bucket", "destination_bucket", "key2", 0)
+    job3 = scheduler.Job("source_bucket", "destination_bucket", "key3", 0)
+
+    orders = scheduler.simulation_order([job1, job2, job3], "robin", 0.0, 3)
+    expected = [job1, job2, job3]
+    for i in range(len(expected)):
+      self.assertEqual(orders[i][1], 2*i)
+      self.assertEqual(orders[i][0], expected[i])
+
+  def test_deadline(self):
+    job1 = scheduler.Job("source_bucket", "destination_bucket", "key1", 0, None)
+    job2 = scheduler.Job("source_bucket", "destination_bucket", "key2", 10, 40)
+    job3 = scheduler.Job("source_bucket", "destination_bucket", "key3", 20, 60)
+
+    orders = scheduler.simulation_order([job1, job2, job3], "deadline", 30.0, 2)
+    expected = [job1, job2, job3]
+    for i in range(len(expected)):
+      self.assertEqual(orders[i][1], expected[i].start_time)
+      self.assertEqual(orders[i][0], expected[i])
+
+    self.assertEqual(orders[0][0].pause, [20.0, 40.0])
 
 if __name__ == "__main__":
   unittest.main()
