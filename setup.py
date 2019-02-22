@@ -231,9 +231,10 @@ def upload_functions(client, params):
   response = client.list_functions()
   function_names = set(list(map(lambda f: f["FunctionName"], response["Functions"])))
   process_functions(params)
-
   for name in params["functions"]:
     upload_function(client, name, function_names, params)
+  for i in range(len(params["pipeline"])):
+    print(i, params["pipeline"][i])
 
 
 def setup_notifications(client, bucket, config):
