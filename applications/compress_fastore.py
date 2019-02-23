@@ -23,8 +23,9 @@ def run(database: Database, file: str, params, input_format, output_format, offs
 
     input_file = file
     tmp_file = "/tmp/{0:s}".format(util.file_name(output_format)).split("/")[:-1]
-    output_file = "/".join(tmp_file)
-    output_file = os.path.join(output_file, "1-1-1-output")
+    output_path = "/".join(tmp_file)
+    output_file = os.path.join(output_path, "1-1-1-output")
+    print("output",output_file)
     
 
     arguments = [
@@ -37,10 +38,13 @@ def run(database: Database, file: str, params, input_format, output_format, offs
     subprocess.check_output(command, stderr=subprocess.STDOUT, shell=True)
 
     output_list = []
-    for (root,dirs,files) in os.walk(output_file,topdown = True):
+    for (root, dirs, files) in os.walk(output_path,topdown = True):
         for file in files:
+            file = "".join(file)
             if file.endswith(".cmeta") or file.endswith(".cdata"):
-                output_list.append(os.path.join(output_file, file))
+                output_list.append(os.path.join(output_path, file))
+
+    print("outputlist",output_list)
 
     return output_list
 
