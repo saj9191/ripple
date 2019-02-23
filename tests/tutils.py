@@ -22,6 +22,8 @@ def create_payload(table_name: str, key: str, prefix: int, file_id: Optional[int
   if file_id:
     extra_params["file_id"] = file_id
     extra_params["num_files"] = num_files
+    extra_params["bin"] = 1
+    extra_params["num_bins"] = 1
 
   if offsets:
     extra_params["offsets"] = offsets

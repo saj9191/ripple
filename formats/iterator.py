@@ -125,7 +125,7 @@ class Iterator(Generic[T]):
   @classmethod
   def to_array(cls: Any, content: bytes) -> Iterable[Any]:
     token = str.encode(cls.delimiter.item_token)
-    items: Iterable[str] = filter(lambda item: len(item.strip()) > 0, content.split(token))
+    items: Iterable[bytes] = filter(lambda item: len(item.strip()) > 0, content.split(token))
     if cls.delimiter.position == DelimiterPosition.start:
       items = map(lambda item: token + item, items)
     elif cls.delimiter.position == DelimiterPosition.end:
@@ -137,7 +137,7 @@ class Iterator(Generic[T]):
     raise Exception("Not Implemented")
 
   def get(self, start_byte: int, end_byte: int) -> Iterable[Any]:
-    content: str = self.entry.get_range(start_byte, end_byte)
+    content: bytes = self.entry.get_range(start_byte, end_byte)
     return self.to_array(content)
 
   def get_extra(self) -> Dict[str, Any]:
