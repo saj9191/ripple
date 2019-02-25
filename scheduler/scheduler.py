@@ -32,11 +32,12 @@ def payload(bucket, key):
 
 
 class Job:
-  def __init__(self, source_bucket, destination_bucket, key, start_time, deadline=None, upload=False):
+  def __init__(self, source_bucket, destination_bucket, key, start_time, deadline=None, priority=None, upload=False):
     self.deadline = deadline if deadline else sys.maxsize
     self.destination_bucket = destination_bucket
     self.key = key
     self.pause = [-1.0, -1.0]
+    self.priority = priority if priority else 0
     self.source_bucket = source_bucket
     self.start_time = start_time
     self.upload = upload
@@ -362,70 +363,76 @@ def run(policy, timeout, params):
 
 Order = Tuple[Job, float]
 
+def simulation_deadline(jobs: List[Job], expected_job_duration: float, max_num_jobs: int, key_func):
+  timestamps = []
+  for i in range(len(jobs)):
+    start_time = min(jobs[i].start_time, jobs[i].deadline - expected_job_duration)
+    end_time = min(jobs[i].deadline, start_time + expected_job_duration)
+    timestamps.append((start_time, i, jobs[i], 1))
+    timestamps.append((end_time, i, jobs[i], -1))
+  timestamps = sorted(timestamps, key=lambda t: t[0])
+
+  running = {}
+  paused = {}
+  i = 0
+  while i < len(timestamps):
+    timestamp = timestamps[i]
+    if timestamp[1] in paused:
+      # We can't finish the task. It's paused.
+      assert(timestamp[3] == -1)
+      timestamps.pop(i)
+    else:
+      if timestamp[3] == 1:
+        if len(running) >= max_num_jobs:
+          # We hit max number of current jobs. Pause the one that has to finish last.
+          running_keys = sorted(list(running.keys()), key=lambda k: key_func(running[k][2]))
+          last_key = running_keys[-1]
+          last_job = running[last_key][2]
+          last_job.pause[0] = timestamp[0]
+          paused[last_key] = running[last_key]
+        running[timestamp[1]] = timestamp
+      else:
+        del running[timestamp[1]]
+        if len(paused) > 0:
+          # We have room to resume old jobs. Pick the one that needs to finish first.
+          paused_keys = sorted(list(paused.keys()), key=lambda k: key_func(paused[k][2]))
+          first_key = paused_keys[-1]
+          first_job = paused[first_key][2]
+          first_job.pause[1] = timestamp[0]
+          del paused[first_key]
+          running[first_key] = first_job
+          paused_time = first_job.pause[1] - first_job.pause[0]
+          end_time = min(first_job.deadline, first_job.start_time + expected_job_duration) + paused_time
+          timestamp = (end_time, first_key, first_job, -1)
+          assert(end_time >= timestamp[0])
+          timestamps.append(timestamp)
+          timestamps = sorted(timestamps, key=lambda t: t[0])
+      i += 1
+
+  orders = list(map(lambda job: (job, job.start_time), jobs))
+  return orders
+
+
 def simulation_order(jobs: List[Job], policy: str, expected_job_duration: float, max_num_jobs: int):
   orders: List[Order] = []
   if policy == "fifo":
     jobs = sorted(jobs, key=lambda job: job.start_time)
     orders = list(map(lambda job: (job, job.start_time), jobs))
+  elif policy == "priority":
+    orders = simulation_deadline(jobs, expected_job_duration, max_num_jobs, lambda k: -1 * k.priority)
   elif policy == "robin":
     # We assume all jobs come in at the same time to simulate round robin
     for i in range(len(jobs)):
       orders.append((jobs[i], 2*i))
   elif policy == "deadline":
-    timestamps = []
-    for i in range(len(jobs)):
-      start_time = min(jobs[i].start_time, jobs[i].deadline - expected_job_duration)
-      end_time = min(jobs[i].deadline, start_time + expected_job_duration)
-      timestamps.append((start_time, i, jobs[i], 1))
-      timestamps.append((end_time, i, jobs[i], -1))
-    timestamps = sorted(timestamps, key=lambda t: t[0])
-
-    running = {}
-    paused = {}
-    i = 0
-    while i < len(timestamps):
-      timestamp = timestamps[i]
-      if timestamp[1] in paused:
-        # We can't finish the task. It's paused.
-        assert(timestamp[3] == -1)
-        timestamps.pop(i)
-      else:
-        if timestamp[3] == 1:
-          if len(running) >= max_num_jobs:
-            # We hit max number of current jobs. Pause the one that has to finish last.
-            running_keys = sorted(list(running.keys()), key=lambda k: running[k][2].deadline)
-            last_key = running_keys[-1]
-            last_job = running[last_key][2]
-            last_job.pause[0] = timestamp[0]
-            paused[last_key] = running[last_key]
-          running[timestamp[1]] = timestamp
-        else:
-          del running[timestamp[1]]
-          if len(paused) > 0:
-            # We have room to resume old jobs. Pick the one that needs to finish first.
-            paused_keys = sorted(list(paused.keys()), key=lambda k: paused[k][2].deadline)
-            first_key = paused_keys[-1]
-            first_job = paused[first_key][2]
-            first_job.pause[1] = timestamp[0]
-            del paused[first_key]
-            running[first_key] = first_job
-            paused_time = first_job.pause[1] - first_job.pause[0]
-            end_time = min(first_job.deadline, first_job.start_time + expected_job_duration) + paused_time
-            timestamp = (end_time, first_key, first_job, -1)
-            assert(end_time >= timestamp[0])
-            timestamps.append(timestamp)
-            timestamps = sorted(timestamps, key=lambda t: t[0])
-        i += 1
-      
-    orders = list(map(lambda job: (job, job.start_time), jobs))
-    print(orders)
+    orders = simulation_deadline(jobs, expected_job_duration, max_num_jobs, lambda k: k.deadline)
   else:
     raise Exception("Policy", policy, "not implemented")
-  
+
   for i in range(len(orders)):
     print("Job", i, "Start Time", orders[i][1], orders[i][0])
   return orders
-    
+
 
 def main():
   parser = argparse.ArgumentParser()
