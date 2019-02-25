@@ -75,7 +75,7 @@ class Iterator(Generic[T]):
         if self.delimiter.position != DelimiterPosition.start:
           # Don't include delimiter
           self.start_index += len(self.delimiter.offset_token)
-      if self.end_index != self.entry.content_length():
+      if self.end_index != (self.entry.content_length() - 1):
         self.end_index -= self.__adjust__(self.end_index, self.delimiter.offset_token)
         if self.delimiter.position == DelimiterPosition.start:
           self.end_index -= len(self.delimiter.offset_token)
