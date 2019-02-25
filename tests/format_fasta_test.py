@@ -49,6 +49,17 @@ class IteratorMethods(unittest.TestCase):
     self.assertEqual(offset_bounds, OffsetBounds(14, 20))
     self.assertFalse(more)
 
+  def test_offsets(self):
+    database: TestDatabase = TestDatabase()
+    table1: TestTable = database.create_table("table1")
+    entry1: TestEntry = table1.add_entry("test.fasta", ">A\tB\tC\n>a\tb\tc\n>1\t2\t3\n")
+
+    # Read everything in one pass
+    it = TestIterator(entry1, OffsetBounds(10, 15), 30, 30)
+    [items, offset_bounds, more] = it.next()
+    self.assertEqual(list(items), [b">a\tb\tc\n"])
+    self.assertEqual(offset_bounds, OffsetBounds(7, 13))
+
 
 if __name__ == "__main__":
   unittest.main()
