@@ -69,7 +69,7 @@ class Iterator(Generic[T]):
   def __setup__(self):
     if self.offset_bounds:
       self.start_index = self.offset_bounds.start_index
-      self.end_index = self.offset_bounds.end_index
+      self.end_index = min(self.offset_bounds.end_index, self.entry.content_length() - 1)
       if self.start_index != 0:
         self.start_index -= self.__adjust__(self.start_index, self.delimiter.offset_token)
         if self.delimiter.position != DelimiterPosition.start:
@@ -78,7 +78,7 @@ class Iterator(Generic[T]):
       if self.end_index != (self.entry.content_length() - 1):
         self.end_index -= self.__adjust__(self.end_index, self.delimiter.offset_token)
         if self.delimiter.position == DelimiterPosition.start:
-          self.end_index -= len(self.delimiter.offset_token)
+          self.end_index -= 1
     else:
       self.start_index = 0
       self.end_index = self.entry.content_length() - 1
