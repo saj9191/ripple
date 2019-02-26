@@ -133,12 +133,10 @@ class Task(threading.Thread):
     return not done
 
   def run(self):
-    print("RUNNING", self.task.key)
     start_time: float = time.time()
     c: str = "sudo docker run --name {0:d} -m {1:d} --cpu-shares {2:d} -v /home/ubuntu/Docker/app:/home/ubuntu/app app ".format(self.nonce, self.memory, self.cpu)
     c += "python3 main.py --key {0:s}".format(self.task.key)
     code, output, err = self.client.exec_command(c)
-    print(code, output, err)
     end_time: float = time.time()
     if code != 0:
       if code not in [PROCESS_OUT_OF_SPACE_CODE, CONTAINER_OUT_OF_SPACE_CODE]:
@@ -155,7 +153,6 @@ class Task(threading.Thread):
         print("Cannot find output for", self.task.key, len(objs))
         self.error = "Cannot find output for " + self.task.key
         return
-      print("Finished task", self.task.key)
       with open("{0:s}/tasks/{1:f}-{2:f}".format(self.results_folder, start_time, end_time), "w+") as f:
         f.write("S3 CREATED TIME: {0:f}\n".format(self.task.created_at))
         f.write("RECEIVED TIME {0:f}\n".format(self.task.received_at))
