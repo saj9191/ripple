@@ -190,12 +190,12 @@ def add_sort_pipeline(sort_params):
     "identifier": sort_params["identifier"],
   }, {})
 
-  add_function("combine-" + fformat, {
-    "format": fformat,
-    "file": "combine_files",
-    "sort": False,
-    "k": 100,
-  }, {"k": 100})
+  if sort_params["combine"]:
+    add_function("combine-" + fformat, {
+      "format": fformat,
+      "file": "combine_files",
+      "sort": False,
+    })
 
   return functions, pipeline
 
