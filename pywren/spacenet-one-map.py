@@ -210,7 +210,7 @@ def main():
       not_dones += pwex.map(knn, b)
       et = time.time()
       print("Map", i, et - st)
-      times["map"] += (et - st) 
+      times["map"] += (et - st)
 
       while not done:
         s = time.time()
@@ -245,6 +245,7 @@ def main():
         im.putpixel((x, y), (255, 0, 0))
     im.save(key)
     et = time.time()
+    times["render"] += (et - st)
     end_time = time.time()
     times["total"] += (end_time - start_time)
     print_results(times, batches, count)
