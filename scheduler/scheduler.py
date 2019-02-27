@@ -177,6 +177,9 @@ class Task(threading.Thread):
     sleep = self.job.start_time - time.time()
     if sleep > 0:
       time.sleep(sleep)
+    if self.job.upload:
+      [key, _, _] = upload.upload(self.job.destination_bucket, self.job.key, self.job.source_bucket)
+      self.token = key.split("/")[1]
     print(self.token, "Starting stage", self.stage)
     while self.__running__() and self.stage < len(self.params["pipeline"]):
       [actual_logs, max_bin, max_file, expected_num_bins] = self.__current_logs__(self.__get_objects__(self.stage))
@@ -240,6 +243,7 @@ class Scheduler:
         self.tasks.pop(i)
       else:
         i += 1
+    print("Num tasks", len(self.tasks))
 
   def __delete_message__(self, queue, message):
     self.sqs.delete_message(QueueUrl=self.log_queue.url, ReceiptHandle=message["ReceiptHandle"])
@@ -390,23 +394,32 @@ def simulation_deadline(jobs: List[Job], expected_job_duration: float, max_num_j
           last_job = running[last_key][2]
           last_job.pause[0] = timestamp[0]
           paused[last_key] = running[last_key]
+          del running[last_key]
         running[timestamp[1]] = timestamp
       else:
         del running[timestamp[1]]
         if len(paused) > 0:
           # We have room to resume old jobs. Pick the one that needs to finish first.
           paused_keys = sorted(list(paused.keys()), key=lambda k: key_func(paused[k][2]))
-          first_key = paused_keys[-1]
-          first_job = paused[first_key][2]
+          first_key = paused_keys[0]
+          first_timestamp = paused[first_key]
+          first_job = first_timestamp[2]
           first_job.pause[1] = timestamp[0]
           del paused[first_key]
-          running[first_key] = first_job
+          running[first_timestamp[1]] = first_timestamp
           paused_time = first_job.pause[1] - first_job.pause[0]
           end_time = min(first_job.deadline, first_job.start_time + expected_job_duration) + paused_time
           timestamp = (end_time, first_key, first_job, -1)
           assert(end_time >= timestamp[0])
-          timestamps.append(timestamp)
-          timestamps = sorted(timestamps, key=lambda t: t[0])
+          found = False
+          j = i + 1
+          while j < len(timestamps) and not found:
+            if timestamp[0] < timestamps[j][0]:
+              timestamps.insert(j, timestamp)
+              found = True
+            j += 1
+          if not found:
+            timestamps.append(timestamp)
       i += 1
 
   orders = list(map(lambda job: (job, job.start_time), jobs))
@@ -428,9 +441,6 @@ def simulation_order(jobs: List[Job], policy: str, expected_job_duration: float,
     orders = simulation_deadline(jobs, expected_job_duration, max_num_jobs, lambda k: k.deadline)
   else:
     raise Exception("Policy", policy, "not implemented")
-
-  for i in range(len(orders)):
-    print("Job", i, "Start Time", orders[i][1], orders[i][0])
   return orders
 
 
