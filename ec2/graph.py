@@ -17,18 +17,22 @@ def graph(subfolder, numbers, colors, labels, start_range=None, end_range=None):
   fig, ax = plt.subplots()
   min_timestamp = None
   max_timestamp = None
+  max_concurrency = None
   for i in range(len(numbers)):
     num = numbers[i]
     timestamps = list(map(lambda r: r[0], num))
     min_t = min(timestamps)
     max_t = max(timestamps)
+    total = list(map(lambda r: r[1], num))
+    max_c = max(total)
     if min_timestamp:
       min_timestamp = min(min_timestamp, min_t)
       max_timestamp = max(max_timestamp, max_t)
+      max_concurrency = max(max_concurrency, max_c)
     else:
       min_timestamp = min_t
       max_timestamp = max_t
-    total = list(map(lambda r: r[1], num))
+      max_concurrency = max_c
     plt.plot(timestamps, total, color=colors[i], label=labels[i])
 
   plt.xlabel("Time (Seconds)")
@@ -37,8 +41,9 @@ def graph(subfolder, numbers, colors, labels, start_range=None, end_range=None):
   if end_range:
     max_timestamp = end_range
 
+  plt.ylim([0, max_concurrency * 1.25])
   plt.xlim([min_timestamp, max_timestamp])
-  ax.legend()
+  ax.legend(loc="best", frameon=False)
   plot_name = subfolder + "/simulation.png"
   print("Plot", plot_name)
   fig.savefig(plot_name)
@@ -72,8 +77,9 @@ def process_tasks(start_time, subfolder):
   total_ranges = []
   active_ranges = []
   pending_ranges = []
+  duration = 0.0
   for i in range(len(results)):
-    print(results[i][0] - start_time, results[i][2] - start_time)
+    duration += (results[i][2] - results[i][0])
     total_ranges.append([results[i][0] - start_time, 1])
     total_ranges.append([results[i][2] - start_time, -1])
     pending_ranges.append([results[i][0] - start_time, 1])
@@ -81,6 +87,7 @@ def process_tasks(start_time, subfolder):
     active_ranges.append([results[i][1] - start_time, 1])
     active_ranges.append([results[i][2] - start_time, -1])
 
+  print("Average task time", duration / len(results))
   ranges = [active_ranges, pending_ranges, total_ranges]
   for i in range(len(ranges)):
     ranges[i] = sorted(ranges[i], key=lambda r: r[0])
