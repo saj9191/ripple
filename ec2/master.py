@@ -47,9 +47,6 @@ class Master:
     self.total_node_count = 0
 
   def __check_for_new_items__(self):
-    if len(self.running_nodes) == 0:
-      return
-
     sqs = boto3.client("sqs", region_name=self.params["region"])
     response = sqs.receive_message(
       AttributeNames=["SentTimestamp"],
@@ -132,12 +129,14 @@ class Master:
 
   def __scale_nodes__(self, cpu_average, num_tasks_average):
     if len(self.starting_nodes) == 0 and len(self.running_nodes) < self.params["max_nodes"]:
-      if (len(self.starting_nodes + self.running_nodes) == 0 and len(self.pending_tasks) > 0) or cpu_average >= self.params["scale_up_utilization"]:
+      if (len(self.starting_nodes + self.running_nodes) == 0 and len(self.pending_tasks) > 0):
+        self.__create_node__()
+        self.scale_up_start_time = time.time()
+      elif cpu_average >= self.params["scale_up_utilization"]:
         if self.scale_up_start_time is None:
           self.scale_up_start_time = time.time()
         if time.time() - self.scale_up_start_time > self.params["scale_time"]:
           self.__create_node__()
-          self.scale_up_start_time = time.time()
       else:
         self.scale_up_start_time = None
 
