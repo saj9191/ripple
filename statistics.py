@@ -1,6 +1,7 @@
 import argparse
 import boto3
 import json
+import os
 import setup
 import sys
 import util
@@ -12,7 +13,8 @@ def process_objects(s3, bucket_name, objects, params):
   list_count = {-1: 0}
   read_count = {-1: 0}
   write_count = {-1: 0}
-  memory_parameters = json.loads(open("../json/memory.json").read())
+  path = os.path.dirname(os.path.realpath(__file__))
+  memory_parameters = json.loads(open(path + "/json/memory.json").read())
   statistics = []
 
   for stage in params["pipeline"]:
@@ -48,7 +50,7 @@ def process_objects(s3, bucket_name, objects, params):
         durations[p][0] = min(durations[p][0], start_time)
         durations[p][1] = max(durations[p][1], end_time)
 
-    statistics[stage]["messages"].append(body)
+    statistics[stage]["messages"].append({"log": objSum.key, "body": body})
 
   print("Write count", write_count[-1])
   print("Read count", read_count[-1])
@@ -79,16 +81,7 @@ def statistics(bucket_name, token, prefix, params, output_file):
 
   [statistics, costs, durations] = process_objects(s3, bucket_name, objects, params)
 
-#  print("Section Costs")
-#  for prefix in costs.keys():
-#    if prefix != -1:
-#      print(params["pipeline"][prefix]["name"] + " " + str(costs[prefix]))
-
   print("Total Cost " + str(costs[-1]))
-#  print("Section Durations")
- # for prefix in durations.keys():
- #   if prefix != -1:
- #     print(params["pipeline"][prefix]["name"] + " " + str(durations[prefix][1] - durations[prefix][0]) + " seconds")
 
   print("Total Duration " + str(durations[-1][1] - durations[-1][0]) + " seconds")
 
