@@ -43,7 +43,7 @@ class Job:
     self.upload = upload
 
   def __repr__(self):
-    return "Job[start_time: {0:f}, deadline: {1:f}, pause: ({2:f},{3:f})]".format(self.start_time, self.deadline, self.pause[0], self.pause[1])
+    return "Job[start_time: {0:f}, deadline: {1:f}, priority: {2:d}, pause: ({3:f},{4:f})]".format(self.start_time, self.deadline, self.priority, self.pause[0], self.pause[1])
 
 
 
@@ -403,10 +403,15 @@ def simulation_deadline(jobs: List[Job], expected_job_duration: float, max_num_j
           running_keys = sorted(list(running.keys()), key=lambda k: key_func(running[k][2]))
           last_key = running_keys[-1]
           last_job = running[last_key][2]
-          last_job.pause[0] = timestamp[0]
-          paused[last_key] = running[last_key]
-          del running[last_key]
-        running[timestamp[1]] = timestamp
+          if key_func(last_job) > key_func(timestamp[2]):
+            last_job.pause[0] = timestamp[0]
+            paused[last_key] = running[last_key]
+            del running[last_key]
+            running[timestamp[1]] = timestamp
+          else:
+            paused[timestamp[1]] = timestamp
+        else:
+          running[timestamp[1]] = timestamp
       else:
         del running[timestamp[1]]
         if len(paused) > 0:
