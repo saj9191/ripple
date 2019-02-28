@@ -5,6 +5,7 @@ import json
 import os
 import scheduler
 import sys
+import time
 currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
 parentdir = os.path.dirname(currentdir)
 sys.path.insert(0, parentdir)
@@ -14,21 +15,27 @@ import setup
 def create_jobs(policy):
   source_bucket = "tide-source-data"
   destination_bucket = "maccoss-tide"
-  prefix = "DIA-Files"
+  prefix = "DIA-Files/"
   s3 = boto3.resource("s3")
   bucket = s3.Bucket(source_bucket)
   objs = list(bucket.objects.filter(Prefix=prefix))
-  job_duration = 2 * 60
+  objs = list(filter(lambda obj: obj.key.endswith("mzML"), objs))
+  job_duration = 180
 
   if policy == "deadline":
     jobs = []
-    for i in range(10):
+    offset = 60
+    now = time.time() + 10
+    num_jobs = 10
+    for i in range(num_jobs):
       obj = objs[i]
-      jobs.append(scheduler.Job(source_bucket, destination_bucket, obj.key, start_time=i * 60, deadline=job_duration + (18 - i) * 60))
+      jobs.append(scheduler.Job(source_bucket, destination_bucket, obj.key, start_time=now + i * offset, deadline=now + job_duration + (2*(num_jobs-1)- i) * offset))
   elif policy == "priority":
     raise Exception("Not implemented")
   jobs = scheduler.simulation_order(jobs, policy, job_duration, 1)
   jobs = list(map(lambda j: j[0], jobs))
+  for job in jobs:
+    print(job)
   return jobs
 
 
@@ -41,9 +48,9 @@ def main():
   params = json.loads(open(args.parameters).read())
   setup.process_functions(params)
   jobs = create_jobs(args.policy)
-  scheduler = Scheduler(args.policy, args.timeout, params)
-  scheduler.add_jobs(jobs)
-  scheduler.listen()
+  s = scheduler.Scheduler(args.policy, args.timeout, params)
+  s.add_jobs(jobs)
+  s.listen()
 
 
 main()
