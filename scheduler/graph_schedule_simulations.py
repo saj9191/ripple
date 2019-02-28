@@ -29,7 +29,6 @@ def process(subfolder):
       token_to_counts[token].append([end_time, -1])
 
   numbers = []
-  labels = []
   for token in token_to_counts.keys():
     counts = list(map(lambda c: [c[0] - min_start_time, c[1]], token_to_counts[token]))
     counts = sorted(counts, key=lambda c: c[0])
@@ -40,11 +39,9 @@ def process(subfolder):
       num_functions += counts[i][1]
       ranges.append([counts[i][0], num_functions])
     print("ranges", ranges)
-    numbers.append(ranges)
-    labels.append(token)
 
   colors = ["red", "blue", "gray", "purple", "green", "orange", "blue", "cyan", "pink", "brown"]
-  graph.graph(subfolder, numbers, colors, labels, None, None)
+  graph.graph(subfolder, numbers, colors, None, None, None)
 
 
 def main():

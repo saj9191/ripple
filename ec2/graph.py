@@ -13,7 +13,7 @@ NODE_START_REGEX = re.compile("NODE START TIME: ([0-9\.]+)")
 NODE_END_REGEX = re.compile("NODE END TIME: ([0-9\.]+)")
 
 
-def graph(subfolder, numbers, colors, labels, start_range=None, end_range=None):
+def graph(subfolder, numbers, colors, labels=None, start_range=None, end_range=None):
   fig, ax = plt.subplots()
   min_timestamp = None
   max_timestamp = None
@@ -33,7 +33,10 @@ def graph(subfolder, numbers, colors, labels, start_range=None, end_range=None):
       min_timestamp = min_t
       max_timestamp = max_t
       max_concurrency = max_c
-    plt.plot(timestamps, total, color=colors[i % len(colors)], label=labels[i])
+    if labels:
+      plt.plot(timestamps, total, color=colors[i % len(colors)], label=labels[i])
+    else:
+      plt.plot(timestamps, total, color=colors[i % len(colors)])
 
   plt.xlabel("Time (Seconds)")
   if start_range:
@@ -43,7 +46,8 @@ def graph(subfolder, numbers, colors, labels, start_range=None, end_range=None):
 
   plt.ylim([0, max_concurrency * 1.25])
   plt.xlim([min_timestamp, max_timestamp])
-  ax.legend(loc="best", frameon=False)
+  if labels:
+    ax.legend(loc="best", frameon=False)
   plot_name = subfolder + "/simulation.png"
   print("Plot", plot_name)
   fig.savefig(plot_name)
