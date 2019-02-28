@@ -106,8 +106,10 @@ def main():
   parser.add_argument("--parameters", type=str, required=True, help="Location of JSON parameter file")
   parser.add_argument("--start_range", type=int, help="Start timestamp of zoom region")
   parser.add_argument("--end_range", type=int, help="End timestamp of zoom region")
+  parser.add_argument("--download", default=False, action="store_true", help="Download the data")
   args = parser.parse_args()
-  download(args.subfolder, args.parameters)
+  if args.download:
+    download(args.subfolder, args.parameters)
   numbers = process(args.subfolder)
   colors = ["red", "blue"]
   labels = ["Number of Lambdas", "Number of Running Jobs"]
