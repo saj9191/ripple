@@ -33,7 +33,7 @@ def graph(subfolder, numbers, colors, labels, start_range=None, end_range=None):
       min_timestamp = min_t
       max_timestamp = max_t
       max_concurrency = max_c
-    plt.plot(timestamps, total, color=colors[i], label=labels[i])
+    plt.plot(timestamps, total, color=colors[i % len(colors)], label=labels[i])
 
   plt.xlabel("Time (Seconds)")
   if start_range:
