@@ -22,7 +22,8 @@
 			"chunk_size": 1000,
 			"format": "fastq",
 			"identifier": "signature",
-			"memory_size": 1024
+			"memory_size": 1024,
+			"combine":false
 		},
 		"compress-fastore": {
 			"file": "application",

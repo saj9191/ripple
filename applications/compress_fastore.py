@@ -14,17 +14,19 @@ def run(database: Database, file: str, params, input_format, output_format, offs
       with open(dir_path + entry.key,"wb+") as f:
         entry.download(f)
 
-
     for (root, dirs, files) in os.walk(dir_path, topdown=True):
         for ele in files:
             ele = ''.join(ele)
             subprocess.call("chmod 755 "+ dir_path +ele,shell = True)
 
-
     input_file = file
+    print("NAME OF INPUT FILE:",input_file)
+    print("SIZE OF COMPRESSION INPUT FILE:\n",os.stat(input_file))
     tmp_file = "/tmp/{0:s}".format(util.file_name(output_format)).split("/")[:-1]
+
+    input_name = input_file.split("/")[-1].split(".")[0]
     output_path = "/".join(tmp_file)
-    output_file = os.path.join(output_path, "1-1-1-output")
+    output_file = os.path.join(output_path, input_name)
     print("output",output_file)
     
 
