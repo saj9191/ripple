@@ -46,8 +46,12 @@ class Job:
     return "Job[start_time: {0:f}, deadline: {1:f}, pause: ({2:f},{3:f})]".format(self.start_time, self.deadline, self.pause[0], self.pause[1])
 
 
+
+Order = Tuple[Job, float]
+
+
 class Task(threading.Thread):
-  def __init__(self, bucket_name, job, timeout, params):
+  def __init__(self, bucket_name, job, timeout, params, tokens):
     super(Task, self).__init__()
     self.bucket_name = bucket_name
     self.key_to_payload = {}
@@ -60,6 +64,7 @@ class Task(threading.Thread):
     self.stage = 0
     self.timeout = timeout
     self.token = job.key
+    self.tokens = tokens
     self.__setup_client__()
 
   def __current_logs__(self, objs):
@@ -97,8 +102,10 @@ class Task(threading.Thread):
       m = {**m, **payload["Records"][0]["s3"]["extra_params"]}
     return (m["prefix"], m["bin"], m["file_id"])
 
-  def __get_object__(self, key):
-    obj = self.s3.Object(self.params["log"], key)
+  def __get_object__(self, prefix):
+    objs = list(self.s3.Bucket(self.params["log"]).objects.filter(Prefix=prefix))
+    assert(len(objs) == 1)
+    obj = objs[0]
     content = obj.get()["Body"].read().decode("utf-8")
     return json.loads(content)
 
@@ -124,6 +131,8 @@ class Task(threading.Thread):
     self.log = self.s3.Bucket(self.params["log"])
 
   def __find_payloads__(self, actual_logs, max_bin, max_file):
+    if self.stage == 0:
+      return [payload(self.bucket_name, self.job.key)]
     missing = set()
     parent_logs = self.found[self.stage - 1]
     parent_obj = list(self.__get_objects__(self.stage - 1))[0]
@@ -152,7 +161,6 @@ class Task(threading.Thread):
     m["nonce"] = int(self.token.split("-")[1])
     m["prefix"] = self.stage - 1
     for (s, b, f) in missing:
-      print("Cannot find", (s, b, f))
       if (s-1, b, f) in parent_logs:
         # First case. The parent only has one child and the same bin and file id
         m["bin"] = b
@@ -169,17 +177,24 @@ class Task(threading.Thread):
         m["num_bins"] = 1
         m["file_id"] = 1
         m["num_files"] = 1
-      body = self.__get_object__(util.file_name(m))
+      name = util.file_name(m)
+      prefix = "-".join(name.split("-")[:-3])
+      body = self.__get_object__(prefix)
       payloads += body["payloads"]
-      return payloads
+    return payloads
+
+  def __upload__(self):
+    [key, _, _] = upload.upload(self.job.destination_bucket, self.job.key, self.job.source_bucket, max(self.job.pause[0], 0))
+    self.token = key.split("/")[1]
+    self.tokens.add(self.token)
+    self.check_time = time.time()
 
   def run(self):
     sleep = self.job.start_time - time.time()
     if sleep > 0:
       time.sleep(sleep)
     if self.job.upload:
-      [key, _, _] = upload.upload(self.job.destination_bucket, self.job.key, self.job.source_bucket)
-      self.token = key.split("/")[1]
+      self.__upload__()
     print(self.token, "Starting stage", self.stage)
     while self.__running__() and self.stage < len(self.params["pipeline"]):
       [actual_logs, max_bin, max_file, expected_num_bins] = self.__current_logs__(self.__get_objects__(self.stage))
@@ -190,12 +205,11 @@ class Task(threading.Thread):
         print(self.token, "Starting stage", self.stage)
       else:
         ctime = time.time()
-        print(self.job.pause, ctime)
         if ctime - self.check_time > self.timeout and (self.job.pause[0] == -1 or ctime < self.job.pause[0] or ctime >= self.job.pause[1]):
           payloads = self.__find_payloads__(actual_logs, max_bin, max_file)
           for payload in payloads:
-            if self.job.pause[1] != -1 and time >= self.job.pause[1]:
-              payloads["execute"] = True
+            if self.job.pause[1] != -1 and ctime >= self.job.pause[1]:
+              payload["execute"] = 0
             name = self.params["pipeline"][self.stage]["name"]
             print(self.token, "Cannot find", payload, "Reinvoking", name)
             self.__invoke__(name, payload)
@@ -224,7 +238,7 @@ class Scheduler:
     self.s3 = boto3.resource("s3")
 
   def __add_task__(self, job):
-    self.tasks.append(Task(self.params["log"], job, self.timeout, self.params))
+    self.tasks.append(Task(self.params["log"], job, self.timeout, self.params, self.tokens))
 
   def __check_tasks__(self):
     self.__get_messages__(self.log_queue)
@@ -243,7 +257,6 @@ class Scheduler:
         self.tasks.pop(i)
       else:
         i += 1
-    print("Num tasks", len(self.tasks))
 
   def __delete_message__(self, queue, message):
     self.sqs.delete_message(QueueUrl=self.log_queue.url, ReceiptHandle=message["ReceiptHandle"])
@@ -364,8 +377,6 @@ def run(policy, timeout, params):
   scheduler = Scheduler(policy, timeout, params)
   scheduler.listen()
 
-
-Order = Tuple[Job, float]
 
 def simulation_deadline(jobs: List[Job], expected_job_duration: float, max_num_jobs: int, key_func):
   timestamps = []

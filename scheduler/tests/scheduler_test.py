@@ -16,16 +16,18 @@ class MockObject:
 
 
 class MockTask(scheduler.Task):
-  def __init__(self, bucket_name, job, timeout, params, objects, queue, max_iterations):
-    scheduler.Task.__init__(self, bucket_name, job, timeout, params)
+  def __init__(self, bucket_name, job, timeout, params, objects, queue, max_iterations, tokens):
+    scheduler.Task.__init__(self, bucket_name, job, timeout, params, tokens)
     self.current_iteration = 0
     self.max_iterations = max_iterations
     self.invokes = []
     self.objects = objects
     self.queue = queue
 
-  def __get_object__(self, key):
-    return self.objects[key]
+  def __get_object__(self, prefix):
+    keys = list(filter(lambda key: key.startswith(prefix), self.objects.keys()))
+    assert(len(keys) == 1)
+    return self.objects[keys[0]]
 
   def __get_objects__(self, stage):
     if stage not in self.queue:
@@ -43,6 +45,9 @@ class MockTask(scheduler.Task):
   def __setup_client__(self):
     pass
 
+  def __upload__(self):
+    pass
+
 
 class MockScheduler(scheduler.Scheduler):
   def __init__(self, policy, params, timeout, max_iterations):
@@ -53,7 +58,7 @@ class MockScheduler(scheduler.Scheduler):
     self.queue = {}
 
   def __add_task__(self, job):
-    self.tasks.append(MockTask(self.params["log"], job, self.timeout, self.params, self.objects, self.queue, self.max_iterations))
+    self.tasks.append(MockTask(self.params["log"], job, self.timeout, self.params, self.objects, self.queue, self.max_iterations, self.tokens))
 
   def __aws_connections__(self):
     pass

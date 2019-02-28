@@ -37,7 +37,7 @@ FILE_FORMAT = [{
   "folder": False,
 }, {
   "name": "execute",
-  "type": "bool",
+  "type": "float",
   "folder": False,
 }, {
   "name": "num_files",
@@ -158,7 +158,8 @@ def load_parameters(s3_dict, key_fields, start_time, event):
 
   params["start_time"] = start_time
   params["payloads"] = []
-  params["execute"] = is_set(event, "execute")
+  if "execute" in event:
+    params["execute"] = event["execute"]
 
   return params
 
@@ -169,7 +170,6 @@ def handle(event, context, func):
   bucket_name = s3_dict["bucket"]["name"]
   key = s3_dict["object"]["key"]
   input_format = parse_file_name(key)
-
   params = load_parameters(s3_dict, input_format, start_time, event)
 
   if run_function(params, input_format):
@@ -191,6 +191,8 @@ def get_formats(input_format, params):
     if key in params:
       output_format[key] = params[key]
 
+  if "execute" in params:
+    output_format["execute"] = params["execute"]
   log_format = dict(output_format)
   log_format["prefix"] -= 1
 
@@ -199,13 +201,10 @@ def get_formats(input_format, params):
 
 
 def run_function(params, m):
-  # The execute variable is for priority scheduling simulation.
-  # We set it to false if we want to simulate the Lambda function
-  # not executing due to a higher priority job.
-  # TODO: For now, we will also run the function if the key doesn't match
-  # the standardized input. We need a better to handle if we have to
-  # trigger a function using data already uploaded to S3.
-  return "execute" not in m or is_set(params, "execute") or is_set(m, "execute")
+  if ("execute" in params and params["execute"] <= 0) or m["execute"] <= 0:
+    return True
+  now = time.time()
+  return now < m["execute"]
 
 
 def duplicate_execution(bucket_format, params):
@@ -421,7 +420,7 @@ def make_folder(file_format):
 
 def file_name(m):
   if "execute" not in m:
-    m["execute"] = True
+    m["execute"] = 0
   return file_format(m)
 
 

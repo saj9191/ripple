@@ -6,7 +6,7 @@ import time
 import util
 
 
-def create_s3_key_name(key):
+def create_s3_key_name(key, execute=None):
   now = time.time()
   nonce = random.randint(1, 1000)
   _, ext = os.path.splitext(key)
@@ -22,13 +22,16 @@ def create_s3_key_name(key):
     "num_files": 1,
     "ext": ext[1:],  # Remove period
   }
+
+  if execute:
+    m["execute"] = execute
   return util.file_name(m)
 
 
 # TODO: Storage class?
-def upload(bucket_name, key, input_bucket_name=None):
+def upload(bucket_name, key, input_bucket_name=None, execute=None):
   s3 = boto3.resource("s3")
-  s3_key = create_s3_key_name(key)
+  s3_key = create_s3_key_name(key, execute)
 
   start = time.time()
   if input_bucket_name is not None:
