@@ -3,6 +3,7 @@ import boto3
 import inspect
 import json
 import os
+import queue
 import random
 import sys
 import threading
@@ -51,8 +52,38 @@ class Job:
 Order = Tuple[Job, float]
 
 
+class Invoker(threading.Thread):
+  def __init__(self, payload_queue, thread_id, params):
+    super(Invoker, self).__init__()
+    self.payload_queue = payload_queue
+    self.running = True
+    self.thread_id = thread_id
+    self.__setup_client__(params)
+
+  def __setup_client__(self, params):
+    s3 = boto3.resource("s3")
+    self.client = util.setup_client("lambda", params)
+
+  def __invoke__(self, name, payload):
+    response = self.client.invoke(
+      FunctionName=name,
+      InvocationType="Event",
+      Payload=json.JSONEncoder().encode(payload)
+    )
+    assert(response["ResponseMetadata"]["HTTPStatusCode"] == 202)
+
+  def __running__(self):
+    return True
+
+  def run(self):
+    print("Invoker", self.thread_id, "Start")
+    while self.__running__():
+      name, payload = self.payload_queue.get()
+      self.__invoke__(name, payload)
+
+
 class Task(threading.Thread):
-  def __init__(self, bucket_name, job, timeout, params, tokens):
+  def __init__(self, bucket_name, job, timeout, params, payload_queue, tokens):
     super(Task, self).__init__()
     self.bucket_name = bucket_name
     self.key_to_payload = {}
@@ -60,13 +91,14 @@ class Task(threading.Thread):
     self.found = {}
     self.job = job
     self.params = params
+    self.payload_queue = payload_queue
     self.processed = set()
     self.running = True
     self.stage = 0
     self.timeout = timeout
     self.token = job.key
     self.tokens = tokens
-    self.__setup_client__()
+    self.__setup__()
 
   def __current_logs__(self, objs):
     logs = set()
@@ -114,22 +146,16 @@ class Task(threading.Thread):
     objs = self.bucket.objects.filter(Prefix=str(stage) + "/" + self.token)
     return objs
 
+  def __setup__(self):
+    self.s3 = boto3.resource("s3")
+    self.bucket = self.s3.Bucket(self.bucket_name)
+
   def __invoke__(self, name, payload):
-    response = self.client.invoke(
-      FunctionName=name,
-      InvocationType="Event",
-      Payload=json.JSONEncoder().encode(payload)
-    )
-    assert(response["ResponseMetadata"]["HTTPStatusCode"] == 202)
+    self.payload_queue.put([name, payload])
 
   def __running__(self):
     return True
 
-  def __setup_client__(self):
-    self.s3 = boto3.resource("s3")
-    self.bucket = self.s3.Bucket(self.bucket_name)
-    self.client = util.setup_client("lambda", self.params)
-    self.log = self.s3.Bucket(self.params["log"])
 
   def __find_payloads__(self, actual_logs, max_bin, max_file):
     if self.stage == 0:
@@ -215,7 +241,6 @@ class Task(threading.Thread):
             payloads.append(payload)
             missing.remove(t)
 
-    assert len(missing) == 0, missing
     return payloads
 
   def __upload__(self):
@@ -258,10 +283,12 @@ class Task(threading.Thread):
 
 class Scheduler:
   def __init__(self, policy, timeout, params):
+    self.invokers = []
     self.max_tasks = 1000
     self.messages = {}
     self.next_job_id = 0
     self.params = params
+    self.payload_queue = queue.Queue()
     self.policy = policy
     self.prefixes = set()
     self.running = True
@@ -274,7 +301,11 @@ class Scheduler:
     self.s3 = boto3.resource("s3")
 
   def __add_task__(self, job):
-    self.tasks.append(Task(self.params["log"], job, self.timeout, self.params, self.tokens))
+    self.tasks.append(Task(self.params["log"], job, self.timeout, self.params, self.payload_queue, self.tokens))
+
+  def __add_invoker__(self, i):
+    self.invokers.append(Invoker(self.payload_queue, i, self.params))
+    self.invokers[-1].start()
 
   def __check_tasks__(self):
     self.__get_messages__(self.log_queue)
@@ -401,6 +432,8 @@ class Scheduler:
       self.tasks[-1].start()
 
   def listen(self):
+    for i in range(10):
+      self.__add_invoker__(i)
     print("Listening")
     while self.__running__():
       self.__check_tasks__()
