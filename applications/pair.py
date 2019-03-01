@@ -34,7 +34,8 @@ def run(database: Database, key: str, params, input_format, output_format, offse
             "train_offsets": offsets,
           }
         }
-      }]
+      }],
+      "log": [output_format["prefix"], output_format["bin"], file_id]
     }
 
     database.invoke(client, params["output_function"], params, payload)

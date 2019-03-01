@@ -24,7 +24,6 @@ def create_jobs(source_bucket, destination_bucket, policy, prefix, num_jobs, job
     offset = 60
     for i in range(num_jobs):
       obj = objs[i]
-      print(obj.key)
       start_time = now + i * offset
       deadline = now + job_duration + (2 * (num_jobs - 1) - i) * offset
       jobs.append(scheduler.Job(source_bucket, destination_bucket, obj.key, start_time=start_time, deadline=deadline))

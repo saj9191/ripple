@@ -3,6 +3,7 @@ import boto3
 import inspect
 import json
 import os
+import random
 import sys
 import threading
 import time
@@ -104,7 +105,7 @@ class Task(threading.Thread):
 
   def __get_object__(self, prefix):
     objs = list(self.s3.Bucket(self.params["log"]).objects.filter(Prefix=prefix))
-    assert(len(objs) == 1)
+    assert len(objs) > 0, "Prefix is {0:s}".format(prefix)
     obj = objs[0]
     content = obj.get()["Body"].read().decode("utf-8")
     return json.loads(content)
@@ -156,31 +157,65 @@ class Task(threading.Thread):
         if ll not in actual_logs:
           missing.add(ll)
 
-    payloads = []
     m["timestamp"] = float(self.token.split("-")[0])
     m["nonce"] = int(self.token.split("-")[1])
     m["prefix"] = self.stage - 1
+    prefixes = set()
+
+    print(self.token, "Stage", self.stage, "Looking for", len(missing), "files")
     for (s, b, f) in missing:
-      if (s-1, b, f) in parent_logs:
-        # First case. The parent only has one child and the same bin and file id
+      if self.stage == 1: # Pair train
+        assert (s-1, 1, 1) in parent_logs, (s-1, 1, 1)
+        assert len(parent_logs) == 1, len(parent_logs)
+        m["bin"] = m["num_bins"] = m["file_id"] = m["num_files"] = 1
+      elif self.stage == 2: # KNN
+        assert (s-1, b, 1) in parent_logs, (s-1, b, 1)
+        assert max_parent_file == 1, max_parent_file
+        m["bin"] = b
+        m["file_id"] = m["num_files"] = 1
+      elif self.stage == 3: # combine
+        assert (s-1, b, f) in parent_logs, (s-1, b, f)
+        assert max_parent_bin == max_bin, (max_parent_bin, max_bin)
+        assert max_parent_file == max_file, (max_parent_file, max_file)
+        m["bin"] = b
+        m["file_id"] = f
+      elif self.stage == 4: # second combine
+        assert (s-1, b, f) in parent_logs, (s-1, b, f)
+        assert max_bin == 1, max_bin
+        assert max_file == max_parent_bin, (max_file, max_parent_bin)
         m["bin"] = b
         m["num_bins"] = max_parent_bin
         m["file_id"] = f
-        m["num_files"] = max_parent_file
-      else:
-        assert((s-1, 1, 1) in parent_logs)
-        assert(max_parent_bin == 1)
-        assert(max_parent_file == 1)
-        # Second case. The child is the result of some split variation. So the max file ID
-        # of the parent must be 1.
-        m["bin"] = 1
-        m["num_bins"] = 1
-        m["file_id"] = 1
-        m["num_files"] = 1
+        m["num_files"] = max_file
+      elif self.stage == 5: # draw
+        m["bin"] = m["num_bins"] = m["file_id"] = m["num_files"] = 1
+        assert (s-1, 1, 1) in parent_logs, (s-1, 1, 1)
+        assert max_parent_bin > 1, max_parent_bin
+        assert max_parent_file > 1, max_parent_file
+
       name = util.file_name(m)
-      prefix = "-".join(name.split("-")[:-3])
+      prefix = "-".join(name.split("-")[:-3]) + "-"
+#      print("Missing", (s, b, f), "Prefix", prefix)
+      prefixes.add(prefix)
+
+    payloads = []
+#    print("missing", list(missing)[0])
+    for prefix in prefixes:
       body = self.__get_object__(prefix)
-      payloads += body["payloads"]
+      for payload in body["payloads"]:
+        if "log" in payload:
+          t = tuple(payload["log"])
+          if t in missing:
+            payloads.append(payload)
+            missing.remove(t)
+        else:
+          m = util.parse_file_name(payload["Records"][0]["s3"]["object"]["key"])
+          t = (s, m["bin"], m["file_id"])
+          if t in missing:
+            payloads.append(payload)
+            missing.remove(t)
+
+    assert len(missing) == 0, missing
     return payloads
 
   def __upload__(self):
@@ -207,11 +242,12 @@ class Task(threading.Thread):
         ctime = time.time()
         if ctime - self.check_time > self.timeout and (self.job.pause[0] == -1 or ctime < self.job.pause[0] or ctime >= self.job.pause[1]):
           payloads = self.__find_payloads__(actual_logs, max_bin, max_file)
-          for payload in payloads:
+          print(self.token, "Stage", self.stage, "Reinvoking", len(payloads), "payloads")
+          for i in range(len(payloads)):
+            payload = payloads[i]
             if self.job.pause[1] != -1 and ctime >= self.job.pause[1]:
               payload["execute"] = 0
             name = self.params["pipeline"][self.stage]["name"]
-            print(self.token, "Cannot find", payload, "Reinvoking", name)
             self.__invoke__(name, payload)
           self.check_time = time.time()
       time.sleep(5)
