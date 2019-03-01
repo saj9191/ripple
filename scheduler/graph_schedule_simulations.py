@@ -38,7 +38,7 @@ def process(subfolder):
       ranges.append([counts[i][0] - 1, num_functions])
       num_functions += counts[i][1]
       ranges.append([counts[i][0], num_functions])
-    print("ranges", ranges)
+    numbers.append(ranges)
 
   colors = ["red", "blue", "gray", "purple", "green", "orange", "blue", "cyan", "pink", "brown"]
   graph.graph(subfolder, numbers, colors, None, None, None)

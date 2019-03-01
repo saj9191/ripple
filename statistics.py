@@ -2,11 +2,12 @@ import argparse
 import boto3
 import json
 import os
+from pathlib import Path
 import setup
 import sys
 import util
 
-def process_objects(s3, bucket_name, objects, params):
+def process_objects(s3, bucket_name, objects, params, subfolder):
   costs = {-1: 0}
   duration_cost = {-1: 0}
   durations = {-1: [sys.maxsize, 0]}
@@ -21,9 +22,22 @@ def process_objects(s3, bucket_name, objects, params):
     statistics.append({"name": stage["name"], "messages": []})
 
   for objSum in objects:
+    name = subfolder + "/" + objSum.key.replace("/", ".")
     obj_format = util.parse_file_name(objSum.key)
-    obj = s3.Object(bucket_name, objSum.key)
-    body = json.loads(obj.get()["Body"].read().decode("utf-8"))
+    if os.path.isfile(name):
+      content = open(name, "r").read()
+      if len(content.strip()) > 0:
+        body = json.loads(open(name, "r").read())
+      else:
+        continue
+    else:
+      Path(name).touch()
+      print("Not Found", name)
+      obj = s3.Object(bucket_name, objSum.key)
+      x = obj.get()["Body"].read()
+      body = json.loads(x.decode("utf-8"))
+      with open(name, "wb+") as f:
+        f.write(x)
     duration = body["duration"]
     stage = obj_format["prefix"] - 1
 
@@ -66,7 +80,7 @@ def record(output, f):
     print(output)
 
 
-def statistics(bucket_name, token, prefix, params, output_file):
+def statistics(bucket_name, token, prefix, params, output_folder):
   s3 = boto3.resource("s3")
   bucket = s3.Bucket(bucket_name)
   if prefix is None and token is None:
@@ -79,14 +93,14 @@ def statistics(bucket_name, token, prefix, params, output_file):
   else:
     objects = list(bucket.objects.filter(Prefix=str(prefix) + "/" + token))
 
-  [statistics, costs, durations] = process_objects(s3, bucket_name, objects, params)
+  [statistics, costs, durations] = process_objects(s3, bucket_name, objects, params, output_folder)
 
   print("Total Cost " + str(costs[-1]))
 
   print("Total Duration " + str(durations[-1][1] - durations[-1][0]) + " seconds")
 
-  if output_file:
-    with open(output_file, "w+") as f:
+  if output_folder:
+    with open(output_folder + "/statistics", "w+") as f:
       f.write(json.dumps({"stats": statistics}, indent=4, sort_keys=True))
 
   return [statistics, costs, durations]
@@ -98,11 +112,11 @@ def main():
   parser.add_argument("--token", type=str, default=None, help="Only delete objects with the specified timestamp / nonce pair")
   parser.add_argument("--prefix", type=int, default=None, help="Only delete objects with the specified prefix")
   parser.add_argument("--parameters", type=str, help="JSON file containing application setup")
-  parser.add_argument("--output_file", type=str, help="Output file to record statistics")
+  parser.add_argument("--output_folder", type=str, help="Output folder to record statistics")
   args = parser.parse_args()
   params = json.loads(open(args.parameters).read())
   setup.process_functions(params)
-  statistics(args.bucket_name, args.token, args.prefix, params, args.output_file)
+  statistics(args.bucket_name, args.token, args.prefix, params, args.output_folder)
 
 
 if __name__ == "__main__":

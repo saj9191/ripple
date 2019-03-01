@@ -48,7 +48,6 @@ class Job:
     return "Job[start_time: {0:f}, deadline: {1:f}, priority: {2:d}, pause: ({3:f},{4:f})]".format(self.start_time, self.deadline, self.priority, self.pause[0], self.pause[1])
 
 
-
 Order = Tuple[Job, float]
 
 
@@ -156,8 +155,7 @@ class Task(threading.Thread):
   def __running__(self):
     return True
 
-
-  def __find_payloads__(self, actual_logs, max_bin, max_file):
+  def __invoke_payloads__(self, actual_logs, max_bin, max_file, unpause):
     if self.stage == 0:
       return [payload(self.bucket_name, self.job.key)]
     missing = set()
@@ -189,6 +187,7 @@ class Task(threading.Thread):
     prefixes = set()
 
     print(self.token, "Stage", self.stage, "Looking for", len(missing), "files")
+    st = time.time()
     for (s, b, f) in missing:
       if self.stage == 1: # Pair train
         assert (s-1, 1, 1) in parent_logs, (s-1, 1, 1)
@@ -216,32 +215,33 @@ class Task(threading.Thread):
       elif self.stage == 5: # draw
         m["bin"] = m["num_bins"] = m["file_id"] = m["num_files"] = 1
         assert (s-1, 1, 1) in parent_logs, (s-1, 1, 1)
-        assert max_parent_bin > 1, max_parent_bin
-        assert max_parent_file > 1, max_parent_file
 
       name = util.file_name(m)
       prefix = "-".join(name.split("-")[:-3]) + "-"
-#      print("Missing", (s, b, f), "Prefix", prefix)
       prefixes.add(prefix)
+    et = time.time()
+    print("Prefix time", et - st)
 
-    payloads = []
-#    print("missing", list(missing)[0])
+    st = time.time()
+    count = 0
+    name = self.params["pipeline"][self.stage]["name"]
     for prefix in prefixes:
       body = self.__get_object__(prefix)
       for payload in body["payloads"]:
         if "log" in payload:
           t = tuple(payload["log"])
-          if t in missing:
-            payloads.append(payload)
-            missing.remove(t)
         else:
           m = util.parse_file_name(payload["Records"][0]["s3"]["object"]["key"])
           t = (s, m["bin"], m["file_id"])
-          if t in missing:
-            payloads.append(payload)
-            missing.remove(t)
-
-    return payloads
+        if t in missing:
+          missing.remove(t)
+          if unpause:
+            payload["execute"] = 0
+          self.__invoke__(name, payload)
+          count += 1
+    print(self.token, "Stage", self.stage, "Reinvoked", count, "functions")
+    et = time.time()
+    print("Payload time", et - st, "finiding", len(prefixes))
 
   def __upload__(self):
     [key, _, _] = upload.upload(self.job.destination_bucket, self.job.key, self.job.source_bucket, max(self.job.pause[0], 0))
@@ -266,14 +266,7 @@ class Task(threading.Thread):
       else:
         ctime = time.time()
         if ctime - self.check_time > self.timeout and (self.job.pause[0] == -1 or ctime < self.job.pause[0] or ctime >= self.job.pause[1]):
-          payloads = self.__find_payloads__(actual_logs, max_bin, max_file)
-          print(self.token, "Stage", self.stage, "Reinvoking", len(payloads), "payloads")
-          for i in range(len(payloads)):
-            payload = payloads[i]
-            if self.job.pause[1] != -1 and ctime >= self.job.pause[1]:
-              payload["execute"] = 0
-            name = self.params["pipeline"][self.stage]["name"]
-            self.__invoke__(name, payload)
+          self.__invoke_payloads__(actual_logs, max_bin, max_file, self.job.pause[1] != -1 and ctime >= self.job.pause[1])
           self.check_time = time.time()
       time.sleep(5)
 
@@ -432,7 +425,7 @@ class Scheduler:
       self.tasks[-1].start()
 
   def listen(self):
-    for i in range(10):
+    for i in range(50):
       self.__add_invoker__(i)
     print("Listening")
     while self.__running__():
