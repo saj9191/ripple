@@ -1,4 +1,3 @@
-import boto3
 import pivot
 import util
 from database import Database, Entry
@@ -6,7 +5,6 @@ from typing import Any, Dict, List
 
 
 def map_file(d: Database, table: str, key: str, input_format: Dict[str, Any], output_format: Dict[str, Any], offsets: List[int], params: Dict[str, Any]):
-  client = params["client"] if "client" in params else boto3.client("lambda")
   prefix: str = util.key_prefix(key)
 
   if util.is_set(params, "ranges"):
@@ -64,7 +62,7 @@ def map_file(d: Database, table: str, key: str, input_format: Dict[str, Any], ou
       payload["Records"][0]["s3"]["extra_params"]["pivots"] = ranges
       payload["Records"][0]["s3"]["pivots"] = ranges
 
-    d.invoke(client, params["output_function"], params, payload)
+    d.invoke(params["output_function"], payload)
 
 
 def handler(event, context):

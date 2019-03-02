@@ -35,8 +35,6 @@ def create_payload(bucket: str, key: str, offsets: List[int], prefix: int, input
 def split_file(d: Database, bucket_name: str, key: str, input_format: Dict[str, Any], output_format: Dict[str, Any], offsets: List[int], params: Dict[str, Any]):
   split_size = params["split_size"]
 
-  client = params["client"] if "client" in params else boto3.client("lambda")
-
   if util.is_set(params, "ranges"):
     [input_bucket, input_key, ranges] = pivot.get_pivot_ranges(bucket_name, key, params)
   else:
@@ -59,7 +57,7 @@ def split_file(d: Database, bucket_name: str, key: str, input_format: Dict[str, 
     if util.is_set(params, "ranges"):
       s3_params["extra_params"]["pivots"] = ranges
 
-    d.invoke(client, params["output_function"], params, payload)
+    d.invoke(params["output_function"], payload)
     file_id += 1
 
 

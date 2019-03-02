@@ -124,7 +124,7 @@ class Database:
   def get_table(self, table_name: str) -> Table:
     raise Exception("Database::get_table not implemented")
 
-  def invoke(self, client, name, params, payload):
+  def invoke(self, name, payload):
     raise Exception("Database::invoke not implemented")
 
   def put(self, table_name: str, key: str, content: BinaryIO, metadata: Dict[str, str]):
@@ -177,6 +177,7 @@ class Bucket(Table):
 class S3(Database):
   def __init__(self):
     self.s3 = boto3.resource("s3")
+    self.client = boto3.client("lambda")
     Database.__init__(self)
 
   def __download__(self, table_name: str, key: str, f: BinaryIO) -> int:
@@ -251,9 +252,9 @@ class S3(Database):
   def get_table(self, table_name: str) -> Table:
     return Table(table_name, self.statistics, self.s3)
 
-  def invoke(self, client, name, params, payload):
+  def invoke(self, name, payload):
     self.payloads.append(payload)
-    response = client.invoke(
+    response = self.client.invoke(
       FunctionName=name,
       InvocationType="Event",
       Payload=json.JSONEncoder().encode(payload)

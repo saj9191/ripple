@@ -6,7 +6,6 @@ from typing import List
 def run(database: Database, key: str, params, input_format, output_format, offsets: List[int]):
   train_key = "train.classification.w1-h1"
   obj = database.get_entry("maccoss-spacenet", train_key)
-  client = params["client"] if "client" in params else boto3.client("lambda")
   content_length: int = obj.content_length()
   split_size = params["split_size"]
   num_files = int((content_length + split_size - 1) / split_size)
@@ -38,7 +37,7 @@ def run(database: Database, key: str, params, input_format, output_format, offse
       "log": [output_format["prefix"], output_format["bin"], file_id]
     }
 
-    database.invoke(client, params["output_function"], params, payload)
+    database.invoke(params["output_function"], payload)
     file_id += 1
 
   return []

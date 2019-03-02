@@ -66,7 +66,6 @@ def run(file, params, input_format, output_format, offsets):
     }]
   }
 
-  client = boto3.client("lambda")
-  util.invoke(client, params["output_function"], params, payload)
+  util.invoke(params["output_function"], payload)
 
   return []
