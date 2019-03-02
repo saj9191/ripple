@@ -23,6 +23,7 @@ class CombineFunction(unittest.TestCase):
       "batch_size": 2,
       "bucket": table1.name,
       "chunk_size": 20,
+      "execute": 0,
       "file": "combine_file",
       "format": "new_line",
       "log": log.name,
@@ -39,7 +40,7 @@ class CombineFunction(unittest.TestCase):
     entries: List[TestEntry] = database.get_entries(table1.name)
     self.assertEqual(len(entries), 3)
     combined_entry = entries[-1]
-    self.assertEqual(combined_entry.key, "1/123.400000-13/1-1/1-1-1-suffix.new")
+    self.assertEqual(combined_entry.key, "1/123.400000-13/1-1/1-0.000000-1-suffix.new")
     self.assertEqual(combined_entry.get_content().decode("utf-8"), "A B C\nD E F\nG H I\nJ K L\n")
 
   def test_batches(self):
@@ -50,6 +51,7 @@ class CombineFunction(unittest.TestCase):
       "batch_size": 2,
       "bucket": table1.name,
       "chunk_size": 20,
+      "execute": 0,
       "file": "combine_file",
       "format": "new_line",
       "log": log.name,
@@ -71,7 +73,7 @@ class CombineFunction(unittest.TestCase):
     entries = database.get_entries(table1.name)
     self.assertEqual(len(entries), 4)
     combined_entry = entries[-1]
-    self.assertEqual(combined_entry.key, "1/123.400000-13/1-1/2-1-2-suffix.new")
+    self.assertEqual(combined_entry.key, "1/123.400000-13/1-1/2-0.000000-2-suffix.new")
     self.assertEqual(combined_entry.get_content().decode("utf-8"), "M N O\bP Q R\n")
 
     event = tutils.create_event(database, table1.name, entry2.key, params)
@@ -79,7 +81,7 @@ class CombineFunction(unittest.TestCase):
     entries = database.get_entries(table1.name)
     self.assertEqual(len(entries), 5)
     combined_entry = entries[-2]
-    self.assertEqual(combined_entry.key, "1/123.400000-13/1-1/1-1-2-suffix.new")
+    self.assertEqual(combined_entry.key, "1/123.400000-13/1-1/1-0.000000-2-suffix.new")
     self.assertEqual(combined_entry.get_content().decode("utf-8"), "A B C\nD E F\nG H I\nJ K L\n")
 
 

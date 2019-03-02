@@ -15,7 +15,7 @@ class SmithWaterman(unittest.TestCase):
     pp.populate_table("ssw-database", "ssw/", files)
     pp.populate_table("ssw-program", "ssw/", ["ssw_test"])
 
-    name = "0/123.400000-13/1-1/1-1-1-fasta.fasta"
+    name = "0/123.400000-13/1-1/1-0.000000-1-fasta.fasta"
     pp.run(name, "ssw/input-10.fasta")
 
     entries: List[TestEntry] = pp.database.get_entries(pp.table.name)

@@ -42,6 +42,7 @@ optimal_alignment_score: 193 suboptimal_alignment_score: 48""")
 
     params = {
       "bucket": table1.name,
+      "execute": 0,
       "file": "sort",
       "format": "blast",
       "identifier": "score",
@@ -105,6 +106,7 @@ optimal_alignment_score: 193 suboptimal_alignment_score: 48""")
 
     params = {
       "bucket": table1.name,
+      "execute": 0,
       "file": "sort",
       "format": "blast",
       "identifier": "score",

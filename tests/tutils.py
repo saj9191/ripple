@@ -191,7 +191,7 @@ class TestDatabase(Database):
       return table.entries[key]
     return None
 
-  def invoke(self, client, name, params, payload):
+  def invoke(self, name, payload):
     self.payloads.append(payload)
 
 

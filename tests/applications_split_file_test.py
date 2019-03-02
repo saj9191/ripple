@@ -42,6 +42,7 @@ class SplitFunction(unittest.TestCase):
     output_format["prefix"] = 1
 
     params = {
+      "execute": 0,
       "file": "split_file",
       "format": "new_line",
       "log": log.name,

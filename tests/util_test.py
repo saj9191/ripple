@@ -27,7 +27,7 @@ class FileNameMethods(unittest.TestCase):
       "ext": "txt"
     }
     self.assertDictEqual(m, util.parse_file_name(util.file_name(m)))
-    self.assertEqual("0/123.400000-13/1-4/1-0-0-suffix.txt", util.file_name(util.parse_file_name("0/123.400000-13/1-4/1-0-0-suffix.txt")))
+    self.assertEqual("0/123.400000-13/1-4/1-0.000000-0-suffix.txt", util.file_name(util.parse_file_name("0/123.400000-13/1-4/1-0.000000-0-suffix.txt")))
 
 
 class ExecutionMethods(unittest.TestCase):
