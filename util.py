@@ -1,5 +1,4 @@
 import boto3
-import botocore
 import json
 import os
 import random
@@ -8,7 +7,6 @@ import subprocess
 import time
 from database import S3
 from botocore.client import Config
-from typing import List
 
 
 FILE_FORMAT = [{
@@ -143,7 +141,7 @@ def load_parameters(s3_dict, key_fields, start_time, event):
     client = event["client"]
   else:
     params = json.loads(open("{0:d}.json".format(prefix)).read())
-    s3 = S3()
+    s3 = S3(params)
     client = boto3.client("lambda")
 
   params["offsets"] = []
@@ -171,16 +169,26 @@ def handle(event, context, func):
   key = s3_dict["object"]["key"]
   input_format = parse_file_name(key)
   params = load_parameters(s3_dict, input_format, start_time, event)
-
   if run_function(params, input_format):
     [output_format, log_format] = get_formats(input_format, params)
-    if not duplicate_execution(log_format, params):
+    entries = prior_executions(log_format, params)
+    if len(entries) == 0:
       if not is_set(event, "test"):
         clear_tmp(params)
       make_folder(output_format)
       func(params["s3"], bucket_name, key, input_format, output_format, params["offsets"], params)
 
       show_duration(context, input_format, log_format, params)
+    else:
+      count = 0
+      for entry in entries:
+        content = json.loads(entry.get_content().decode("utf-8"))
+        count += len(content["payloads"])
+        for payload in content["payloads"]:
+          if "execute" in params:
+            payload["execute"] = params["execute"]
+          params["s3"].invoke(params["output_function"], payload)
+      print("Re-invoking", count, "Payloads")
 
 
 def get_formats(input_format, params):
@@ -209,14 +217,14 @@ def run_function(params, m):
   return now < m["execute"]
 
 
-def duplicate_execution(bucket_format, params):
+def prior_executions(bucket_format, params):
   prefix = "-".join(file_name(bucket_format).split("-")[:-1])
   objects = params["s3"].get_entries(params["log"], prefix)
   if "execute" in params:
     bucket_format["execute"] = params["execute"]
     prefix = "-".join(file_name(bucket_format).split("-")[:-1])
     objects += params["s3"].get_entries(params["log"], prefix)
-  return len(objects) != 0
+  return objects
 
 
 def current_last_file(batch, current_key, params):
@@ -304,8 +312,9 @@ def show_duration(context, input_format, bucket_format, params):
   for key in ["name"]:
     log_results[key] = params[key]
 
-  bucket_format["suffix"] = params["start_time"]
-  params["s3"].write(params["log"], file_name(bucket_format), str.encode(json.dumps(log_results)), {})
+  bucket_format["suffix"] = 0#params["start_time"]
+  bucket_format["execute"] = 0#params["start_time"]
+  params["s3"].write(params["log"], file_name(bucket_format), str.encode(json.dumps(log_results)), {}, invoke=False)
 
 
 def print_request(m, params):
