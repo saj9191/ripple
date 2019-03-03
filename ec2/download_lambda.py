@@ -18,15 +18,24 @@ def download(subfolder, param_file):
   params = json.loads(open(param_file).read())
 
   total_cost = 0.0
+  average_duration = 0.0
+  count = 0
+  tokens = set()
   for objSum in objSums:
     token = objSum.key.split("/")[1]
-    file_name = subfolder + "/" + token
-    if not os.path.isfile(file_name):
-      [stats, costs, durations] = statistics.statistics("maccoss-log", objSum.key.split("/")[1], None,  params, None)
-      total_cost += costs[-1]
+    tokens.add(token)
 
-      with open(file_name, "w+") as f:
-        f.write(json.dumps({"cost": costs, "durations": durations, "stats": stats}))
+  for token in tokens:
+    print("token", token)
+    dir_name = subfolder + "/" + token
+    if not os.path.isdir(dir_name):
+      os.mkdir(dir_name)
+    [stats, costs, durations] = statistics.statistics("maccoss-log", token, None, params, dir_name)
+    total_cost += costs[-1]
+    average_duration += durations[-1][1] - durations[-1][0]
+    count += 1
+  average_duration /= float(count)
+  print("Average duration", average_duration)
 
 def s3_cost(stats):
   cost = 0
@@ -51,29 +60,31 @@ def process(subfolder):
   list_count = 0
   read_count = 0
   write_count = 0
-  for file in os.listdir(subfolder):
-    name = subfolder + "/" + file
-    if name.endswith(".png") or name.endswith("README"):
-      continue
-    results = json.loads(open(name).read())
-    for stage in results["stats"]:
-      for message in stage["messages"]:
-        start_time = message["start_time"]
-        end_time = start_time + message["duration"] / 1000.0
-        lambda_ranges.append([start_time, 1])
-        lambda_ranges.append([end_time, -1])
-        list_count += message["list_count"]
-        read_count += message["read_count"]
-        write_count += message["write_count"]
+  for d in os.listdir(subfolder):
+    for f in os.listdir(subfolder + "/" + d):
+      name = subfolder + "/" + d + "/" + f
+      if name.endswith(".png") or name.endswith("README"):
+        continue
+      print(name)
+      results = json.loads(open(name).read())
+      for stage in results["stats"]:
+        for message in stage["messages"]:
+          start_time = message["start_time"]
+          end_time = start_time + message["duration"] / 1000.0
+          lambda_ranges.append([start_time, 1])
+          lambda_ranges.append([end_time, -1])
+          list_count += message["list_count"]
+          read_count += message["read_count"]
+          write_count += message["write_count"]
 
-    durations = results["durations"]
-    total_cost += results["cost"]["-1"]
-    d = durations["-1"][1] - durations["-1"][0]
-    print("duration", d)
-    average_duration += d
-    task_ranges.append([durations["-1"][0], 1])
+      durations = results["durations"]
+      total_cost += results["cost"]["-1"]
+      d = durations["-1"][1] - durations["-1"][0]
+      print("duration", d)
+      average_duration += d
+      task_ranges.append([durations["-1"][0], 1])
+      task_ranges.append([durations["-1"][1], -1])
     count += 1
-    task_ranges.append([durations["-1"][1], -1])
 
   total_s3_cost = 0
   total_s3_cost += (write_count + list_count) / 1000.0 * 0.005
@@ -110,10 +121,10 @@ def main():
   args = parser.parse_args()
   if args.download:
     download(args.subfolder, args.parameters)
-  numbers = process(args.subfolder)
-  colors = ["red", "blue"]
-  labels = ["Number of Lambdas", "Number of Running Jobs"]
-  graph.graph(args.subfolder, numbers, colors, labels, args.start_range, args.end_range)
+  #numbers = process(args.subfolder)
+  #colors = ["red", "blue"]
+  #labels = ["Number of Lambdas", "Number of Running Jobs"]
+  #graph.graph(args.subfolder, numbers, colors, labels, args.start_range, args.end_range)
 
 if __name__ == "__main__":
   main()
