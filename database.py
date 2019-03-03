@@ -127,10 +127,10 @@ class Database:
   def invoke(self, name, payload):
     raise Exception("Database::invoke not implemented")
 
-  def put(self, table_name: str, key: str, content: BinaryIO, metadata: Dict[str, str]):
+  def put(self, table_name: str, key: str, content: BinaryIO, metadata: Dict[str, str], invoke=True):
     self.statistics.write_count += 1
     self.statistics.write_byte_count += os.path.getsize(content.name)
-    self.__put__(table_name, key, content, metadata)
+    self.__put__(table_name, key, content, metadata, invoke)
 
   def read(self, table_name: str, key: str) -> bytes:
     self.statistics.read_count += 1
@@ -138,10 +138,10 @@ class Database:
     self.statistics.read_byte_count += len(content)
     return content
 
-  def write(self, table_name: str, key: str, content: bytes, metadata: Dict[str, str]):
+  def write(self, table_name: str, key: str, content: bytes, metadata: Dict[str, str], invoke=True):
     self.statistics.write_count += 1
     self.statistics.write_byte_count += len(content)
-    self.__write__(table_name, key, content, metadata)
+    self.__write__(table_name, key, content, metadata, invoke)
 
 
 class Object(Entry):
@@ -175,9 +175,10 @@ class Bucket(Table):
 
 
 class S3(Database):
-  def __init__(self):
+  def __init__(self, params):
     self.s3 = boto3.resource("s3")
     self.client = boto3.client("lambda")
+    self.params = params
     Database.__init__(self)
 
   def __download__(self, table_name: str, key: str, f: BinaryIO) -> int:
@@ -205,7 +206,7 @@ class S3(Database):
 
     return objects
 
-  def __put__(self, table_name: str, key: str, content: BinaryIO, metadata: Dict[str, str]):
+  def __put__(self, table_name: str, key: str, content: BinaryIO, metadata: Dict[str, str], invoke=True):
     self.__s3_write__(table_name, key, content, metadata)
 
   def __read__(self, table_name: str, key: str) -> bytes:
@@ -213,10 +214,10 @@ class S3(Database):
     content = obj.get()["Body"].read()
     return content
 
-  def __write__(self, table_name: str, key: str, content: bytes, metadata: Dict[str, str]):
-    self.__s3_write__(table_name, key, content, metadata)
+  def __write__(self, table_name: str, key: str, content: bytes, metadata: Dict[str, str], invoke=True):
+    self.__s3_write__(table_name, key, content, metadata, invoke)
 
-  def __s3_write__(self, table_name: str, key: str, content: Union[bytes, BinaryIO], metadata: Dict[str, str]):
+  def __s3_write__(self, table_name: str, key: str, content: Union[bytes, BinaryIO], metadata: Dict[str, str], invoke=True):
     done: bool = False
     while not done:
       try:
@@ -226,18 +227,21 @@ class S3(Database):
         print("Warning: S3::write Rate Limited")
         time.sleep(random.randint(1, 10))
 
-    self.payloads.append({
-      "Records": [{
-        "s3": {
-          "bucket": {
-            "name": table_name
-          },
-          "object": {
-            "key": key
+    if "output_function" in self.params and invoke:
+      payload = {
+        "Records": [{
+          "s3": {
+            "bucket": {
+              "name": table_name
+            },
+            "object": {
+              "key": key
+            }
           }
-        }
-      }]
-    })
+        }]
+      }
+      self.payloads.append(payload)
+      self.invoke(self.params["output_function"], payload)
 
   def contains(self, table_name: str, key: str) -> bool:
     try:
