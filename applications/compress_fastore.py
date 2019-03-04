@@ -1,54 +1,54 @@
+import shutil
 import subprocess
 import util
 import os
 from database import Database
 from typing import List
 
+
+def download(database, bucket, path, name):
+   with open(path + name, "wb+") as f:
+     database.get_entry(bucket, name).download(f)
+   subprocess.call("chmod 755 " + path + name, shell=True)
+
+
 def run(database: Database, file: str, params, input_format, output_format, offsets: List[int]):
     dir_path = "/tmp/fastore_test/"
-    bucket = params["bucket"]
     if not os.path.exists(dir_path):
-        os.makedirs(dir_path)
+      os.makedirs(dir_path)
+    bin_path = dir_path #+ "bin/"
+    if not os.path.exists(bin_path):
+      os.makedirs(bin_path)
+    script_path = dir_path #+ "script/"
+    if not os.path.exists(script_path):
+      os.makedirs(script_path)
 
-    for entry in database.get_entries(params["program_bucket"]):
-      with open(dir_path + entry.key,"wb+") as f:
-        entry.download(f)
+    script_files = ["fastore_compress.sh"]
+    bin_files = ["fastore_bin", "fastore_pack", "fastore_rebin"]
 
-    for (root, dirs, files) in os.walk(dir_path, topdown=True):
-        for ele in files:
-            ele = ''.join(ele)
-            subprocess.call("chmod 755 "+ dir_path +ele,shell = True)
+    for s in script_files:
+      download(database, params["program_bucket"], script_path, s)
+
+    for b in bin_files:
+      download(database, params["program_bucket"], bin_path, b)
 
     input_file = file
-    print("NAME OF INPUT FILE:",input_file)
-    print("SIZE OF COMPRESSION INPUT FILE:\n",os.stat(input_file))
-    tmp_file = "/tmp/{0:s}".format(util.file_name(output_format)).split("/")[:-1]
-
-    input_name = input_file.split("/")[-1].split(".")[0]
-    output_path = "/".join(tmp_file)
-    output_file = os.path.join(output_path, input_name)
-    print("output",output_file)
-    
+    output_format["ext"] = "compress"
 
     arguments = [
         "in " + input_file,
-        "pair " + input_file,
-        "out " + output_file
+        "pair " + input_file
     ]
 
-    command = "cd /tmp/fastore_test; ./fastore_compress.sh --lossless --{0:s}".format(" --".join(arguments),output_file)
+    command = "cd {0:s}; ./fastore_compress.sh --lossless --{1:s}".format(script_path, " --".join(arguments))
     subprocess.check_output(command, stderr=subprocess.STDOUT, shell=True)
 
+    output_files = ["OUT.cdata", "OUT.cmeta"]
     output_list = []
-    for (root, dirs, files) in os.walk(output_path,topdown = True):
-        for file in files:
-            file = "".join(file)
-            if file.endswith(".cmeta") or file.endswith(".cdata"):
-                output_list.append(os.path.join(output_path, file))
-
-    print("outputlist",output_list)
+    for f in output_files:
+      output_format["ext"] = f.split(".")[-1]
+      output_file = "/tmp/{0:s}".format(util.file_name(output_format))
+      shutil.move(script_path + f, output_file)
+      output_list.append(output_file)
 
     return output_list
-
-
-

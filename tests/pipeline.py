@@ -73,7 +73,6 @@ class Pipeline:
   def __trigger__(self, payload: Dict[str, Any]):
     stage: int = self.__get_stage__(payload)
     if stage == len(self.pipeline):
-      print("Pipeline Finished")
       return
 
     function_name: str = self.pipeline[stage]["name"]
@@ -118,6 +117,7 @@ class Pipeline:
       self.database.payloads = sorted(self.database.payloads, key=lambda payload: self.__get_stage__(payload))
       payload = self.database.payloads.pop(0)
       self.__trigger__(payload)
+    print("Pipeline Finished")
 
     self.database.statistics.calculate_total_cost()
     self.__clean_up__(token)

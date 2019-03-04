@@ -7,15 +7,11 @@
 	"tag": "fastore",
 	"timeout": 600,
 	"num_bins": 50,
-	"bucket": "jessie-try-fastore",
+	"bucket": "maccoss-methyl-log",
 	"storage_class": "STANDARD",
 	"credential_profile": "default",
-	"role": "lambda_basic_execution",
-	"log": "jessie-try-log",
-	"sample_input": true,
-	"sample_bucket": "jessie-fastore-source",
-	"stats": false,
-	"setup": true,
+	"role": "service-role/lambdaFullAccessRole",
+	"log": "maccoss-methyl-log",
 	"functions": {
 		"sort-fastq": {
 			"file": "sort",

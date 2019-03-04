@@ -141,13 +141,13 @@ class TestDatabase(Database):
     entries = list(map(lambda key: self.tables[table_name].entries[key], keys))
     return sorted(entries, key=lambda entry: entry.key)
 
-  def __put__(self, table_name: str, key: str, f: BinaryIO, metadata: Dict[str, str]):
+  def __put__(self, table_name: str, key: str, f: BinaryIO, metadata: Dict[str, str], invoke=False):
     self.__write__(table_name, key, f.read(), metadata)
 
   def __read__(self, table_name: str, key: str) -> str:
     return self.get_entry(table_name, key).content
 
-  def __write__(self, table_name: str, key: str, content: bytes, metadata: Dict[str, str]):
+  def __write__(self, table_name: str, key: str, content: bytes, metadata: Dict[str, str], invoke=False):
     self.add_entry(table_name, key, content)
     if not key.endswith(".log"):
       self.payloads.append({

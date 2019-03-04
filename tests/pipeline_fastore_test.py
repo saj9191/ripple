@@ -16,8 +16,8 @@ class FaStore(unittest.TestCase):
 
     pp.populate_table("jessie-fastore-program", "fastore/", files)
 
-    name = "0/123.400000-13/1-1/1-0.000000-1-fasta.fq"
-    pp.run(name, "fastore/SP1.fq")
+    name = "0/123.400000-13/1-1/1-0.000000-1-fastq.fq"
+    pp.run(name, "fastore/SP2.fastq")
 
 
 if __name__ == "__main__":
