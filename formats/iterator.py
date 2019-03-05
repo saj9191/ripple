@@ -1,6 +1,7 @@
 import boto3
 import heapq
 import os
+import re
 import util
 from database import Entry
 from enum import Enum
@@ -18,8 +19,11 @@ class DelimiterPosition(Enum):
 
 class Delimiter:
   def __init__(self, item_token: str, offset_token: str, position: DelimiterPosition):
-    self.item_token = item_token
-    self.offset_token = offset_token
+    self.item_token = str.encode(item_token)
+    self.offset_token = str.encode(offset_token)
+    if position == DelimiterPosition.start:
+      self.item_regex = re.compile(b"^" + self.item_token, re.MULTILINE)
+      self.offset_regex = re.compile(b"^" + self.offset_token, re.MULTILINE)
     self.position = position
 
 
@@ -42,7 +46,7 @@ class Options:
 
 
 class Iterator(Generic[T]):
-  adjust_chunk_size: ClassVar[int] = 300
+  adjust_chunk_size: ClassVar[int] = 600
   next_index: int = -1
   options: ClassVar[Options]
   read_chunk_size: ClassVar[int] = 10*1000*1000
@@ -58,11 +62,11 @@ class Iterator(Generic[T]):
     self.remainder: bytes = b''
     self.__setup__()
 
-  def __adjust__(self, end_index: int, token: str) -> int:
+  def __adjust__(self, end_index: int, token) -> int:
     content: bytes = self.entry.get_range(max(end_index - self.adjust_chunk_size, 0), end_index)
     last_byte: int = len(content) - 1
-    index = content.rindex(str.encode(token))
-    offset_index: int = last_byte - content.rindex(str.encode(token))
+    index = list(token.finditer(content))[-1].span()[0]
+    offset_index: int = last_byte - index
     assert(offset_index >= 0)
     return offset_index
 
@@ -71,12 +75,12 @@ class Iterator(Generic[T]):
       self.start_index = self.offset_bounds.start_index
       self.end_index = min(self.offset_bounds.end_index, self.entry.content_length() - 1)
       if self.start_index != 0:
-        self.start_index -= self.__adjust__(self.start_index, self.delimiter.offset_token)
+        self.start_index -= self.__adjust__(self.start_index, self.delimiter.offset_regex)
         if self.delimiter.position != DelimiterPosition.start:
           # Don't include delimiter
-          self.start_index += len(self.delimiter.offset_token)
+          self.start_index += 1
       if self.end_index != (self.entry.content_length() - 1):
-        self.end_index -= self.__adjust__(self.end_index, self.delimiter.offset_token)
+        self.end_index -= self.__adjust__(self.end_index, self.delimiter.offset_regex)
         if self.delimiter.position == DelimiterPosition.start:
           self.end_index -= 1
     else:
@@ -124,7 +128,7 @@ class Iterator(Generic[T]):
 
   @classmethod
   def to_array(cls: Any, content: bytes) -> Iterable[Any]:
-    token = str.encode(cls.delimiter.item_token)
+    token = cls.delimiter.item_token
     items: Iterable[bytes] = filter(lambda item: len(item.strip()) > 0, content.split(token))
     if cls.delimiter.position == DelimiterPosition.start:
       items = map(lambda item: token + item, items)

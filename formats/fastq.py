@@ -11,7 +11,7 @@ class Identifiers(Enum):
 
 
 class Iterator(iterator.Iterator[Identifiers]):
-  delimiter: Delimiter = Delimiter(item_token="@", offset_token="@", position=DelimiterPosition.start)
+  delimiter: Delimiter = Delimiter(item_token="@S", offset_token="@S", position=DelimiterPosition.start)
   options: ClassVar[Options] = Options(has_header = False)
   identifiers: Identifiers
   signature_length: ClassVar[int] = 8
@@ -22,22 +22,22 @@ class Iterator(iterator.Iterator[Identifiers]):
 
   @classmethod
   def get_identifier_value(cls: Any, item: bytes, identifier: Identifiers) -> float:
-    lines = item.decode("utf-8").split("\n")
-    if len(lines) < 4:
-      return -1
-    else:
-      seq = lines[1]
-      identifier = seq[0:7]
+    lines = item.decode("utf-8").strip().split("\n")
+    if len(lines) != 4:
+      print(lines)
+    assert(len(lines) == 4)
+    seq = lines[1]
+    identifier = seq[0:7]
 
-      for i in range(len(seq)-cls.signature_length+1):
-        window = seq[i:i+7]
-        if window < identifier:
-          identifier = window
+    for i in range(len(seq)-cls.signature_length+1):
+      window = seq[i:i+7]
+      if window < identifier:
+        identifier = window
 
-      identifier_value = 0
-      for i in range(cls.signature_length):
-        identifier_value *= len(cls.base_ids)
-        identifier_value += cls.base_ids[seq[i]]
-        assert(identifier_value >= 0)
+    identifier_value = 0
+    for i in range(cls.signature_length):
+      identifier_value *= len(cls.base_ids)
+      identifier_value += cls.base_ids[seq[i]]
 
-      return identifier_value
+    assert(identifier_value >= 0)
+    return identifier_value

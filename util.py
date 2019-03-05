@@ -158,6 +158,8 @@ def load_parameters(s3_dict, key_fields, start_time, event):
   params["payloads"] = []
   if "execute" in event:
     params["execute"] = event["execute"]
+  elif "extra_params" in s3_dict and "execute" in s3_dict["extra_params"]:
+    params["execute"] = s3_dict["extra_params"]["execute"]
 
   return params
 
@@ -188,14 +190,14 @@ def handle(event, context, func):
           if "execute" in params:
             payload["execute"] = params["execute"]
           params["s3"].invoke(params["output_function"], payload)
-      print("Re-invoking", count, "Payloads")
 
 
 def get_formats(input_format, params):
   output_format = dict(input_format)
   output_format["prefix"] = params["prefix"] + 1
 
-  for key in ["file_id", "num_files", "bin", "num_bins"]:
+  keys = set(list(map(lambda f: f["name"], FILE_FORMAT))).difference(set(["prefix"])).union(set(["ext"]))
+  for key in keys:
     if key in params:
       output_format[key] = params[key]
 

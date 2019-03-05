@@ -10,11 +10,12 @@ def create_pivots(d: Database, format_lib: Any, iterator_class: Any, items: List
   if len(items) == 0:
     return []
 
-  pivots: List[float] = list(map(lambda item: iterator_class.get_identifier_value(item, format_lib.Identifiers[params["identifier"]]), items))
+  pivots: List[float] = map(lambda item: iterator_class.get_identifier_value(item, format_lib.Identifiers[params["identifier"]]), items)
+  pivots = list(set(list(pivots)))
   pivots.sort()
 
   max_identifier: float = float(pivots[-1] + 1)
-  num_bins = 2 * params["num_bins"]
+  num_bins = 100
   increment = int((len(items) + num_bins - 1) / num_bins)
   pivots = pivots[0::increment]
   if pivots[-1] == max_identifier - 1:
