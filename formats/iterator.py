@@ -95,22 +95,34 @@ class Iterator(Generic[T]):
   def combine(cls: Any, entries: List[Entry], f: BinaryIO, extra: Dict[str, Any]) -> Dict[str, str]:
     metadata: Dict[str, str] = {}
 
-    for i in range(len(entries)):
-      entry = entries[i]
-      if i > 0 and cls.delimiter.position == DelimiterPosition.inbetween:
-        f.seek(-1 * len(cls.delimiter.item_token), os.SEEK_END)
-        end: str = f.read(len(cls.delimiter.item_token)).decode("utf-8")
-        if end != cls.delimiter.item_token:
-          f.write(str.encode(cls.delimiter.item_token))
-      if cls.options.has_header and i > 0:
-        lines = entry.get_content().split(str.encode(cls.delimiter.item_token))[1:]
-        content = str.encode(cls.delimiter.item_token).join(lines)
-        f.write(content)
-      else:
-        # TODO: There seems to be a bug where if I do entry.download(f), it's not guaranteed
-        # the entire file will write at the end. I need to figure out why because downloading,
-        # loading into memory and then writing to disk is slower.
-        f.write(entry.get_content())
+    if extra["sort"]:
+      items = []
+      for i in range(len(entries)):
+        it = cls(entries[i], None)
+        sub_items = it.get(it.get_start_index(), it.get_end_index())
+        items += list(map(lambda item: (it.get_identifier_value(item, extra["identifier"]), item), sub_items))
+      items = sorted(items, key=lambda i: i[0])
+      items = list(map(lambda i: i[1], items))
+      print("Num items", len(items))
+      content, metadata = cls.from_array(items, f, extra)
+      f.write(content)
+    else:
+      for i in range(len(entries)):
+        entry = entries[i]
+        if i > 0 and cls.delimiter.position == DelimiterPosition.inbetween:
+          f.seek(-1 * len(cls.delimiter.item_token), os.SEEK_END)
+          end: str = f.read(len(cls.delimiter.item_token)).decode("utf-8")
+          if end != cls.delimiter.item_token:
+            f.write(cls.delimiter.item_token)
+        if cls.options.has_header and i > 0:
+          lines = entry.get_content().strip().split(cls.delimiter.item_token)[1:]
+          content = cls.delimiter.item_token.join(lines)
+          f.write(content)
+        else:
+          # TODO: There seems to be a bug where if I do entry.download(f), it's not guaranteed
+          # the entire file will write at the end. I need to figure out why because downloading,
+          # loading into memory and then writing to disk is slower.
+          f.write(entry.get_content().strip())
 
     return metadata
 
@@ -118,7 +130,7 @@ class Iterator(Generic[T]):
   def from_array(cls: Any, items: List[Any], f: Optional[BinaryIO], extra: Dict[str, Any]) -> Tuple[str, Dict[str, str]]:
     metadata: Dict[str, str] = {}
     if cls.delimiter.position == DelimiterPosition.inbetween:
-      content = str.encode(cls.delimiter.item_token).join(items)
+      content = cls.delimiter.item_token.join(items)
     else:
       content = b"".join(items)
 
@@ -175,7 +187,7 @@ class Iterator(Generic[T]):
       self.remainder = b''
       more = False
     else:
-      token = str.encode(self.delimiter.offset_token)
+      token = self.delimiter.offset_token
       index: int = stream.rindex(token) if token in stream else -1
       if index != -1:
         if self.delimiter.position == DelimiterPosition.inbetween:

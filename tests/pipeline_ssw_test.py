@@ -8,11 +8,7 @@ class SmithWaterman(unittest.TestCase):
   def test_basic(self):
     pp: pipeline.Pipeline = pipeline.Pipeline("ssw/smith-waterman.json")
 
-    files = []
-    for i in range(3):
-      files.append("uniprot-fasta-{0:d}".format(i + 1))
-
-    pp.populate_table("ssw-database", "ssw/", files)
+    pp.populate_table("ssw-database", "ssw/", ["uniprot.fasta"])
     pp.populate_table("ssw-program", "ssw/", ["ssw_test"])
 
     name = "0/123.400000-13/1-1/1-0.000000-1-fasta.fasta"

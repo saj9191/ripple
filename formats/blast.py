@@ -21,7 +21,7 @@ class Iterator(iterator.Iterator[Identifiers]):
     iterator.Iterator.__init__(self, Iterator, obj, offset_bounds)
 
   @classmethod
-  def get_identifier_value(cls: Any, item: bytes, identifier: Identifiers) -> float:
+  def get_identifier_value(cls: Any, item: bytes, identifier: str) -> float:
     s: str = item.decode("utf-8")
     m = cls.optimal_score_regex.match(s)
     score = float(m.group(1)) * 1000
