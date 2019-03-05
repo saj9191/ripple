@@ -43,7 +43,6 @@ def split_file(d: Database, bucket_name: str, key: str, input_format: Dict[str, 
     input_key = key
     obj = d.get_entry(input_bucket, input_key)
 
-  print("Splitting", input_key, "Output function", params["output_function"])
   output_format["ext"] = obj.key.split(".")[-1]
   assert("ext" not in output_format or output_format["ext"] != "pivot")
   file_id = 1 
@@ -53,7 +52,6 @@ def split_file(d: Database, bucket_name: str, key: str, input_format: Dict[str, 
   while file_id <= num_files:
     offsets = [(file_id - 1) * split_size, min(content_length, (file_id) * split_size) - 1]
     payload = create_payload(input_bucket, input_key, offsets, output_format, file_id, num_files)
-    print(payload)
 
     s3_params = payload["Records"][0]["s3"]
 

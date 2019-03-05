@@ -12,7 +12,7 @@ sys.path.insert(0, parentdir)
 import setup
 
 
-def create_jobs(source_bucket, destination_bucket, policy, prefix, num_jobs, job_duration, relative):
+def create_jobs(source_bucket, destination_bucket, policy, prefix, num_jobs, job_duration, offset, relative):
   s3 = boto3.resource("s3")
   bucket = s3.Bucket(source_bucket)
   objs = list(bucket.objects.filter(Prefix=prefix))
@@ -21,7 +21,6 @@ def create_jobs(source_bucket, destination_bucket, policy, prefix, num_jobs, job
 
   if policy == "deadline":
     jobs = []
-    offset = 60
     for i in range(num_jobs):
       obj = objs[i]
       start_time = now + i * offset
@@ -29,12 +28,11 @@ def create_jobs(source_bucket, destination_bucket, policy, prefix, num_jobs, job
       jobs.append(scheduler.Job(source_bucket, destination_bucket, obj.key, start_time=start_time, deadline=deadline))
   elif policy == "priority":
     jobs = []
-    offset = 40
     duration = 200
     for i in range(num_jobs):
       obj = objs[i]
       start_time = now + i * duration
-      if i % 3 == 2:
+      if i % 3 == 1:
         priority = 10
         start_time = now + (i - 1) * duration + offset
       else:
@@ -58,11 +56,11 @@ def main():
   p = json.loads(open(args.parameters).read())
   params = json.loads(open(p["parameters"]).read())
   setup.process_functions(params)
-  jobs = create_jobs(p["source_bucket"], params["bucket"], p["policy"], p["prefix"], p["num_jobs"], p["duration"], args.relative)
+  jobs = create_jobs(p["source_bucket"], params["bucket"], p["policy"], p["prefix"], p["num_jobs"], p["duration"], p["offset"], args.relative)
   if args.run:
     s = scheduler.Scheduler(p["policy"], p["timeout"], params)
     s.add_jobs(jobs)
-    s.listen()
+    s.listen(p["num_invokers"], p["num_loggers"])
 
 
 main()
