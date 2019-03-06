@@ -52,7 +52,7 @@ class Iterator(new_line.Iterator):
 
   @classmethod
   def from_array(cls: Any, items: List[Neighbors], f: Optional[BinaryIO], extra: Dict[str, Any]) -> Tuple[str, Dict[str, str]]:
-    content = str.encode(cls.delimiter.item_token).join(list(map(lambda n: __neighbors_to_bytes__(n), items)))
+    content = cls.delimiter.item_token.join(list(map(lambda n: __neighbors_to_bytes__(n), items)))
 
     if f:
       f.write(content)
@@ -67,7 +67,7 @@ class Iterator(new_line.Iterator):
 
   @classmethod
   def to_array(cls: Any, content: bytes) -> Iterable[Neighbors]:
-    items = filter(lambda item: len(item.strip()) > 0, content.split(str.encode(cls.delimiter.item_token)))
+    items = filter(lambda item: len(item.strip()) > 0, content.split(cls.delimiter.item_token))
     return map(lambda n: __neighbors_from_bytes__(n), items)
 
   @classmethod

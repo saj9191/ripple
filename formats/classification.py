@@ -41,12 +41,12 @@ class Iterator(Generic[T], iterator.Iterator[T]):
 
   @classmethod
   def from_array(cls: Any, items: List[Classification], f: Optional[BinaryIO], extra: Dict[str, Any]) -> Tuple[Union[bytes, str], Dict[str, str]]:
-    content: bytes = str.encode(cls.delimiter.item_token).join(list(map(lambda item: __from_classification__(item), items)))
+    content: bytes = cls.delimiter.item_token.join(list(map(lambda item: __from_classification__(item), items)))
     if f:
       f.write(content)
     return (content, {})
 
   @classmethod
   def to_array(cls: Any, content: Union[bytes, str]) -> Iterable[Classification]:
-    items = filter(lambda item: len(item.strip()) > 0, content.split(str.encode(cls.delimiter.item_token)))
+    items = filter(lambda item: len(item.strip()) > 0, content.split(cls.delimiter.item_token))
     return map(lambda item: __to_classification__(item), items)
