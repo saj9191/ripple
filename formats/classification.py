@@ -1,6 +1,7 @@
 import iterator
 import new_line
 import numpy as np
+import re
 from database import Entry
 from iterator import Delimiter, DelimiterPosition, OffsetBounds, Options
 from typing import Any, BinaryIO, ClassVar, Dict, Generic, Iterable, List, Optional, Tuple, TypeVar, Union
@@ -48,5 +49,5 @@ class Iterator(Generic[T], iterator.Iterator[T]):
 
   @classmethod
   def to_array(cls: Any, content: Union[bytes, str]) -> Iterable[Classification]:
-    items = filter(lambda item: len(item.strip()) > 0, content.split(cls.delimiter.item_token))
+    items = filter(lambda item: len(item.strip()) > 0, re.split(cls.delimiter.item_regex, content))
     return map(lambda item: __to_classification__(item), items)

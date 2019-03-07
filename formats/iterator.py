@@ -49,7 +49,7 @@ class Options:
 
 
 class Iterator(Generic[T]):
-  adjust_chunk_size: ClassVar[int] = 600
+  adjust_chunk_size: ClassVar[int] = 1000
   next_index: int = -1
   options: ClassVar[Options]
   read_chunk_size: ClassVar[int] = 10*1000*1000
@@ -68,7 +68,7 @@ class Iterator(Generic[T]):
   def __adjust__(self, end_index: int, token) -> int:
     content: bytes = self.entry.get_range(max(end_index - self.adjust_chunk_size, 0), end_index)
     last_byte: int = len(content) - 1
-    index = list(token.finditer(content))[-1].span()[0]
+    index = list(token.finditer(content))[-1].span()[0] + len(self.delimiter.offset_token) - 1
     offset_index: int = last_byte - index
     assert(offset_index >= 0)
     return offset_index
