@@ -12,11 +12,11 @@ class FaStore(unittest.TestCase):
 
     pp: pipeline.Pipeline = pipeline.Pipeline("fastore/fastore_compression.json")
 
-    files = ["fastore_bin", "fastore_rebin", "fastore_pack","fastore_compress.sh"]
+    files = ["fastore_bin", "fastore_rebin", "fastore_pack","fastore_compress.sh", "reference.fastq"]
 
-    pp.populate_table("jessie-fastore-program", "fastore/", files)
+    pp.populate_table("maccoss-methyl-data", "fastore/", files)
 
-    name = "0/123.400000-13/1-1/1-0.000000-1-fastq.fq"
+    name = "0/123.400000-13/1-1/1-0.000000-1-suffix.fastq"
     pp.run(name, "fastore/SP2.fastq")
 
 

@@ -18,9 +18,13 @@ class DelimiterPosition(Enum):
 
 
 class Delimiter:
-  def __init__(self, item_token: str, offset_token: str, position: DelimiterPosition):
+  def __init__(self, item_token: str, offset_token: str, position: DelimiterPosition, regex=None):
     self.item_token = str.encode(item_token)
     self.offset_token = str.encode(offset_token)
+    if regex:
+      self.regex = re.compile(regex, re.MULTILINE)
+    else:
+      self.regex = None
     if position == DelimiterPosition.start:
       self.item_regex = re.compile(b"^" + self.item_token, re.MULTILINE)
       self.offset_regex = re.compile(b"^" + self.offset_token, re.MULTILINE)
@@ -143,11 +147,14 @@ class Iterator(Generic[T]):
   @classmethod
   def to_array(cls: Any, content: bytes) -> Iterable[Any]:
     token = cls.delimiter.item_regex
-    items: Iterable[bytes] = filter(lambda item: len(item.strip()) > 0, re.split(token, content))
-    if cls.delimiter.position == DelimiterPosition.start:
-      items = map(lambda item: cls.delimiter.item_token + item, items)
-    elif cls.delimiter.position == DelimiterPosition.end:
-      items = map(lambda item: item + cls.delimiter.item_token, items)
+    if cls.delimiter.regex is not None:
+      items = map(lambda item: item[0], re.findall(cls.delimiter.regex, content))
+    else:
+      items: Iterable[bytes] = filter(lambda item: len(item.strip()) > 0, re.split(token, content))
+      if cls.delimiter.position == DelimiterPosition.start:
+        items = map(lambda item: cls.delimiter.item_token + item, items)
+      elif cls.delimiter.position == DelimiterPosition.end:
+        items = map(lambda item: item + cls.delimiter.item_token, items)
     return items
 
   @classmethod

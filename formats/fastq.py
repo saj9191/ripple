@@ -11,7 +11,7 @@ class Identifiers(Enum):
 
 
 class Iterator(iterator.Iterator[Identifiers]):
-  delimiter: Delimiter = Delimiter(item_token="@", offset_token="@", position=DelimiterPosition.start)
+  delimiter: Delimiter = Delimiter(item_token="@", offset_token="@", position=DelimiterPosition.start, regex=b"(@([^\n]*\n){3}[^\n]*)")
   options: ClassVar[Options] = Options(has_header = False)
   identifiers: Identifiers
   signature_length: ClassVar[int] = 8

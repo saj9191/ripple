@@ -16,15 +16,15 @@ expected_items = [
 b"""@cluster_29:UMI_GCAGGA
 CCCCCTTAAATAGCTGTTTATTTGGCCCCAG
 +
-8;;;>DC@DAC=B?C@9?B?CDCB@><<??A\n""",
+8;;;>DC@DAC=B?C@9?B?CDCB@><<??A""",
 b"""@cluster_39:UMI_GAACCG
 CCTTCCATCACCAGATCGGAAAAACACACGC
 +
-00>7;8@5<192?/8;0;;>=3=/3239713\n""",
+00>7;8@5<192?/8;0;;>=3=/3239713""",
 b"""@cluster_43:UMI_GGATTG
 GAGTTATAATCCAATCTTTATTTAAAAATCT
 +
->=AEC?C@;??0A>?0DEB9EEB@DDC1?=6\n"""
+>=AEC?C@;??0A>?0DEB9EEB@DDC1?=6"""
 ]
 
 
@@ -40,7 +40,7 @@ class IteratorMethods(unittest.TestCase):
     database: TestDatabase = TestDatabase()
     table1: TestTable = database.create_table("table1")
 
-    entry1: TestEntry = table1.add_entry("test.fastq", b"".join(expected_items))
+    entry1: TestEntry = table1.add_entry("test.fastq", b"\n".join(expected_items))
     # Read everything in one pass
     it = TestIterator(entry1, None, 300, 300)
     [items, offset_bounds, more] = it.next()
@@ -48,7 +48,7 @@ class IteratorMethods(unittest.TestCase):
 
     self.assertEqual(len(items), 3)
     self.assertEqual(items, expected_items)
-    self.assertEqual(offset_bounds, OffsetBounds(0, 266))
+    self.assertEqual(offset_bounds, OffsetBounds(0, 265))
     self.assertFalse(more)
 
     # Requires multiple passes
@@ -65,13 +65,13 @@ class IteratorMethods(unittest.TestCase):
 
     [items, offset_bounds, more] = it.next()
     self.assertEqual(list(items), expected_items[2:])
-    self.assertEqual(offset_bounds, OffsetBounds(178, 266))
+    self.assertEqual(offset_bounds, OffsetBounds(178, 265))
     self.assertFalse(more)
 
   def test_offsets(self):
     database: TestDatabase = TestDatabase()
     table1: TestTable = database.create_table("table1")
-    entry1: TestEntry = table1.add_entry("test.fastq", b"".join(expected_items))
+    entry1: TestEntry = table1.add_entry("test.fastq", b"\n".join(expected_items))
 
     it = TestIterator(entry1, OffsetBounds(100, 200), 100, 100)
     [items, offset_bounds, more] = it.next()
@@ -85,7 +85,7 @@ class IteratorMethods(unittest.TestCase):
     [items, offset_bounds, more] = it.next()
     items = list(items)
     self.assertEqual(items, expected_items[2:])
-    self.assertEqual(offset_bounds, OffsetBounds(178, 266))
+    self.assertEqual(offset_bounds, OffsetBounds(178, 265))
     self.assertFalse(more)
 
 
