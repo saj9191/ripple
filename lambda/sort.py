@@ -44,8 +44,6 @@ def handle_sort(d: Database, table_name: str, key: str, input_format: Dict[str, 
   extra = it.get_extra()
   items = it.get(it.get_start_index(), it.get_end_index())
   items = list(map(lambda item: (it.get_identifier_value(item, format_lib.Identifiers[params["identifier"]]), item), items))
-  print("output", util.file_name(output_format))
-  print("Num items", len(items))
   sorted_items = sorted(items, key=lambda k: k[0])
   bin_ranges = params["pivots"]
   binned_input = bin_input(sorted_items, bin_ranges)
