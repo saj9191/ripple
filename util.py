@@ -115,10 +115,7 @@ def combine_instance(bucket_name, key, params={}):
     count += 1
     if count == num_attempts and not done:
       return [False, None, False]
-    if num_files is None:
-      sleep = 5
-    else:
-      sleep = int((1 * num_files) / num_keys)
+    sleep = 5
     time.sleep(sleep)
     [batch, last] = get_batch(bucket_name, key, prefix, params)
 
