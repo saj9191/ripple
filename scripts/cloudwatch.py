@@ -1,10 +1,12 @@
 import argparse
 import boto3
+import json
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import numpy as np
 import re
+import sys
 import time
 
 
@@ -25,13 +27,9 @@ def parse(logs):
   return results
 
 
-def fetch_logs(start_time, end_time):
-  session = boto3.Session(region_name="us-west-1")
-  client = session.client("logs")
-  pattern = "Max Memory Used"
-  
+def get_events(client, name, start_time, end_time, pattern):
   response = client.filter_log_events(
-    logGroupName="/aws/lambda/pywren_1",
+    logGroupName=name,
     startTime=start_time,
     endTime=end_time,
     filterPattern=pattern
@@ -39,17 +37,46 @@ def fetch_logs(start_time, end_time):
   events = response["events"]
   while "nextToken" in response:
     response = client.filter_log_events(
-      logGroupName="/aws/lambda/pywren_1",
+      logGroupName=name,
       startTime=start_time,
       endTime=end_time,
       nextToken=response["nextToken"],
       filterPattern=pattern
     )
     events += response["events"]
-    print("Num events", len(events))
+    nextToken = None
+    if "nextToken" in response:
+      nextToken = response["nextToken"]
+    print(name, "Num events", len(events), nextToken)
   print("Num events", len(events))
   return events
 
+
+def pywren_logs(client, pattern, start_time, end_time):
+  return get_events(client, "/aws/lambda/pywren_1", start_time, end_time, pattern)
+
+
+def ripple_logs(client, pattern, params, start_time, end_time):
+  events = []
+
+  for function in params["functions"].keys():
+    name = "/aws/lambda/{0:s}".format(function)
+    events += get_events(client, name, start_time, end_time, pattern)
+  return events
+
+
+def fetch_logs(params, start_time, end_time):
+  if params:
+    session = boto3.Session(region_name=params["region"])
+  else:
+    session = boto3.Session(region_name="us-west-1")
+
+  client = session.client("logs")
+  pattern = "Max Memory Used"
+  if params:
+    return ripple_logs(client, pattern, params, start_time, end_time)
+  else:
+    return pywren_logs(client, pattern, start_time, end_time)
 
 def statistics(results):
   total_memory_used = 0
@@ -60,13 +87,19 @@ def statistics(results):
   print("Percent memory used", float(total_memory_used) / total_memory)
 
 
-def cdf(results):
-#  X.sort()
-  
+def compare(subfolder, ripple_results, pywren_results):
+  ripple_used_results = cdf(subfolder, ripple_results, 2)
+  pywren_used_results = cdf(subfolder, pywren_results, 2)
+  results = [ripple_used_results, pywren_used_results]
+  labels = ["Ripple Mem Used", "PyWren Mem Used"]
+  plot("compare", subfolder, results, labels)
+
+
+def cdf(subfolder, results, index):
   counts = {}
   for i in range(len(results)):
     result = results[i]
-    mem = float(result[2])
+    mem = result[index]
     if mem not in counts:
       counts[mem] = 0
     counts[mem] += 1
@@ -81,32 +114,59 @@ def cdf(results):
     Y[i] = counts[X[i]]
 
   print("Max Memory", results[0][3])
-#  X /= float(results[0][3])
-  print("X", X)
-  print("Y", Y)
-#  X *= 100
   Y /= Y.sum()
   CY = np.cumsum(Y)
+  return [X, CY]
 
-  fig, _ = plt.subplots()
-  plt.plot(X, CY)
-  plt.xlim([min(X), max(X)])
+
+def plot(name, subfolder, results, labels):
+  fig, ax = plt.subplots()
+  min_x = sys.maxsize
+  max_x = 0
+  for i in range(len(results)):
+    [X, CY] = results[i]
+    ax.plot(X, CY, label=labels[i])
+    min_x = min(min(X), min_x)
+    max_x = max(max(X), max_x)
+  plt.xlim([min_x, max_x])
   plt.ylabel("CDF")
   plt.xlabel("Max Memory Used (MB)")
-  fig.savefig("CDF.png")
+  plot_name = subfolder + "/" + name + ".png"
+  print("Plot_name", plot_name)
+  ax.legend(labels)
+  fig.savefig(plot_name)
   plt.close()
 
 
 def main():
   parser = argparse.ArgumentParser()
-  parser.add_argument("--duration", type=int, required=True)
+  parser.add_argument("--compare", type=str)
+  parser.add_argument("--duration", type=int)
+  parser.add_argument("--subfolder", type=str, required=True)
+  parser.add_argument("--load", action="store_true")
+  parser.add_argument("--parameters", type=str)
   args = parser.parse_args()
 
-  end_time = int(time.time()) * 1000
-  start_time = end_time - args.duration * 1000
-  logs = fetch_logs(start_time, end_time)
-  results = parse(logs)
-  statistics(results)
-  cdf(results)
+  if args.compare:
+    print("Ripple")
+    ripple_results = parse(json.load(open(args.subfolder + "/logs", "r"))["logs"])
+    print("PyWren")
+    pywren_results = parse(json.load(open(args.compare + "/logs", "r"))["logs"])
+    compare(args.subfolder, ripple_results, pywren_results)
+  else:
+    end_time = int(time.time()) * 1000
+    start_time = end_time - args.duration * 1000
+    params = None
+    if args.parameters:
+      params = json.load(open(args.parameters, "r"))
+    if args.load:
+      logs = json.load(open(args.subfolder + "/logs", "r"))["logs"]
+    else:
+      logs = fetch_logs(params, start_time, end_time)
+      with open(args.subfolder + "/logs", "w+") as f:
+        f.write(json.dumps({"logs": logs}))
+    results = parse(logs)
+    statistics(results)
+    cdf(args.subfolder, results)
 
 main()
