@@ -316,41 +316,6 @@ def show_duration(context, input_format, bucket_format, params):
   params["s3"].write(params["log"], file_name(bucket_format), str.encode(json.dumps(log_results)), {}, invoke=False)
 
 
-def print_request(m, params):
-  if is_set(params, "test"):
-    return
-
-  msg = "{7:f} - TIMESTAMP {0:f} NONCE {1:d} STEP {2:d} BIN {3:d} FILE {4:d} TOKEN {5:d}"
-  msg = msg.format(m["timestamp"], m["nonce"], params["prefix"], m["bin"], m["file_id"], params["token"], time.time())
-  if "parent_token" in params:
-    msg += " INVOKED BY TOKEN {0:d}".format(params["parent_token"])
-  print(msg)
-  msg += "\n"
-
-  with open(LOG_NAME, "a+") as f:
-    f.write(msg)
-
-
-def print_read(m, key, params):
-  print_action(m, key, "READ", params)
-
-
-def print_write(m, key, params):
-  print_action(m, key, "WRITE", params)
-
-
-def print_action(m, key, action, params):
-  if is_set(params, "test"):
-    return
-
-  msg = "{6:f} - TIMESTAMP {0:f} NONCE {1:d} STEP {2:d} BIN {3:d} {4:s} FILE NAME {5:s}"
-  msg = msg.format(m["timestamp"], m["nonce"], params["prefix"], m["bin"], action, key, time.time())
-  print(msg)
-  msg += "\n"
-  with open(LOG_NAME, "a+") as f:
-    f.write(msg)
-
-
 def setup_client(service, params):
   extra_time = 20
   config = Config(read_timeout=params["timeout"] + extra_time)
