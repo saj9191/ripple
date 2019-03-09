@@ -74,7 +74,6 @@ class Pipeline:
     stage: int = self.__get_stage__(payload)
     if stage == len(self.pipeline):
       return
-
     function_name: str = self.pipeline[stage]["name"]
     if stage > self.stage:
       print("Starting stage {0:d}: {1:s}".format(stage + 1, function_name))
@@ -88,7 +87,8 @@ class Pipeline:
     if function_params["file"] == "map":
       self.__import_format__("pivot")
     function_module = self.__import_function__(function_params["file"])
-    event = tutils.create_event_from_payload(self.database, payload, function_params)
+    self.database.params = function_params
+    event = tutils.create_event_from_payload(self.database, payload)
     context = tutils.create_context({"timeout": 60})
     function_module.handler(event, context)
 
@@ -112,6 +112,7 @@ class Pipeline:
     token: str = key.split("/")[1]
     entry: TestEntry = self.table.add_entry(key, content)
     self.database.payloads.append(tutils.create_payload(self.table_name, key, 0))
+    self.database.payloads[-1]["execute"] = 0
 
     while len(self.database.payloads) > 0:
       self.database.payloads = sorted(self.database.payloads, key=lambda payload: self.__get_stage__(payload))
