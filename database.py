@@ -93,6 +93,7 @@ class Database:
   def __init__(self):
     self.payloads = []
     self.statistics = Statistics()
+    self.max_sleep_time = 5
 
   def __download__(self, table_name: str, key: str, f: BinaryIO) -> int:
     raise Exception("Database::__download__ not implemented")
@@ -182,6 +183,7 @@ class S3(Database):
     self.s3 = boto3.resource("s3")
     self.client = boto3.client("lambda")
     self.params = params
+    self.sleep_time = 1
     Database.__init__(self)
 
   def __download__(self, table_name: str, key: str, f: BinaryIO) -> int:
@@ -204,8 +206,10 @@ class S3(Database):
           objects = bucket.objects.all()
         objects = list(map(lambda obj: Object(obj.key, self.s3.Object(table_name, obj.key), self.statistics), objects))
         done = True
+        self.sleep_time = min(max(int(self.sleep_time / 2), 1), self.max_sleep_time)
       except Exception as e:
-        time.sleep(1)
+        time.sleep(self.sleep_time)
+        self.sleep_time *= 2
 
     return objects
 
@@ -225,10 +229,12 @@ class S3(Database):
     while not done:
       try:
         self.s3.Object(table_name, key).put(Body=content, Metadata=metadata)
+        self.sleep_time = min(max(int(self.sleep_time / 2), 1), self.max_sleep_time)
         done = True
       except botocore.exceptions.ClientError as e:
-        print("Warning: S3::write Rate Limited")
-        time.sleep(random.randint(1, 10))
+        print("Warning: S3::write Rate Limited. Sleeping for", self.sleep_time)
+        time.sleep(self.sleep_time)
+        self.sleep_time *= 2
 
     if "output_function" in self.params and invoke:
       payload = {
