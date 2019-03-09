@@ -27,7 +27,7 @@ def combine(database: Database, bucket_name, key, input_format, output_format, o
     msg = msg.format(input_format["timestamp"], input_format["nonce"], input_format["bin"], input_format["file_id"])
     print(msg)
 
-    format_lib = importlib.import_module(params["format"])
+    format_lib = importlib.import_module(params["output_format"])
     iterator_class = getattr(format_lib, "Iterator")
     file_name = util.file_name(output_format)
     temp_name = "/tmp/{0:s}".format(file_name)

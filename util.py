@@ -120,7 +120,7 @@ def combine_instance(bucket_name, key, params={}):
 
   last_file = current_last_file(batch, key, params)
   keys = list(map(lambda b: b[0].key, batch))
-  return [done, last_file, keys]
+  return [done and last_file, last_file, keys]
 
 
 def load_parameters(s3_dict, key_fields, start_time, event):
@@ -178,6 +178,7 @@ def handle(event, context, func):
         clear_tmp(params)
       make_folder(output_format)
       finished = func(params["database"], bucket_name, key, input_format, output_format, params["offsets"], params)
+
       if finished:
         write_log(context, input_format, log_format, params)
     else:
@@ -294,10 +295,10 @@ def lambda_setup(event, context):
 def write_log(context, input_format, bucket_format, params):
   duration = params["timeout"] * 1000 - context.get_remaining_time_in_millis()
 
-  log_results = {
+  log_results = {**{
     "start_time": params["start_time"],
     "duration": duration
-  } + params["database"].get_statistics()
+  },  **params["database"].get_statistics()}
 
   for key in ["name"]:
     log_results[key] = params[key]

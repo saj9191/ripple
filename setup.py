@@ -8,6 +8,21 @@ import subprocess
 import util
 
 
+def get_layers(region, account_id, imports):
+  layers = []
+  for imp in imports:
+    if imp  == "PIL":
+        layers.append("arn:aws:lambda:{0:s}:{1:d}:layer:PIL:2".format(region, account_id))
+    elif imp == "sklearn":
+      layers.append("arn:aws:lambda:{0:s}:{1:d}:layer:Sklearn:1".format(region, account_id))
+    elif imp == "numpy":
+      layers.append("arn:aws:lambda:{0:s}:{1:d}:layer:numpy:1".format(region, account_id))
+    elif imp == "thundra":
+      layers.append("arn:aws:lambda:{0:s}:269863060030:layer:thundra-lambda-python-layer:4".format(region))
+    else:
+      raise Exception("Cannot find layer for", imp)
+  return layers
+
 def upload_function_code(client, zip_file, name, p, create):
   zipped_code = open(zip_file, "rb").read()
   fparams = p["functions"][name]
@@ -21,11 +36,9 @@ def upload_function_code(client, zip_file, name, p, create):
       Code={
         "ZipFile": zipped_code
       },
-      Tags={
-        "Application": p["tag"],
-      },
       Timeout=p["timeout"],
-      MemorySize=fparams["memory_size"]
+      MemorySize=fparams["memory_size"],
+      Layers=get_layers(p["region"], account_id, fparams["imports"])
     )
     assert(response["ResponseMetadata"]["HTTPStatusCode"] == 201)
 
@@ -35,17 +48,11 @@ def upload_function_code(client, zip_file, name, p, create):
       ZipFile=zipped_code
     )
     assert(response["ResponseMetadata"]["HTTPStatusCode"] == 200)
-    response = client.tag_resource(
-      Resource="arn:aws:lambda:{0:s}:{1:d}:function:{2:s}".format(p["region"], account_id, name),
-      Tags={
-        "Application": p["tag"],
-      }
-    )
-    assert(response["ResponseMetadata"]["HTTPStatusCode"] == 204)
     response = client.update_function_configuration(
       FunctionName=name,
       Timeout=p["timeout"],
-      MemorySize=fparams["memory_size"]
+      MemorySize=fparams["memory_size"],
+      Layers=get_layers(p["region"], account_id, fparams["imports"])
     )
     assert(response["ResponseMetadata"]["HTTPStatusCode"] == 200)
     try:
@@ -103,6 +110,9 @@ def zip_ripple_file(zip_directory, fparams):
   shutil.copyfile("lambda/{0:s}".format(file), "{0:s}/{1:s}".format(zip_directory, file))
   for file in ["formats/iterator.py", "formats/pivot.py", "database.py", "util.py"]:
     copy_file(zip_directory, file)
+  for format in fparams["formats"]:
+    copy_file(zip_directory, "formats/{0:s}.py".format(format))
+
 
 
 def upload_function(client, name, functions, params):
@@ -113,10 +123,7 @@ def upload_function(client, name, functions, params):
     shutil.rmtree(zip_directory)
 
   fparams = params["functions"][name]
-  if "dependencies" in fparams:
-    zip_libraries(zip_directory, fparams["dependencies"])
-  else:
-    os.makedirs(zip_directory)
+  os.makedirs(zip_directory)
 
   zip_ripple_file(zip_directory, fparams)
   zip_application(zip_directory, fparams)
@@ -195,7 +202,7 @@ def add_sort_pipeline(sort_params):
       "format": fformat,
       "file": "combine_files",
       "sort": False,
-    })
+    }, {})
 
   return functions, pipeline
 
@@ -211,7 +218,7 @@ def process_functions(params):
       variable_to_step[pipeline[i]["output"]] = i + 1
     if "input" in pipeline[i]:
       pipeline[i]["input_prefix"] = variable_to_step[pipeline[i]["input"]]
-    if params["functions"][name]["file"] == "sort":
+    if False:#params["functions"][name]["file"] == "sort":
       del params["functions"][name]
       sort_functions, sort_pipeline = add_sort_pipeline(fn_params)
       pipeline = pipeline[:i] + sort_pipeline + pipeline[i+1:]
@@ -224,13 +231,16 @@ def process_functions(params):
     if i - 1 != len(pipeline) - 1:
       pipeline[i - 1]["output_function"] = pipeline[i]["name"]
 
+    if "output_function" in pipeline[-1]:
+      del pipeline[-1]["output_function"]
+
   params["pipeline"] = pipeline
 
 
 def upload_functions(client, params):
   response = client.list_functions()
   function_names = set(list(map(lambda f: f["FunctionName"], response["Functions"])))
-  process_functions(params)
+#  process_functions(params)
   for name in params["functions"]:
     upload_function(client, name, function_names, params)
   for i in range(len(params["pipeline"])):
@@ -238,6 +248,7 @@ def upload_functions(client, params):
 
 
 def setup_notifications(client, bucket, config):
+  print(config)
   response = client.put_bucket_notification_configuration(
       Bucket=bucket,
       NotificationConfiguration=config
@@ -271,16 +282,6 @@ def create_bucket(client, bucket_name, params):
       if "BucketAlreadyOwnedByYou" not in str(ex):
         raise ex
 
-  client.put_bucket_tagging(
-    Bucket=bucket_name,
-    Tagging={
-      "TagSet": [{
-        "Key": "Application",
-        "Value": params["tag"],
-      }]
-    }
-  )
-
 
 def function_arns(params):
   name_to_arn = {}
@@ -305,7 +306,9 @@ def setup_triggers(params):
   lambda_client = util.lambda_client(params)
   configurations = []
   account_id = boto3.client("sts").get_caller_identity().get("Account")
-  for name in params["functions"]:
+
+
+  for name in [params["pipeline"][0]["name"]]:
     args = {
       "FunctionName": name,
       "StatementId": name + "-" + params["bucket"],

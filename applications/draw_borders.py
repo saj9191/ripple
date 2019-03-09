@@ -55,7 +55,7 @@ def flood(classifications, x, y, visited, width, height, cl):
 
 
 def run(database: Database, key: str, params, input_format, output_format, offsets: List[int]):
-  prefix = "{0:d}/{1:f}-{2:d}/".format(params["input_prefix"], input_format["timestamp"], input_format["nonce"])
+  prefix = "{0:d}/{1:f}-{2:d}/".format(params["image"], input_format["timestamp"], input_format["nonce"])
   entries = database.get_entries(params["bucket"], prefix)
   assert(len(entries) == 1)
   entry = entries[0]
