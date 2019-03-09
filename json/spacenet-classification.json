@@ -1,10 +1,9 @@
 {
-	"bucket": "maccoss-tide",
-	"log": "maccoss-log",
+	"bucket": "maccoss-methyl",
+	"log": "maccoss-methyl-log",
 	"region": "us-west-2",
 	"role": "service-role/lambdaFullAccessRole",
 	"storage_class": "STANDARD",
-	"folder": "hello",
 	"tag": "spacenet",
 	"timeout": 600,
 	"dependencies": {
