@@ -61,8 +61,6 @@
 		}
 	},
 	"pipeline": [{
-		"name": "initiate-reference"
-	}, {
 		"name": "split-fastq",
 		"ranges": false
 	}, {
@@ -75,21 +73,8 @@
 	}, {
 		"name": "sort-fastq"
 	}, {
-		"name": "combine-fastq",
-		"output": "reference"
-	}, {
-	  "name": "initiate-input",
-		"input": "input"
-  }, {
-		"name": "split-fastq",
-		"ranges": true,
-		"input": "input"
-	}, {
-		"name": "sort-fastq"
-	}, {
 		"name": "combine-fastq"
 	}, {
-		"name": "compress-fastore",
-		"input": "reference"
+		"name": "compress-fastore"
 	}]
 }
