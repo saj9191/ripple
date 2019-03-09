@@ -125,6 +125,16 @@ class Database:
     self.statistics.list_count += 1
     return self.__get_entries__(table_name, prefix)
 
+  def get_statistics(self) -> Dict[str, Any]:
+    return {
+      "payloads": self.payloads,
+      "read_count": self.statistics.read_count,
+      "write_count": self.statistics.write_count,
+      "list_count": self.statistics.list_count,
+      "write_byte_count": self.statistics.write_byte_count,
+      "read_byte_count": self.statistics.read_byte_count,
+    }
+
   def get_table(self, table_name: str) -> Table:
     raise Exception("Database::get_table not implemented")
 

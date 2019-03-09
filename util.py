@@ -295,15 +295,9 @@ def write_log(context, input_format, bucket_format, params):
   duration = params["timeout"] * 1000 - context.get_remaining_time_in_millis()
 
   log_results = {
-    "payloads": params["database"].payloads,
     "start_time": params["start_time"],
-    "read_count": params["database"].statistics.read_count,
-    "write_count": params["database"].statistics.write_count,
-    "list_count": params["database"].statistics.list_count,
-    "write_byte_count": params["database"].statistics.write_byte_count,
-    "read_byte_count": params["database"].statistics.read_byte_count,
-    "duration": duration,
-  }
+    "duration": duration
+  } + params["database"].get_statistics()
 
   for key in ["name"]:
     log_results[key] = params[key]
