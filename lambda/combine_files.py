@@ -39,7 +39,7 @@ def combine(database: Database, bucket_name, key, input_format, output_format, o
       metadata = iterator_class.combine(entries, f, params)
 
     with open(temp_name, "rb") as f:
-      params["s3"].put(params["bucket"], file_name, f, metadata)
+      database.put(params["bucket"], file_name, f, metadata)
     os.remove(temp_name)
   return (not last_file or combine)
 

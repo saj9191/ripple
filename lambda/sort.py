@@ -33,7 +33,7 @@ def write_binned_input(d: Database, binned_input: List[Any], bin_ranges: List[Di
 
 
 def handle_sort(d: Database, table_name: str, key: str, input_format: Dict[str, Any], output_format: Dict[str, Any], offsets: List[int], params: Dict[str, Any]):
-  entry = params["s3"].get_entry(table_name, key)
+  entry = database.get_entry(table_name, key)
   assert("ext" in output_format)
   format_lib = importlib.import_module(params["format"])
   iterator_class = getattr(format_lib, "Iterator")

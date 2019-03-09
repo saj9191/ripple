@@ -85,7 +85,7 @@ def object_exists(s3, bucket_name, key):
 
 
 def get_batch(bucket_name, key, prefix, params):
-  objects = params["s3"].get_entries(bucket_name, prefix)
+  objects = params["database"].get_entries(bucket_name, prefix)
   batch_size = None if "batch_size" not in params else params["batch_size"]
   batch = []
   expected_batch_id = None
@@ -159,7 +159,7 @@ def load_parameters(s3_dict, key_fields, start_time, event):
     s3 = S3(params)
     client = boto3.client("lambda")
 
-  params["s3"] = s3
+  params["database"] = s3
   return params
 
 
@@ -177,7 +177,7 @@ def handle(event, context, func):
       if not is_set(event, "test"):
         clear_tmp(params)
       make_folder(output_format)
-      finished = func(params["s3"], bucket_name, key, input_format, output_format, params["offsets"], params)
+      finished = func(params["database"], bucket_name, key, input_format, output_format, params["offsets"], params)
       if finished:
         write_log(context, input_format, log_format, params)
     else:
@@ -188,7 +188,7 @@ def handle(event, context, func):
         payload = content["payloads"][i]
         if "reexecute" in params:
           payload["execute"] = params["reexecute"]
-        params["s3"].invoke(params["output_function"], payload)
+        params["database"].invoke(params["output_function"], payload)
 
 
 def get_formats(input_format, params):
@@ -218,8 +218,8 @@ def run_function(params, m):
 
 def prior_execution(bucket_format, params):
   key = file_name(bucket_format)
-  if params["s3"].contains(params["log"], key):
-    return params["s3"].get_entry(params["log"], key)
+  if params["database"].contains(params["log"], key):
+    return params["database"].get_entry(params["log"], key)
   return None
 
 
@@ -295,20 +295,20 @@ def write_log(context, input_format, bucket_format, params):
   duration = params["timeout"] * 1000 - context.get_remaining_time_in_millis()
 
   log_results = {
-    "payloads": params["s3"].payloads,
+    "payloads": params["database"].payloads,
     "start_time": params["start_time"],
-    "read_count": params["s3"].statistics.read_count,
-    "write_count": params["s3"].statistics.write_count,
-    "list_count": params["s3"].statistics.list_count,
-    "write_byte_count": params["s3"].statistics.write_byte_count,
-    "read_byte_count": params["s3"].statistics.read_byte_count,
+    "read_count": params["database"].statistics.read_count,
+    "write_count": params["database"].statistics.write_count,
+    "list_count": params["database"].statistics.list_count,
+    "write_byte_count": params["database"].statistics.write_byte_count,
+    "read_byte_count": params["database"].statistics.read_byte_count,
     "duration": duration,
   }
 
   for key in ["name"]:
     log_results[key] = params[key]
 
-  params["s3"].write(params["log"], file_name(bucket_format), str.encode(json.dumps(log_results)), {}, invoke=False)
+  params["database"].write(params["log"], file_name(bucket_format), str.encode(json.dumps(log_results)), {}, invoke=False)
 
 
 def setup_client(service, params):
