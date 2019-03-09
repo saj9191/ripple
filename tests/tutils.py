@@ -8,7 +8,7 @@ currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentfram
 parentdir = os.path.dirname(currentdir)
 sys.path.insert(0, parentdir)
 import database
-from database import Database, Entry, Statistics, Table
+from database import Database, Entry, Statistics, S3, Table
 
 
 def equal_lists(list1, list2):
@@ -114,12 +114,13 @@ class TestTable(Table):
       entry.destroy()
 
 
-class TestDatabase(Database):
+class TestDatabase(S3):
   payloads: List[Dict[str, Any]]
   tables: Dict[str, TestTable]
 
   def __init__(self):
     Database.__init__(self)
+    self.params = {}
     self.payloads = []
     self.tables = {}
     if not os.path.isdir("/tmp/s3"):
@@ -203,31 +204,12 @@ class Context:
     return self.milliseconds_left
 
 
-class Client:
-  def __init__(self):
-    self.invokes = []
-
-  def invoke(self, FunctionName: str, InvocationType: str, Payload: Dict[str, Any]):
-    self.invokes.append({
-      "name": FunctionName,
-      "type": InvocationType,
-      "payload": Payload
-    })
-
-    return {
-      "ResponseMetadata": {
-        "HTTPStatusCode": 202
-      }
-    }
-
-
-def create_event_from_payload(database: Database, payload: Dict[str, Any], params: Dict[str, Any]):
+def create_event_from_payload(database: Database, payload: Dict[str, Any]):
   def load():
-    return params
+    return database.params
 
   base = {
     "test": True,
-    "client": Client(),
     "load_func": load,
     "s3": database,
   }
@@ -235,8 +217,8 @@ def create_event_from_payload(database: Database, payload: Dict[str, Any], param
   return {**base, **payload}
 
 
-def create_event(database: Database, table_name: str, key: str, params: Dict[str, Any], offsets=None):
-  return create_event_from_payload(database, create_payload(table_name, key, int(key.split("/")[0]), offsets=offsets), params)
+def create_event(database: Database, table_name: str, key: str, offsets=None):
+  return create_event_from_payload(database, create_payload(table_name, key, int(key.split("/")[0]), offsets=offsets))
 
 
 def create_context(params):

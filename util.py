@@ -134,17 +134,11 @@ def load_parameters(s3_dict, key_fields, start_time, event):
 
   if is_set(event, "test"):
     params = event["load_func"]()
-    s3 = event["s3"]
-    client = event["client"]
   else:
     params = json.loads(open("{0:d}.json".format(prefix)).read())
-    s3 = S3(params)
-    client = boto3.client("lambda")
 
   params["offsets"] = []
   params["prefix"] = prefix
-  params["s3"] = s3
-  params["client"] = client
 
   if "extra_params" in s3_dict:
     params = {**params, **s3_dict["extra_params"]}
@@ -154,10 +148,18 @@ def load_parameters(s3_dict, key_fields, start_time, event):
   params["start_time"] = start_time
   params["payloads"] = []
   if "execute" in event:
-    params["execute"] = event["execute"]
+    params["reexecute"] = event["execute"]
   elif "extra_params" in s3_dict and "execute" in s3_dict["extra_params"]:
-    params["execute"] = s3_dict["extra_params"]["execute"]
+    params["reexecute"] = s3_dict["extra_params"]["execute"]
 
+  if is_set(event, "test"):
+    s3 = event["s3"]
+    s3.params = params
+  else:
+    s3 = S3(params)
+    client = boto3.client("lambda")
+
+  params["s3"] = s3
   return params
 
 
@@ -203,14 +205,11 @@ def get_formats(input_format, params):
 
   log_format["ext"] = "log"
 
-  if "execute" in params:
-    output_format["execute"] = params["execute"]
-
   return [output_format, log_format]
 
 
 def run_function(params, m):
-  if ("execute" in params and params["execute"] <= 0) or m["execute"] <= 0:
+  if ("reexecute" in params and params["reexecute"] <= 0) or m["execute"] <= 0:
     return True
   now = time.time()
   return now < m["execute"]
@@ -311,8 +310,6 @@ def show_duration(context, input_format, bucket_format, params):
   for key in ["name"]:
     log_results[key] = params[key]
 
-  bucket_format["suffix"] = 0#params["start_time"]
-  bucket_format["execute"] = 0#params["start_time"]
   params["s3"].write(params["log"], file_name(bucket_format), str.encode(json.dumps(log_results)), {}, invoke=False)
 
 

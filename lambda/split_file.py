@@ -51,12 +51,16 @@ def split_file(d: Database, bucket_name: str, key: str, input_format: Dict[str, 
 
   while file_id <= num_files:
     offsets = [(file_id - 1) * split_size, min(content_length, (file_id) * split_size) - 1]
-    payload = create_payload(input_bucket, input_key, offsets, output_format, file_id, num_files)
-
-    s3_params = payload["Records"][0]["s3"]
-
+    extra_params = {**output_format, **{
+      "file_id": file_id,
+      "num_files": num_files,
+      "offsets": offsets,
+    }}
     if util.is_set(params, "ranges"):
-      s3_params["extra_params"]["pivots"] = ranges
+      extra_params["pivots"] = ranges
+
+    payload = params["s3"].create_payload(params["bucket"], util.file_name(input_format), extra_params)
+    payload["log"] = [output_format["prefix"], output_format["bin"], file_id]
 
     d.invoke(params["output_function"], payload)
     file_id += 1

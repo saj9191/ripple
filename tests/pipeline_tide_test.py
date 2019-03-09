@@ -14,7 +14,7 @@ class Tide(unittest.TestCase):
 
     pp.populate_table("maccoss-fasta", "tide/", files)
 
-    name = "0/123.400000-13/1-1/1-0.000000-1-tide.mzML"
+    name = "0/123.400000-13/1-1/1-1.000000-1-tide.mzML"
     pp.run(name, "tide/tide.mzML")
 
     with open(pp.dir_path + "/tide/tide-search.txt") as f:

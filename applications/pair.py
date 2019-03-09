@@ -13,29 +13,14 @@ def run(database: Database, key: str, params, input_format, output_format, offse
 
   while file_id <= num_files:
     offsets = [(file_id - 1) * split_size, min(content_length, (file_id) * split_size) - 1]
-
-    payload = {
-      "Records": [{
-        "s3": {
-          "bucket": {
-            "name": params["bucket"],
-          },
-          "object": {
-            "key": util.file_name(input_format),
-          },
-          "extra_params": {
-            "file_id": file_id,
-            "num_files": num_files,
-            "bin": output_format["bin"],
-            "num_bins": output_format["num_bins"],
-            "train_key": train_key,
-            "prefix": output_format["prefix"],
-            "train_offsets": offsets,
-          }
-        }
-      }],
-      "log": [output_format["prefix"], output_format["bin"], file_id]
-    }
+    extra_params = {**output_format, **{
+      "file_id": file_id,
+      "num_files": num_files,
+      "train_key": train_key,
+      "train_offsets": offsets,
+    }}
+    payload = database.create_payload(params["bucket"], util.file_name(input_format), extra_params)
+    payload["log"] = [output_format["prefix"], output_format["bin"], file_id]
 
     database.invoke(params["output_function"], payload)
     file_id += 1

@@ -109,6 +109,9 @@ class Database:
   def contains(self, table_name: str, key: str) -> bool:
     raise Exception("Database::contains not implemented")
 
+  def create_payload(self, table_name: str, key: str, extra: Dict[str, Any]) -> Dict[str, Any]:
+    raise Exception("Database::create_payload not implemented")
+
   def download(self, table_name: str, key: str, f: BinaryIO) -> int:
     self.statistics.read_count += 1
     content_length: int = self.__download__(table_name, key, f)
@@ -240,6 +243,8 @@ class S3(Database):
           }
         }]
       }
+      if "reexecute" in self.params:
+        payload["execute"] = self.params["reexecute"]
       self.payloads.append(payload)
       self.invoke(self.params["output_function"], payload)
 
@@ -255,6 +260,24 @@ class S3(Database):
 
   def get_table(self, table_name: str) -> Table:
     return Table(table_name, self.statistics, self.s3)
+
+  def create_payload(self, table_name: str, key: str, extra: Dict[str, Any]) -> Dict[str, Any]:
+    payload = {
+      "Records": [{
+        "s3": {
+          "bucket": {
+            "name": table_name
+          },
+          "object": {
+            "key": key
+          },
+          "extra_params": extra
+        }
+      }]
+    }
+    if "reexecute" in self.params:
+      payload["execute"] = self.params["reexecute"]
+    return payload
 
   def invoke(self, name, payload):
     self.payloads.append(payload)
