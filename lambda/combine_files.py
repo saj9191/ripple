@@ -17,7 +17,7 @@ def combine(database: Database, bucket_name, key, input_format, output_format, o
   output_format["num_bins"] = 1
   util.make_folder(output_format)
 
-  [combine, keys, last] = util.combine_instance(bucket_name, key, params)
+  [combine, last_file, keys] = util.combine_instance(bucket_name, key, params)
   if combine:
     if "batch_size" in params:
       output_format["num_files"] = int((input_format["num_files"] + params["batch_size"] - 1) / params["batch_size"])
@@ -41,6 +41,7 @@ def combine(database: Database, bucket_name, key, input_format, output_format, o
     with open(temp_name, "rb") as f:
       params["s3"].put(params["bucket"], file_name, f, metadata)
     os.remove(temp_name)
+  return (not last_file or combine)
 
 
 def handler(event, context):

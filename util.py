@@ -92,15 +92,13 @@ def get_batch(bucket_name, key, prefix, params):
   if batch_size:
     expected_batch_id = int((parse_file_name(key)["file_id"] - 1) / batch_size)
 
-  last = False
   for obj in objects:
     m = parse_file_name(obj.key)
     batch_id = int((m["file_id"] - 1) / batch_size) if batch_size else None
     if batch_size is None or batch_id == expected_batch_id:
       batch.append([obj, m])
-      last = (m["num_files"] == m["file_id"])
 
-  return [batch, last]
+  return batch
 
 
 def combine_instance(bucket_name, key, params={}):
@@ -108,19 +106,21 @@ def combine_instance(bucket_name, key, params={}):
   num_attempts = 20
   prefix = key_prefix(key) + "/"
   count = 0
-  [batch, last] = get_batch(bucket_name, key, prefix, params)
+  batch = get_batch(bucket_name, key, prefix, params)
+  last_file = current_last_file(batch, key, params)
 
-  while not done and current_last_file(batch, key, params):
+  while not done and last_file:
     [done, num_keys, num_files] = have_all_files(batch, prefix, params)
     count += 1
     if count == num_attempts and not done:
-      return [False, None, False]
-    sleep = 5
-    time.sleep(sleep)
-    [batch, last] = get_batch(bucket_name, key, prefix, params)
+      return [False, last_file, None]
+    time.sleep(random.randint(1, 5))
+    batch = get_batch(bucket_name, key, prefix, params)
+    last_file = current_last_file(batch, key, params)
 
+  last_file = current_last_file(batch, key, params)
   keys = list(map(lambda b: b[0].key, batch))
-  return [done and current_last_file(batch, key, params), keys, last]
+  return [done, last_file, keys]
 
 
 def load_parameters(s3_dict, key_fields, start_time, event):

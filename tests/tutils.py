@@ -174,7 +174,7 @@ class TestDatabase(Database):
     return table
 
   def contains(self, table_name: str, key: str) -> bool:
-    return table_name in self.tables and key in self.tables[table_name].objects
+    return table_name in self.tables and key in self.tables[table_name].entries
 
   def create_table(self, table_name: str) -> TestTable:
     table: TestTable = TestTable(table_name, self.statistics, None)
