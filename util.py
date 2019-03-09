@@ -172,23 +172,23 @@ def handle(event, context, func):
   params = load_parameters(s3_dict, input_format, start_time, event)
   if run_function(params, input_format):
     [output_format, log_format] = get_formats(input_format, params)
-    entries = prior_executions(log_format, params)
-    if len(entries) == 0:
+    entry = prior_execution(log_format, params)
+    if entry is None:
       if not is_set(event, "test"):
         clear_tmp(params)
       make_folder(output_format)
-      func(params["s3"], bucket_name, key, input_format, output_format, params["offsets"], params)
-
-      show_duration(context, input_format, log_format, params)
+      finished = func(params["s3"], bucket_name, key, input_format, output_format, params["offsets"], params)
+      if finished:
+        write_log(context, input_format, log_format, params)
     else:
       count = 0
-      for entry in entries:
-        content = json.loads(entry.get_content().decode("utf-8"))
-        count += len(content["payloads"])
-        for payload in content["payloads"]:
-          if "execute" in params:
-            payload["execute"] = params["execute"]
-          params["s3"].invoke(params["output_function"], payload)
+      content = json.loads(entry.get_content().decode("utf-8"))
+      count += len(content["payloads"])
+      for i in range(len(content["payloads"])):
+        payload = content["payloads"][i]
+        if "reexecute" in params:
+          payload["execute"] = params["reexecute"]
+        params["s3"].invoke(params["output_function"], payload)
 
 
 def get_formats(input_format, params):
@@ -202,7 +202,8 @@ def get_formats(input_format, params):
 
   log_format = dict(output_format)
   log_format["prefix"] -= 1
-
+  log_format["suffix"] = 0
+  log_format["execute"] = 0
   log_format["ext"] = "log"
 
   return [output_format, log_format]
@@ -215,14 +216,11 @@ def run_function(params, m):
   return now < m["execute"]
 
 
-def prior_executions(bucket_format, params):
-  prefix = "-".join(file_name(bucket_format).split("-")[:-1])
-  objects = params["s3"].get_entries(params["log"], prefix)
-  if "execute" in params:
-    bucket_format["execute"] = params["execute"]
-    prefix = "-".join(file_name(bucket_format).split("-")[:-1])
-    objects += params["s3"].get_entries(params["log"], prefix)
-  return objects
+def prior_execution(bucket_format, params):
+  key = file_name(bucket_format)
+  if params["s3"].contains(params["log"], key):
+    return params["s3"].get_entry(params["log"], key)
+  return None
 
 
 def current_last_file(batch, current_key, params):
@@ -293,7 +291,7 @@ def lambda_setup(event, context):
   return [bucket_name, key, params]
 
 
-def show_duration(context, input_format, bucket_format, params):
+def write_log(context, input_format, bucket_format, params):
   duration = params["timeout"] * 1000 - context.get_remaining_time_in_millis()
 
   log_results = {
