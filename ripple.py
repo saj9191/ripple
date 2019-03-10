@@ -10,12 +10,7 @@ from typing import Any, Dict, Optional
 
 
 IMPORT_REGEXES = [re.compile(r"import ([a-zA-Z\_\.]+)"), re.compile("from ([a-zA-Z\_\.]+) import .*")]
-SUPPORTED_LIBRARIES = set(["PIL", "numpy", "sklearn", "thundra"])
-
-
-def new(name: str, table: str, log: str, timeout: int, config: Dict[str, Any]):
-  pipeline = Pipeline(name, table, log, timeout, config)
-  return [Step(pipeline, 0), pipeline]
+SUPPORTED_LIBRARIES = set(["PIL", "numpy", "sklearn"])
 
 
 def serialize(obj):
@@ -23,15 +18,19 @@ def serialize(obj):
 
 
 class Step:
-  def __init__(self, pipeline, step: int):
+  def __init__(self, pipeline, step: int, format: Optional[str]=None):
+    self.format = format
     self.pipeline = pipeline
     self.step = step
 
   def combine(self, params={}, config={}):
-    return self.pipeline.combine(params, config)
+    return self.pipeline.combine(self.format, params, config)
+
+  def split(self, params={}, config={}):
+    return self.pipeline.split(self.format, params, config)
 
   def run(self, application: str, params={}, output_format=None, config={}):
-    return self.pipeline.run(application, params, output_format, config)
+    return self.pipeline.run(application, self.format, output_format, params, config)
 
 
 class Pipeline:
@@ -45,36 +44,40 @@ class Pipeline:
     else:
       self.memory_size = 1536
 
-    if "thundra" in self.config:
-      self.thundra = self.config["thundra"]
-      del self.config["thundra"]
-    else:
-      self.thundra = False
     self.name = name
     self.pipeline = []
     self.table = table
     self.timeout = timeout
     self.formats = self.__get_formats__()
 
-  def __add__(self, name, path, function_params, pipeline_params):
+  def input(self, format):
+    assert(len(self.pipeline) == 0)
+    return Step(self, 0, format)
+
+  def __add__(self, name, input_format, function_params, pipeline_params, path: Optional[str]=None):
     self.functions[name] = function_params
     pipeline_params["name"] = name
-    modules = self.__get_imports__(path)
     if len(self.pipeline) > 0:
       self.pipeline[-1]["output_function"] = name
-    imports = modules.intersection(SUPPORTED_LIBRARIES)
-    formats = modules.intersection(set(self.formats.keys()))
+
+    formats = set([input_format])
+    if "formats" in self.functions[name]:
+      formats = formats.union(self.functions[name]["formats"])
+
+    formats = formats.intersection(set(self.formats.keys()))
+    imports = set()
+    if path:
+      modules = self.__get_imports__(path)
+      imports = modules.intersection(SUPPORTED_LIBRARIES)
+      formats = formats.union(modules.intersection(set(self.formats.keys())))
+
     for format in list(formats):
       formats = formats.union(self.formats[format])
+    self.functions[name]["formats"] = list(formats)
     self.functions[name]["imports"] = list(imports)
-    if "formats" in self.functions[name]:
-      self.functions[name]["formats"] = self.functions[name]["formats"].union(formats)
-    else:
-      self.functions[name]["formats"] = formats
 
     if name in self.functions:
       assert(self.functions[name] == function_params)
-    self.functions[name]["formats"] = list(self.functions[name]["formats"])
     self.pipeline.append(pipeline_params)
 
   def __get_formats__(self):
@@ -96,8 +99,6 @@ class Pipeline:
 
   def __get_imports__(self, path):
     imports = set()
-    if self.thundra:
-      imports.add("thundra")
     with open(path, "r") as f:
       lines = f.readlines()
       for line in lines:
@@ -108,8 +109,7 @@ class Pipeline:
             break
     return imports
 
-  def combine(self, params={}, config={}):
-    output_format = self.functions[self.pipeline[-1]["name"]]["output_format"]
+  def combine(self, output_format, params={}, config={}):
     name = "combine-{0:s}-files".format(output_format)
     function_params = {**{
       "file": "combine_files",
@@ -117,13 +117,16 @@ class Pipeline:
       "memory_size": self.memory_size,
       "output_format": output_format
     }, **config}
-    path = "{0:s}/formats/{1:s}.py".format(currentdir, output_format)
-    self.__add__(name, path, function_params, params)
-    return Step(self, len(self.pipeline))
+    self.__add__(name, output_format, function_params, params, None)
+    return Step(self, len(self.pipeline), output_format)
 
-  def compile(self, output_file):
+  def compile(self, output_file, dry_run=False):
     configuration = self.get_configuration(output_file)
-    setup.setup(json.loads(json.dumps(configuration, default=serialize)))
+    jconfig = json.dumps(configuration, default=serialize, indent=2)
+    if dry_run:
+      print(jconfig)
+    else:
+      setup.setup(json.loads(jconfig))
 
   def get_configuration(self, output_file):
     configuration = {**{
@@ -133,10 +136,11 @@ class Pipeline:
       "functions": self.functions,
       "pipeline": self.pipeline,
     }, **self.config}
-    #print(json.dumps(configuration, indent=2, default=serialize))
+    with open(output_file, "w+") as f:
+      f.write(json.dumps(configuration, indent=2, default=serialize))
     return configuration
 
-  def run(self, name, params={}, output_format=None, config={}):
+  def run(self, name, input_format, output_format=None, params={}, config={}):
     function_params = {**{
       "application": name,
       "file": "application",
@@ -144,6 +148,14 @@ class Pipeline:
       "output_format": output_format,
     }, **config}
     path = "{0:s}/applications/{1:s}.py".format(currentdir, name)
-    self.__add__(name, path, function_params, params)
-    return Step(self, len(self.pipeline))
+    self.__add__(name, input_format, function_params, params, path)
+    return Step(self, len(self.pipeline), output_format)
+
+  def split(self, format, params={}, config={}):
+    name = "split-file"
+    function_params = {**{
+      "file": "split_file"
+    }, **config}
+    self.__add__(name, None, function_params, params, None)
+    return Step(self, len(self.pipeline), format)
 

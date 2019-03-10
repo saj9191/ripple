@@ -17,8 +17,6 @@ def get_layers(region, account_id, imports):
       layers.append("arn:aws:lambda:{0:s}:{1:d}:layer:Sklearn:1".format(region, account_id))
     elif imp == "numpy":
       layers.append("arn:aws:lambda:{0:s}:{1:d}:layer:numpy:1".format(region, account_id))
-    elif imp == "thundra":
-      layers.append("arn:aws:lambda:{0:s}:269863060030:layer:thundra-lambda-python-layer:4".format(region))
     else:
       raise Exception("Cannot find layer for", imp)
   return layers
