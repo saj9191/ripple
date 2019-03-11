@@ -56,9 +56,17 @@ class Entry:
     raise Exception("Entry::content_length not implemented")
 
   def download(self, f: BinaryIO) -> int:
-    self.statistics.read_count += 1
-    content_length: int = self.__download__(f)
-    return content_length
+    count = 0
+    done = False
+    while not done:
+      self.statistics.read_count += 1
+      try:
+        content_length: int = self.__download__(f)
+        return content_length
+      except Exception as e:
+        count += 1
+        if count == 3:
+          raise e
 
   def get_content(self) -> bytes:
     self.statistics.read_count += 1
@@ -113,10 +121,19 @@ class Database:
   def create_payload(self, table_name: str, key: str, extra: Dict[str, Any]) -> Dict[str, Any]:
     raise Exception("Database::create_payload not implemented")
 
-  def download(self, table_name: str, key: str, f: BinaryIO) -> int:
-    self.statistics.read_count += 1
-    content_length: int = self.__download__(table_name, key, f)
-    return content_length
+  def download(self, table_name: str, key: str, file_name: str) -> int:
+    count = 0
+    done = False
+    while not done:
+      self.statistics.read_count += 1
+      try:
+        with open(file_name, "wb+") as f:
+          content_length: int = self.__download__(table_name, key, f)
+        return content_length
+      except Exception as e:
+        count += 1
+        if count == 3:
+          raise e
 
   def get_entry(self, table_name: str, key: str) -> Optional[Entry]:
     raise Exception("Database::key not implemented")

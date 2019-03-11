@@ -14,7 +14,7 @@ def run_application(d: Database, bucket_name: str, key: str, input_format: Dict[
       d.download(bucket_name, key, fb)
   else:
     obj = d.get_entry(bucket_name, key)
-    format_lib = importlib.import_module(params["format"])
+    format_lib = importlib.import_module(params["input_format"])
     iterator_class = getattr(format_lib, "Iterator")
     iterator = iterator_class(obj, OffsetBounds(offsets[0], offsets[1]))
     items = iterator.get(iterator.get_start_index(), iterator.get_end_index())

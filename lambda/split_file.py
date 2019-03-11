@@ -43,6 +43,7 @@ def split_file(database: Database, bucket_name: str, key: str, input_format: Dic
 
     database.invoke(params["output_function"], payload)
     file_id += 1
+  return True
 
 
 def handler(event, context):
