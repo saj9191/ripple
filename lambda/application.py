@@ -10,8 +10,7 @@ def run_application(d: Database, bucket_name: str, key: str, input_format: Dict[
   util.make_folder(util.parse_file_name(key))
 
   if len(offsets) == 0:
-    with open(temp_file, "wb+") as fb:
-      d.download(bucket_name, key, fb)
+    d.download(bucket_name, key, temp_file)
   else:
     obj = d.get_entry(bucket_name, key)
     format_lib = importlib.import_module(params["input_format"])
