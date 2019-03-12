@@ -15,6 +15,12 @@ class MockObject:
     self.key = key
 
 
+class MockLogger(scheduler.Logger):
+  def __init__(self, queue):
+    scheduler.Logger.__init__(self, queue)
+
+
+
 class MockTask(scheduler.Task):
   def __init__(self, bucket_name, job, timeout, params, objects, queue, max_iterations, tokens):
     scheduler.Task.__init__(self, bucket_name, job, timeout, params, tokens)

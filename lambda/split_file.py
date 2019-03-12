@@ -1,5 +1,6 @@
 import boto3
 import pivot
+import threading
 import util
 from database import Database
 from typing import Any, Dict, List, Optional
@@ -28,6 +29,7 @@ def split_file(database: Database, bucket_name: str, key: str, input_format: Dic
   content_length: int = obj.content_length()
   num_files = int((content_length + split_size - 1) / split_size)
 
+#  threads = []
   while file_id <= num_files:
     offsets = [(file_id - 1) * split_size, min(content_length, (file_id) * split_size) - 1]
     extra_params = {**output_format, **{
@@ -41,8 +43,12 @@ def split_file(database: Database, bucket_name: str, key: str, input_format: Dic
     payload = database.create_payload(params["bucket"], util.file_name(input_format), extra_params)
     payload["log"] = [output_format["prefix"], output_format["bin"], file_id]
 
-    database.invoke(params["output_function"], payload)
+    threading.Thread(target=database.invoke, args=(params["output_function"], payload)).start()
+    #threads.append(threading.Thread(target=database.invoke, args=(params["output_function"], payload)))
     file_id += 1
+#
+#  for thread in threads:
+#    thread.join()
   return True
 
 

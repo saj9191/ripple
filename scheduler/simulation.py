@@ -28,13 +28,11 @@ def create_jobs(source_bucket, destination_bucket, policy, prefix, num_jobs, job
       jobs.append(scheduler.Job(source_bucket, destination_bucket, obj.key, start_time=start_time, deadline=deadline))
   elif policy == "priority":
     jobs = []
-    duration = 200
     for i in range(num_jobs):
       obj = objs[i]
-      start_time = now + i * duration
+      start_time = now + i * offset
       if i % 3 == 1:
         priority = 10
-        start_time = now + (i - 1) * duration + offset
       else:
         priority = 1
       jobs.append(scheduler.Job(source_bucket, destination_bucket, obj.key, start_time=start_time, priority=priority))

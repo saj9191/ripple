@@ -1,76 +1,103 @@
 {
-	"bucket": "maccoss-methyl",
-	"log": "maccoss-methyl-log",
-	"region": "us-west-2",
-	"role": "service-role/lambdaFullAccessRole",
-	"storage_class": "STANDARD",
-	"tag": "spacenet",
-	"timeout": 600,
-	"dependencies": {
-		"formats": {
-			"classification": [
-				"formats/knn.py",
-				"formats/pixel.py",
-				"formats/new_line.py"
-			],
-			"knn": [
-				"formats/new_line.py"
-			],
-			"pixel": [
-				"formats/new_line.py"
-			]
-		},
-		"libraries": "knn_libraries"
-	},
-	"functions": {
-		"convert-to-pixels": {
-			"application": "convert_to_pixels",
-			"file": "application",
-			"memory_size": 128,
-		  "pixels_per_bin": 1000
-		},
-		"pair-train": {
-			"application": "pair",
-		  "file": "application",
-			"memory_size": 128,
-			"split_size": 10000000
-		},
-		"knn": {
-			"application": "run_knn",
-		  "file": "application",
-			"format": "classification",
-			"memory_size": 3008,
-			"k": 100
-		},
-		"combine-knn-files": {
-			"file": "combine_files",
-			"format": "knn",
-			"memory_size": 3008,
-			"k": 100
-		},
-		"draw-borders": {
-			"application": "draw_borders",
-			"file": "application",
-			"format": "knn",
-			"memory_size": 1024
-		}
-	},
-	"pipeline": [{
-	  "name": "convert-to-pixels",
-	  "output": "pixel"
-	}, {
-	  "name": "pair-train"
-	}, {
-	  "name": "knn",
-		"input": "pixel"
-	}, {
-	  "name": "combine-knn-files",
-		"sort": true
-	}, {
-	  "name": "combine-knn-files",
-		"sort": false
-	}, {
-    "name": "draw-borders",
-		"input": "input"
-	}]
+  "bucket": "maccoss-methyl",
+  "log": "maccoss-methyl-log",
+  "timeout": 600,
+  "functions": {
+    "convert-to-pixels": {
+      "application": "convert-to-pixels",
+      "file": "application",
+      "memory_size": 128,
+      "output_format": "pixel",
+      "formats": [],
+      "imports": [
+        "PIL",
+        "numpy"
+      ]
+    },
+    "pair-train": {
+      "application": "pair",
+      "file": "application",
+      "memory_size": 128,
+      "output_format": null,
+      "formats": [
+        "pixel",
+        "new_line"
+      ],
+      "imports": []
+    },
+    "knn": {
+      "application": "run_knn",
+      "file": "application",
+      "memory_size": 3008,
+      "output_format": "knn",
+      "formats": [
+        "classification",
+        "new_line",
+        "knn"
+      ],
+      "imports": [
+        "sklearn",
+        "numpy"
+      ]
+    },
+    "combine-knn-files": {
+      "file": "combine_files",
+      "formats": [
+        "new_line",
+        "knn"
+      ],
+      "memory_size": 3008,
+      "output_format": "knn",
+      "imports": []
+    },
+    "draw-borders": {
+      "application": "draw_borders",
+      "file": "application",
+      "memory_size": 1024,
+      "output_format": "tif",
+      "formats": [
+        "new_line",
+        "knn"
+      ],
+      "imports": [
+        "PIL",
+        "numpy"
+      ]
+    }
+  },
+  "pipeline": [
+    {
+      "pixels_per_bin": 1000,
+      "name": "convert-to-pixels",
+      "output_function": "pair"
+    },
+    {
+      "split_size": 10000000,
+      "name": "pair_train",
+      "output_function": "run_knn"
+    },
+    {
+      "k": 100,
+      "name": "run_knn",
+      "output_function": "combine-knn-files"
+    },
+    {
+      "k": 100,
+      "sort": true,
+      "name": "combine-knn-files",
+      "output_function": "combine-knn-files"
+    },
+    {
+      "k": 100,
+      "sort": false,
+      "name": "combine-knn-files",
+      "output_function": "draw_borders"
+    },
+    {
+      "image": 0,
+      "name": "draw_borders"
+    }
+  ],
+  "region": "us-west-2",
+  "role": "service-role/lambdaFullAccessRole"
 }

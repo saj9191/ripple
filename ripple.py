@@ -144,6 +144,7 @@ class Pipeline:
     function_params = {**{
       "application": name,
       "file": "application",
+      "input_format": input_format,
       "memory_size": self.memory_size,
       "output_format": output_format,
     }, **config}

@@ -23,7 +23,7 @@
   },
   "pipeline": [
     {
-      "split_size": 110000000,
+      "split_size": 500000000,
       "name": "split-file",
       "output_function": "compress_methyl"
     },

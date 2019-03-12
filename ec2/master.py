@@ -196,7 +196,8 @@ class Master:
       time.sleep(10)
 
   def run(self):
-    while len(self.pending_tasks) > 0 or self.num_tasks > 0 or self.running:
+    nodes = self.starting_nodes + self.running_nodes + self.terminating_nodes
+    while len(self.pending_tasks) > 0 or self.num_tasks > 0 or len(nodes) > 0 or self.running:
       self.__check_for_new_items__()
       self.__check_nodes__()
       self.__start_tasks__()

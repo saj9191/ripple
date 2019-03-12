@@ -123,13 +123,13 @@ class Task(threading.Thread):
     super(Task, self).__init__()
     self.bucket_name = bucket_name
     self.check_time = time.time()
-    self.expected_logs = set()
+    self.expected_logs = set([(0, 1, 1)])
     self.actual_logs = set()
     self.job = job
     self.key = job.key
     self.logger_queue = logger_queue
     self.params = params
-    self.payload_map = {}
+    self.payload_map = { 0: {} }
     self.invoker_queue = invoker_queue
     self.processed = set()
     self.running = True
@@ -155,6 +155,7 @@ class Task(threading.Thread):
     self.key = key
     self.token = key.split("/")[1]
     self.tokens.add(self.token)
+    self.payload_map[0][(0, 1, 1)] = payload(self.job.destination_bucket, self.key)
     self.check_time = time.time()
 
   def check_for_updates(self):
@@ -188,7 +189,6 @@ class Task(threading.Thread):
           self.expected_logs.add((stage, bin_id, file_id))
     missing_logs = self.expected_logs.difference(self.actual_logs)
     print(self.token, "Stage", self.stage, "Missing", len(missing_logs), "Expected", len(self.expected_logs))
-    print(self.token, "Actual", self.actual_logs)
     return missing_logs
 
   def invoke(self, name, payload, unpause):
@@ -207,8 +207,12 @@ class Task(threading.Thread):
     while self.__running__() and self.stage < len(self.params["pipeline"]):
       self.check_for_updates()
       ctime = time.time()
-      if self.job.pause[0] == -1 or (ctime < self.job.pause[0] or self.job.pause[1] < ctime):
-        if ctime - self.check_time > self.timeout:
+      if self.job.pause[0] != -1 and self.job.pause[0] < ctime and ctime < self.job.pause[1]:
+        sleep = self.job.pause[1] - ctime
+        print(self.token, "Sleeping for", sleep, "seconds")
+        time.sleep(self.job.pause[1] - ctime)
+      else:
+        if (ctime - self.check_time) > self.timeout:
           log_identifiers = self.get_missing_logs()
           count = 0
           for identifier in log_identifiers:
@@ -219,7 +223,7 @@ class Task(threading.Thread):
               count += 1
           print(self.token, "Invoked", count, "Payloads")
           self.check_time = time.time()
-      time.sleep(5)
+        time.sleep(5)
 
     print(self.token, "Done processing.")
 

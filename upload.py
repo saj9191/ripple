@@ -52,7 +52,10 @@ def upload(bucket_name, key, input_bucket_name=None, execute=None):
         print("ERROR: upload_input", e)
   else:
     print("Uploading {0:s} to s3://{1:s}".format(key, bucket_name), flush=True)
-    s3.Object(bucket_name, s3_key).put(Body=open(key, 'rb'), Metadata={"original_name": key})
+    config = boto3.s3.transfer.TransferConfig(multipart_threshold=64*1024*1024, max_concurrency=10,
+                                              multipart_chunksize=16*1024*1024, use_threads=False)
+    s3.upload_file(key, bucket_name, Config=config)
+#    s3.Object(bucket_name, s3_key).put(Body=open(key, 'rb'), Metadata={"original_name": key})
 
   end = time.time()
 

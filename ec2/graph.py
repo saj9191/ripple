@@ -1,4 +1,5 @@
 import argparse
+import json
 import matplotlib
 import os
 import re
@@ -13,11 +14,20 @@ NODE_START_REGEX = re.compile("NODE START TIME: ([0-9\.]+)")
 NODE_END_REGEX = re.compile("NODE END TIME: ([0-9\.]+)")
 
 
-def graph(subfolder, numbers, colors, labels=None, start_range=None, end_range=None):
+def graph(subfolder, numbers, colors, pending_tasks, labels=None, start_range=None, end_range=None):
+  grid = plt.GridSpec(10, 1)
   fig, ax = plt.subplots()
+  ax.set_xticks([])
+  ax.set_yticks([])
+  ax.spines["right"].set_visible(False)
+  ax.spines["top"].set_visible(False)
+  ax1 = fig.add_subplot(grid[:8, 0])
+  ax1.spines["right"].set_visible(False)
+  ax1.spines["top"].set_visible(False)
   min_timestamp = None
   max_timestamp = None
   max_concurrency = None
+  handles = []
   for i in range(len(numbers)):
     num = numbers[i]
     timestamps = list(map(lambda r: r[0], num))
@@ -34,9 +44,22 @@ def graph(subfolder, numbers, colors, labels=None, start_range=None, end_range=N
       max_timestamp = max_t
       max_concurrency = max_c
     if labels:
-      plt.plot(timestamps, total, color=colors[i % len(colors)], label=labels[i])
+      handles.append(plt.plot(timestamps, total, color=colors[i % len(colors)], label=labels[i]))
     else:
-      plt.plot(timestamps, total, color=colors[i % len(colors)])
+      handles.append(plt.plot(timestamps, total, color=colors[i % len(colors)]))
+  print("max_timestamp", max_timestamp)
+#  if labels:
+#    plt.legend(loc="upper right", frameon=False)
+
+  plt.xticks([])
+  plt.ylim([0, max_concurrency * 1.15])
+  plt.xlim([min_timestamp, max_timestamp])
+  fig.add_subplot(grid[8:, 0])
+  timestamps = list(map(lambda r: r[0], pending_tasks))
+  total = list(map(lambda r: r[1], num))
+  handles.append(plt.plot(timestamps, total, color="gray", label="Number of Pending Jobs"))
+  if labels:
+    fig.legend(loc="upper right", frameon=False)
 
   plt.xlabel("Time (Seconds)")
   if start_range:
@@ -44,13 +67,11 @@ def graph(subfolder, numbers, colors, labels=None, start_range=None, end_range=N
   if end_range:
     max_timestamp = end_range
 
-  plt.ylim([0, max_concurrency * 1.25])
   plt.xlim([min_timestamp, max_timestamp])
-  if labels:
-    ax.legend(loc="best", frameon=False)
+  print(max_concurrency)
   plot_name = subfolder + "/simulation.png"
   print("Plot", plot_name)
-  fig.savefig(plot_name)
+  plt.savefig(plot_name)
   plt.close()
 
 
@@ -108,7 +129,16 @@ def process_tasks(start_time, subfolder):
   return tasks
 
 
-def process_nodes(subfolder):
+def num_vcpu(instance):
+  if instance == "t2.xlarge":
+    return 4
+  elif instance == "r5a.xlarge":
+    return 4
+  raise Exception("num_vcpu", instance, "not implemented")
+
+def process_nodes(subfolder, parameters):
+  params = json.loads(open(subfolder + "/" + parameters, "r").read())
+  vcpu = num_vcpu(params["instance"])
   node_times = []
   folder = subfolder + "/nodes/"
   regex = [NODE_START_REGEX, NODE_END_REGEX]
@@ -127,8 +157,8 @@ def process_nodes(subfolder):
     et = node_times[i][1] - start_time
     cost += (et - st) * (0.1856 / 60 / 60)
     volume_cost += (et - st) * ((0.10 * 26) / 30 / 24 / 60 / 60)
-    ranges.append([st, 1])
-    ranges.append([et, -1])
+    ranges.append([st, vcpu])
+    ranges.append([et, -1*vcpu])
     read_count += 1
     write_count += 1
 
@@ -153,17 +183,18 @@ def process_nodes(subfolder):
 
 def main():
   parser = argparse.ArgumentParser()
+  parser.add_argument("--parameters", type=str, required=True, help="Parameters to use")
   parser.add_argument("--subfolder", type=str, required=True, help="Folder containing data to graph")
   parser.add_argument("--start_range", type=int, help="Start timestamp of zoom region")
   parser.add_argument("--end_range", type=int, help="End timestamp of zoom region")
   args = parser.parse_args()
-  [start_time, num_nodes] = process_nodes(args.subfolder)
+  [start_time, num_nodes] = process_nodes(args.subfolder, args.parameters)
   [active_tasks, pending_tasks, total_tasks] = process_tasks(start_time, args.subfolder)
 
-  numbers = [num_nodes, active_tasks, pending_tasks, total_tasks]
-  colors = ["red", "blue", "gray", "purple"]
-  labels = ["Number of Servers", "Number of Running Jobs", "Number of Pending Jobs", "Number of Total Jobs"]
-  graph(args.subfolder, numbers, colors, labels, args.start_range, args.end_range)
+  numbers = [num_nodes, active_tasks, total_tasks]
+  colors = ["red", "blue", "purple"]
+  labels = ["Number of VCPUs", "Number of Running Jobs", "Number of Total Jobs"]
+  graph(args.subfolder, numbers, colors, pending_tasks, labels, args.start_range, args.end_range)
 
 
 if __name__ == "__main__":

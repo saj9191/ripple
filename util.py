@@ -4,6 +4,7 @@ import os
 import random
 import re
 import subprocess
+import threading
 import time
 from database import S3
 from botocore.client import Config
@@ -171,16 +172,23 @@ def handle(event, context, func):
   input_format = parse_file_name(key)
   params = load_parameters(s3_dict, input_format, start_time, event)
   if run_function(params, input_format):
+    cpu = []
+    monitor = Monitor(cpu)
+    monitor.start()
+    params["cpu"] = cpu
     [output_format, log_format] = get_formats(input_format, params)
     entry = prior_execution(log_format, params)
     if entry is None:
       if not is_set(event, "test"):
         clear_tmp(params)
       make_folder(output_format)
-      finished = func(params["database"], bucket_name, key, input_format, output_format, params["offsets"], params)
-
-      if finished:
-        write_log(context, input_format, log_format, params)
+      try:
+        finished = func(params["database"], bucket_name, key, input_format, output_format, params["offsets"], params)
+        if finished:
+          write_log(context, input_format, log_format, params)
+      except Exception as e:
+        monitor.running = False
+        raise e
     else:
       count = 0
       content = json.loads(entry.get_content().decode("utf-8"))
@@ -190,6 +198,7 @@ def handle(event, context, func):
         if "reexecute" in params:
           payload["execute"] = params["reexecute"]
         params["database"].invoke(params["output_function"], payload)
+    monitor.running = False 
 
 
 def get_formats(input_format, params):
@@ -297,7 +306,8 @@ def write_log(context, input_format, bucket_format, params):
 
   log_results = {**{
     "start_time": params["start_time"],
-    "duration": duration
+    "duration": duration,
+    "cpu": params["cpu"],
   },  **params["database"].get_statistics()}
 
   for key in ["name"]:
@@ -426,3 +436,17 @@ def get_key_regex(m):
 def clear_tmp(params={}):
   if not is_set(params, "test"):
     subprocess.call("rm -rf /tmp/*", shell=True)
+
+
+class Monitor(threading.Thread):
+  def __init__(self, cpu):
+    super(Monitor, self).__init__()
+    self.cpu = cpu
+    self.running = True
+
+  def run(self):
+    while self.running:
+      ps_results = subprocess.check_output("ps -o %cpu", shell=True).decode("utf-8").strip().split("\n")[1:]
+      cpu = sum(map(lambda c: float(c), ps_results))
+      self.cpu.append(cpu)
+      time.sleep(5)
