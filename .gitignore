@@ -18,6 +18,7 @@ data/*
 *.png
 *__pycache__
 *.pem
+*.json
 jupyter
 *.ropeproject
 json/private*
