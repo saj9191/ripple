@@ -29,7 +29,7 @@ def split_file(database: Database, bucket_name: str, key: str, input_format: Dic
   content_length: int = obj.content_length()
   num_files = int((content_length + split_size - 1) / split_size)
 
-#  threads = []
+  threads = []
   while file_id <= num_files:
     offsets = [(file_id - 1) * split_size, min(content_length, (file_id) * split_size) - 1]
     extra_params = {**output_format, **{
@@ -43,12 +43,12 @@ def split_file(database: Database, bucket_name: str, key: str, input_format: Dic
     payload = database.create_payload(params["bucket"], util.file_name(input_format), extra_params)
     payload["log"] = [output_format["prefix"], output_format["bin"], file_id]
 
-    threading.Thread(target=database.invoke, args=(params["output_function"], payload)).start()
-    #threads.append(threading.Thread(target=database.invoke, args=(params["output_function"], payload)))
+    threads.append(threading.Thread(target=database.invoke, args=(params["output_function"], payload)))
+    threads[-1].start()
     file_id += 1
-#
-#  for thread in threads:
-#    thread.join()
+
+  for thread in threads:
+    thread.join()
   return True
 
 
