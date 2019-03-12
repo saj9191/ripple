@@ -1,69 +1,73 @@
 {
-	"input_name": "Coon-HeLa-APD-Data/ASH_20170314_HELA_120MIN.mzML",
-	"model": "lambda",
-	"iterations": 1,
-	"region": "us-west-2",
-	"folder": "tide",
-	"tag": "tide-simulation",
-	"timeout": 600,
-	"bucket": "maccoss-tide",
-	"storage_class": "STANDARD",
-	"credential_profile": "maccoss",
-	"role": "service-role/lambdaFullAccessRole",
-	"log": "maccoss-log",
-	"sample_input": true,
-	"sample_bucket": "tide-source-data",
-	"stats": false,
-	"setup": true,
-	"dependencies": {
-		"formats": {
-			"percolator": [
-				"formats/tsv.py",
-				"formats/new_line.py"
-			],
-			"tsv": [
-				"formats/new_line.py"
-			]
-		}
-	},
-	"functions": {
-		"split-mzML": {
-			"split_size": 100000000,
-			"file": "split_file",
-			"memory_size": 128
-		},
-		"tide": {
-			"file": "application",
-			"format": "mzML",
-			"application": "tide",
-			"memory_size": 3008,
-			"database_bucket": "maccoss-fasta",
-			"num_threads": 0,
-			"species": "normalHuman"
-		},
-		"combine-tsv-files": {
-			"file": "combine_files",
-			"format": "tsv",
-			"memory_size": 256,
-			"chunk_size": 10000000,
-			"sort": false
-		},
-		"percolator": {
-			"file": "application",
-			"application": "percolator",
-			"database_bucket": "maccoss-fasta",
-			"memory_size": 3008,
-			"max_train": 10000,
-			"output": "peptides"
-		}
-	},
-	"pipeline": [{
-		"name": "split-mzML"
-	}, {
-		"name": "tide"
-	}, {
-		"name": "combine-tsv-files"
-	}, {
-		"name": "percolator"
-	}]
+  "bucket": "maccoss-tide",
+  "log": "maccoss-log",
+  "timeout": 600,
+  "functions": {
+    "split-file": {
+      "file": "split_file",
+      "memory_size": 128,
+      "formats": [],
+      "imports": []
+    },
+    "tide": {
+      "application": "tide",
+      "file": "application",
+      "input_format": "mzML",
+      "memory_size": 3008,
+      "output_format": "tsv",
+      "formats": [
+        "mzML"
+      ],
+      "imports": []
+    },
+    "combine-tsv-files": {
+      "file": "combine_files",
+      "formats": [
+        "tsv",
+        "new_line"
+      ],
+      "memory_size": 256,
+      "output_format": "tsv",
+      "imports": []
+    },
+    "percolator": {
+      "application": "percolator",
+      "file": "application",
+      "input_format": "tsv",
+      "memory_size": 3008,
+      "output_format": null,
+      "formats": [
+        "tsv",
+        "new_line"
+      ],
+      "imports": []
+    }
+  },
+  "pipeline": [
+    {
+      "split_size": 100000000,
+      "name": "split-file",
+      "output_function": "tide"
+    },
+    {
+      "database_bucket": "maccoss-fasta",
+      "num_threads": 0,
+      "species": "normalHuman",
+      "name": "tide",
+      "output_function": "combine-tsv-files"
+    },
+    {
+      "sort": false,
+      "name": "combine-tsv-files",
+      "output_function": "percolator"
+    },
+    {
+      "database_bucket": "maccoss-fasta",
+      "max_train": 10000,
+      "output": "peptides",
+      "name": "percolator"
+    }
+  ],
+  "region": "us-west-2",
+  "role": "service-role/lambdaFullAccessRole"
 }

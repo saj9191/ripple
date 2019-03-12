@@ -7,9 +7,7 @@ from typing import List
 
 
 def run(database: Database, file: str, params, input_format, output_format, offsets: List[int]):
-  with open("/tmp/crux", "wb") as f:
-    database.download(params["database_bucket"], "crux", f)
-
+  database.download(params["database_bucket"], "crux", "/tmp/crux")
   subprocess.call("chmod 755 /tmp/crux", shell=True)
   output_dir = "/tmp/percolator-crux-output-{0:f}-{1:d}".format(input_format["timestamp"], input_format["nonce"])
 

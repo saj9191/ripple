@@ -12,11 +12,8 @@ def run(database: Database, file: str, params, input_format, output_format, offs
   else:
     raise Exception("Tide needs species parameter specified")
 
-  with open("/tmp/fasta", "wb+") as f:
-    database.download(params["database_bucket"], "{0:s}/fasta".format(species), f)
-
-  with open("/tmp/crux", "wb+") as f:
-    database.download(params["database_bucket"], "crux", f)
+  database.download(params["database_bucket"], "{0:s}/fasta".format(species), "/tmp/fasta")
+  database.download(params["database_bucket"], "crux", "/tmp/crux")
 
   subprocess.call("chmod 755 /tmp/crux", shell=True)
   index_files = ["auxlocs", "pepix", "protix"]
@@ -25,8 +22,7 @@ def run(database: Database, file: str, params, input_format, output_format, offs
 
   for index_file in index_files:
     name = "{0:s}/{1:s}".format(species, index_file)
-    with open("/tmp/fasta.index/{0:s}".format(index_file), "wb") as f:
-      database.download(params["database_bucket"], name, f)
+    database.download(params["database_bucket"], name, "/tmp/fasta.index/{0:s}".format(index_file))
 
   output_dir = "/tmp/crux-output-{0:f}-{1:d}".format(input_format["timestamp"], input_format["nonce"])
 
