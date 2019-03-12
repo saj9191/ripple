@@ -249,6 +249,9 @@ def have_all_files(batch, prefix, params):
     batch_id = 1
     max_batch_id = 1
 
+  if len(batch) == 0:
+    return (False, -1, -1)
+
   if batch_id < max_batch_id:
     num_files = params["batch_size"]
   else:
