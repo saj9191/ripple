@@ -61,7 +61,7 @@ def upload(bucket_name, key, input_bucket_name=None, execute=None):
   obj = s3.Object(bucket_name, s3_key)
   timestamp = obj.last_modified.timestamp()
   duration = end - start
-  print("Uploaded key {0:s} as {1:s}. Upload Duration {2:d}. Last modified {3:f}.".format(key, s3_key, duration, timestamp), flush=True)
+  print("Uploaded key {0:s} as {1:s}. Upload Duration {2:f}. Last modified {3:f}.".format(key, s3_key, duration, timestamp), flush=True)
 
   return s3_key, timestamp, duration
 

@@ -147,7 +147,7 @@ def run(params, m, distribution, output_folder):
 
   if output_folder:
     responses = list(response_queue.queue)
-    with open(output_folder + "/upload_stats") as f:
+    with open(output_folder + "/upload_stats", "w+") as f:
       f.write(json.dumps({"stats": responses}))
 
 class DummyMaster:
