@@ -15,6 +15,7 @@ paper/*.pdf
 paper/*.log
 paper/*.thm
 data/*
+*.png
 *__pycache__
 *.pem
 jupyter
