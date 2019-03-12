@@ -55,17 +55,15 @@ def upload(bucket_name, key, input_bucket_name=None, execute=None):
     config = boto3.s3.transfer.TransferConfig(multipart_threshold=64*1024*1024, max_concurrency=10,
                                               multipart_chunksize=16*1024*1024, use_threads=False)
     s3.upload_file(key, bucket_name, Config=config)
-#    s3.Object(bucket_name, s3_key).put(Body=open(key, 'rb'), Metadata={"original_name": key})
 
   end = time.time()
 
   obj = s3.Object(bucket_name, s3_key)
-  timestamp = obj.last_modified.timestamp() * 1000
-  print("Uploaded key {0:s} as {1:s}. Last modified {2:f}".format(key, s3_key, timestamp), flush=True)
-  seconds = end - start
-  milliseconds = seconds * 1000
+  timestamp = obj.last_modified.timestamp()
+  duration = end - start
+  print("Uploaded key {0:s} as {1:s}. Upload Duration {2:d}. Last modified {3:f}.".format(key, s3_key, duration, timestamp), flush=True)
 
-  return s3_key, timestamp, milliseconds
+  return s3_key, timestamp, duration
 
 
 def main():

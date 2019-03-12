@@ -74,13 +74,14 @@ class Diurnal(Distribution):
 
 
 class Request(threading.Thread):
-  def __init__(self, thread_id, date_time, request_queue, params):
+  def __init__(self, thread_id, date_time, request_queue, response_queue, params):
     super(Request, self).__init__()
     self.date_time = date_time
     self.error = None
     self.start_time = time.time()
     self.params = params
     self.request_queue = request_queue
+    self.response_queue = response_queue
     self.thread_id = thread_id
 
   def run(self):
@@ -95,7 +96,7 @@ class Request(threading.Thread):
         sleep = max(0, request_delta - time_delta)
         time.sleep(sleep)
         print("Thread", self.thread_id, "Wakeup", request_date_time)
-        upload.upload(self.params["bucket"], file_name, self.params["input_bucket"])
+        self.response_queue.put(upload.upload(self.params["bucket"], file_name, self.params["input_bucket"]))
       except queue.Empty as e:
         pass
 
@@ -114,7 +115,7 @@ def create_requests(params):
   return requests
 
 
-def run(params, m, distribution):
+def run(params, m, distribution, output_folder):
   s3 = boto3.resource("s3")
   file_names = list(map(lambda o: o.key, s3.Bucket(params["input_bucket"]).objects.filter(Prefix=params["input_prefix"])))
   file_names = list(filter(lambda k: not k.endswith("/"), file_names))
@@ -123,6 +124,7 @@ def run(params, m, distribution):
 
   threads = []
   request_queue = queue.Queue()
+  response_queue = queue.Queue()
   if distribution:
     print(requests)
     return
@@ -130,7 +132,7 @@ def run(params, m, distribution):
     request_queue.put([file_names[i % num_files], requests[i]])
 
   for i in range(params["num_threads"]):
-    threads.append(Request(i, 0, request_queue, params))
+    threads.append(Request(i, 0, request_queue, response_queue, params))
     threads[-1].start()
 
   while request_queue.qsize() > 0:
@@ -143,19 +145,23 @@ def run(params, m, distribution):
   for thread in threads:
     thread.join()
 
+  if output_folder:
+    responses = list(response_queue.queue)
+    with open(output_folder + "/upload_stats") as f:
+      f.write(json.dumps({"stats": responses}))
 
 class DummyMaster:
   def __init__(self):
     self.error = None
 
-
 def main():
   parser = argparse.ArgumentParser()
   parser.add_argument("--parameters", type=str, required=True, help="File containing simulation distribution parameters")
   parser.add_argument("--distribution", action="store_true", help="Just print the distribution timestamps")
+  parser.add_argument("--output_folder", type=str, help="Folder to store timestamp results")
   args = parser.parse_args()
   params = json.loads(open(args.parameters).read())
-  run(params, DummyMaster(), args.distribution)
+  run(params, DummyMaster(), args.distribution, args.output_folder)
 
 
 if __name__ == "__main__":
