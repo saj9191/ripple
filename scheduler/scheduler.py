@@ -88,6 +88,8 @@ class Logger(threading.Thread):
     self.__setup__()
 
   def __get_log__(self, name):
+    while not util.object_exists(self.s3, self.bucket_name, name):
+      time.sleep(0.5)
     obj = self.s3.Object(self.bucket_name, name)
     body = json.loads(obj.get()["Body"].read().decode("utf-8"))
     return body
@@ -129,7 +131,9 @@ class Task(threading.Thread):
     self.key = job.key
     self.logger_queue = logger_queue
     self.params = params
-    self.payload_map = { 0: {} }
+    self.payload_map = {}
+    for i in range(len(params["pipeline"])):
+      self.payload_map[i] = {}
     self.invoker_queue = invoker_queue
     self.processed = set()
     self.running = True
@@ -221,7 +225,7 @@ class Task(threading.Thread):
             if stage in self.payload_map and identifier in self.payload_map[stage]:
               self.invoke(name, self.payload_map[stage][identifier], self.job.pause[1] < ctime)
               count += 1
-          print(self.token, "Invoked", count, "Payloads")
+          print(self.token, "Invoked", count, "Payloads. First", log_identifiers[0])
           self.check_time = time.time()
         time.sleep(5)
 
@@ -494,7 +498,7 @@ def main():
   args = parser.parse_args()
   params = json.loads(open(args.parameters).read())
   setup.process_functions(params)
-  params["s3"] = database.S3()
+  params["s3"] = database.S3(params)
   run(args.policy, args.timeout, params)
 
 
