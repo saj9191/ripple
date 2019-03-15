@@ -25,6 +25,7 @@ def run_application(d: Database, bucket_name: str, key: str, input_format: Dict[
   application_method = getattr(application_lib, "run")
   output_files = application_method(d, temp_file, params, input_format, output_format, offsets)
 
+  found = False
   for output_file in output_files:
     p = util.parse_file_name(output_file.replace("/tmp/", ""))
     if p is None:
@@ -35,9 +36,12 @@ def run_application(d: Database, bucket_name: str, key: str, input_format: Dict[
     else:
       new_key = util.file_name(p)
 
-    with open(output_file, "rb") as f:
-      d.put(params["bucket"], new_key, f, {})
-  return True
+    if not d.contains(params["bucket"], new_key):
+      with open(output_file, "rb") as f:
+        d.put(params["bucket"], new_key, f, {})
+    else:
+      found = True
+  return not found
 
 
 def handler(event, context):

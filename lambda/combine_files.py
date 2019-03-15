@@ -5,12 +5,12 @@ from database import Database, Entry
 from typing import Any, Dict, List
 
 
-def combine(database: Database, bucket_name, key, input_format, output_format, offsets, params):
+def combine(database: Database, table_name, key, input_format, output_format, offsets, params):
   output_format["file_id"] = input_format["bin"]
   output_format["bin"] = 1
   output_format["num_bins"] = 1
   util.make_folder(output_format)
-  [combine, last_file, keys] = util.combine_instance(bucket_name, key, params)
+  [combine, last_file, keys] = util.combine_instance(table_name, key, params)
   if combine:
     output_format["num_files"] = input_format["num_bins"]
     msg = "Combining TIMESTAMP {0:f} NONCE {1:d} BIN {2:d} FILE {3:d}"
@@ -23,15 +23,22 @@ def combine(database: Database, bucket_name, key, input_format, output_format, o
     temp_name = "/tmp/{0:s}".format(file_name)
     # Make this deterministic and combine in the same order
     keys.sort()
-    entries: List[Entry] = list(map(lambda key: database.get_entry(bucket_name, key), keys))
+    entries: List[Entry] = list(map(lambda key: database.get_entry(table_name, key), keys))
     metadata: Dict[str, str] = {}
+    if database.contains(table_name, file_name):
+      return False
+
     with open(temp_name, "wb+") as f:
       metadata = iterator_class.combine(entries, f, params)
 
-    with open(temp_name, "rb") as f:
-      database.put(params["bucket"], file_name, f, metadata)
+    found = database.contains(table_name, file_name)
+    if not found:
+      with open(temp_name, "rb") as f:
+        database.put(params["bucket"], file_name, f, metadata)
     os.remove(temp_name)
-  return ((key != last_file) or combine)
+    return not found
+  else:
+    return (key != last_file)
 
 
 def handler(event, context):
