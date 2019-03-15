@@ -5,13 +5,13 @@ from PIL import Image
 from typing import List
 
 
-def make_file(output_format, output_files):
+def make_file(output_format):
   output_format["bin"] += 1
-  output_file = "/tmp/{0:s}".format(util.file_name(output_format))
   util.make_folder(output_format)
+  name = util.file_name(output_format)
+  output_file = "/tmp/" + name
   f = open(output_file, "wb+")
-  output_files.append(output_file)
-  return f
+  return [f, name]
 
 
 def create_window(im, x, y, window_width, window_height, width, height):
@@ -36,8 +36,7 @@ def run(database: Database, key: str, params, input_format, output_format, offse
   num_bins = int((width * height + params["pixels_per_bin"] - 1) / params["pixels_per_bin"])
   output_format["bin"] = 0
   output_format["num_bins"] = num_bins
-  output_files = []
-  f = make_file(output_format, output_files)
+  [f, name] = make_file(output_format)
 
   for y in range(height):
     for x in range(width):
@@ -47,7 +46,9 @@ def run(database: Database, key: str, params, input_format, output_format, offse
       f.write(str.encode("{x} {y} ".format(x=x, y=y)) + window.tostring())
       if (y * width + x) % params["pixels_per_bin"] == params["pixels_per_bin"] - 1:
         f.close()
-        f = make_file(output_format, output_files)
+        database.put(params["bucket"], name, open("/tmp/" + name, "rb"), {})
+        [f, name] = make_file(output_format)
   f.close()
+  database.put(params["bucket"], name, open("/tmp/" + name, "rb"), {})
   assert(num_bins == output_format["bin"])
-  return output_files
+  return []
