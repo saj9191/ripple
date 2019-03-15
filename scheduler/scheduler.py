@@ -82,24 +82,28 @@ class Queue(threading.Thread):
 
   def __get_objects__(self):
     objects = self.__fetch_objects__()
+    count = 0
     for obj in objects:
       key = obj.key
+      count += 1
       if key not in self.processed_logs:
         self.processed_logs.add(key)
         m = util.parse_file_name(key)
         prefix: int = m["prefix"]
         token: str = "{0:f}-{1:d}".format(m["timestamp"], m["nonce"])
-        identifier: Token = (token, m["prefix"], m["bin"], m["num_bins"], m["file"], m["num_files"])
+        identifier: Token = (token, m["prefix"], m["bin"], m["num_bins"], m["file_id"], m["num_files"])
         self.pending_job_tokens.add(token)
-        self.finished_task.add(identifier)
+        self.finished_tasks.add(identifier)
         self.logger_queue.put([key, identifier])
 
   def __running__(self):
     return True
 
   def run(self):
+    print("Queue started. Monitoring ", self.bucket_name)
     while self.__running__():
       self.__get_objects__()
+      time.sleep(random.randint(0, 3))
 
 
 class Logger(threading.Thread):
@@ -107,7 +111,8 @@ class Logger(threading.Thread):
     super(Logger, self).__init__()
     self.bucket_name = bucket_name
     self.logger_queue = logger_queue
-    self.__setup_connections_()
+    self.payload_map = payload_map
+    self.__setup_connections__()
 
   def __running__(self):
     return True
@@ -117,7 +122,7 @@ class Logger(threading.Thread):
 
   def __get_log__(self, name):
     while not util.object_exists(self.s3, self.bucket_name, name):
-      time.sleep(0.5)
+      time.sleep(random.randint(0, 3))
 
     while True:
       try:
@@ -129,6 +134,7 @@ class Logger(threading.Thread):
         time.sleep(random.randint(0, 3))
 
   def run(self):
+    stalled = []
     while self.__running__():
       [key, identifier] = self.logger_queue.get()
       body = self.__get_log__(key)
@@ -141,13 +147,27 @@ class Logger(threading.Thread):
           if "extra_params" in payload["Records"][0]["s3"]:
             c = {**c, **payload["Records"][0]["s3"]["extra_params"]}
           child_identifier = (token, c["prefix"], c["bin"], c["num_bins"], c["file_id"], c["num_files"])
-        self.payload_map[child_identifier] = payload
+        assert(child_identifier[2] <= child_identifier[3] and child_identifier[4] <= child_identifier[5])
+        if token in self.payload_map:
+          self.payload_map[token][child_identifier] = payload
+        else:
+          stalled.append([token, child_identifier, payload])
+
+    i = 0
+    while i < len(stalled):
+      [token, child_identifier, apyload] = stalled[i]
+      if token in self.payload_map:
+        self.payload_map[token][child_identifier] = payload
+        stalled.pop(i)
+      else:
+        i += 1
 
 
 class Invoker(threading.Thread):
-  def __init__(self, invoker_queue):
+  def __init__(self, invoker_queue, region):
     super(Invoker, self).__init__()
     self.invoker_queue = invoker_queue
+    self.region = region
     self.running = True
     self.__setup_connections__()
 
@@ -169,7 +189,7 @@ class Invoker(threading.Thread):
     return True
 
   def __setup_connections__(self):
-    self.client = boto3.client("lambda")
+    self.client = boto3.client("lambda", region_name=self.region)
 
   def run(self):
     while self.__running__():
@@ -186,7 +206,6 @@ class Task(threading.Thread):
     self.invoker_queue = invoker_queue
     self.job = job
     self.key = job.key
-    self.logger_queue = logger_queue
     self.payload_map = payload_map
     self.pipeline = pipeline
     self.running = True
@@ -197,7 +216,7 @@ class Task(threading.Thread):
     self.__setup_connections__()
 
   def __running__(self):
-    return True
+    return self.running
 
   def __setup_connections__(self):
     self.s3 = boto3.resource("s3")
@@ -207,12 +226,12 @@ class Task(threading.Thread):
     [key, _, _] = upload.upload(self.job.destination_bucket, self.job.key, self.job.source_bucket, max(self.job.pause[0], 0))
     self.key = key
     self.token = key.split("/")[1]
-    self.job_tokens.add(tokens)
-    self.expected_logs.add([self.token, 0, 1, 1, 1, 1])
-    self.check_time = time.time()
+    self.payload_map[self.token] = {}
+    self.job_tokens.add(self.token)
 
   def __stage_tasks__(self, stage):
-    return list(filter(lambda t: t[0] == self.token and t[1] == stage, self.finished_tasks))
+    finished_tasks = list(self.finished_tasks)
+    return list(filter(lambda t: t[0] == self.token and t[1] == stage, finished_tasks))
 
   def check_for_updates(self):
     stage_tasks = self.__stage_tasks__(self.stage)
@@ -226,14 +245,17 @@ class Task(threading.Thread):
       self.check_time = time.time()
 
   def get_missing_logs(self):
+    self.expected_logs = self.expected_logs.union(set(self.payload_map[self.token].keys()))
     for stage in range(self.stage, len(self.pipeline)):
       stage_tasks = self.__stage_tasks__(stage)
-      if stage_tasks[0] not in self.expected_logs:
+      if len(stage_tasks) > 0 and stage_tasks[0] not in self.expected_logs:
         num_bins = stage_tasks[0][3]
         num_files = stage_tasks[0][5]
         for bin_id in range(1, num_bins + 1):
           for file_id in range(1, num_files + 1):
-            self.expected_logs.add((self.token, stage, bin_id, num_bins, file_id, num_files))
+            assert(bin_id <= num_bins and file_id <= num_files)
+            t = (self.token, stage, bin_id, num_bins, file_id, num_files)
+            self.expected_logs.add(t)
     missing_logs = self.expected_logs.difference(self.finished_tasks)
     return missing_logs
 
@@ -248,11 +270,14 @@ class Task(threading.Thread):
       time.sleep(sleep)
     if self.job.upload:
       self.__upload__()
+    self.expected_logs.add((self.token, 0, 1, 1, 1, 1))
+    self.check_time = time.time()
 
-    print(self.token, "Starting stage", self.stage, "Timeout", self.timeout)
-    while self.__running__() and self.stage < self.pipeline_length:
+    print(self.token, "Starting stage", self.stage)
+    while self.__running__() and self.stage < len(self.pipeline):
       self.check_for_updates()
       ctime = time.time()
+      self.running = (self.token, 3, 1, 1, 1, 1) not in self.finished_tasks
       if self.job.pause[0] != -1 and self.job.pause[0] < ctime and ctime < self.job.pause[1]:
         sleep = self.job.pause[1] - ctime
         print(self.token, "Sleeping for", sleep, "seconds")
@@ -262,11 +287,14 @@ class Task(threading.Thread):
           log_identifiers = self.get_missing_logs()
           count = 0
           for identifier in log_identifiers:
-            if identifier in self.payload_map:
-              self.invoke(name, self.payload_map[identifier], self.job.pause[1] < ctime)
+            if identifier in self.payload_map[self.token]:
+              name = self.pipeline[identifier[1]]["name"]
+              self.invoke(name, self.payload_map[self.token][identifier], self.job.pause[1] < ctime)
               count += 1
+          if count > 0:
+            print(self.token, "Re-invoked", count, "payloads. Missing ", list(log_identifiers)[0])
           self.check_time = time.time()
-
+        time.sleep(random.randint(0, 5))
     print(self.token, "Done processing.")
 
 class Scheduler:
@@ -286,12 +314,13 @@ class Scheduler:
     self.policy = policy
     self.processed_logs = set()
     self.queues = []
+    self.region = params["region"]
     self.running = True
     self.tasks = []
     self.timeout = timeout
 
   def __add_invoker__(self):
-    self.invokers.append(Invoker(self.invoker_queue))
+    self.invokers.append(Invoker(self.invoker_queue, self.region))
     self.invokers[-1].start()
 
   def __add_task__(self, job):
@@ -307,23 +336,25 @@ class Scheduler:
     self.loggers[-1].start()
 
   def __check_tasks__(self):
-    for token in self.pending_job_tokens:
+    pending_job_tokens = list(self.pending_job_tokens)
+    for token in pending_job_tokens:
       self.pending_job_tokens.remove(token)
       if token not in self.job_tokens:
+        self.payload_map[token] = {}
         self.job_tokens.add(token)
         job = Job("", self.bucket_name, token, float(token.split("-")[0]))
         self.__add_task__(job)
 
     i = 0
     while i < len(self.tasks):
-      if not self.tasks[i].running:
-        self.tasks[i].join()
-        self.tasks.pop(i)
-      else:
-        i += 1
+     if not self.tasks[i].running:
+       self.tasks[i].join()
+       self.tasks.pop(i)
+     else:
+       i += 1
 
   def __running__(self):
-    return self.running
+   return self.running
 
   def add_jobs(self, jobs):
     for job in jobs:
@@ -336,7 +367,7 @@ class Scheduler:
       self.__add_invoker__()
     for i in range(num_loggers):
       self.__add_logger__()
-    for i in range(5):
+    for i in range(1):
       self.__add_queue__()
 
     print("Listening")
@@ -348,8 +379,10 @@ class Scheduler:
 
 
 def run(policy, timeout, params):
-  scheduler = Scheduler(policy, timeout, params)
-  scheduler.listen(params["num_invokers"], params["num_loggers"])
+ scheduler = Scheduler(policy, timeout, params)
+ params["num_invokers"] = 10
+ params["num_loggers"] = 10
+ scheduler.listen(params["num_invokers"], params["num_loggers"])
 
 
 def simulation_deadline(jobs: List[Job], expected_job_duration: float, max_num_jobs: int, key_func):
