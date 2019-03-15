@@ -336,7 +336,7 @@ class Iterator(iterator.Iterator[Identifiers]):
   def to_array(cls: Any, content: bytes) -> Iterable[Any]:
     content = "<data>" + content.decode("utf-8") + "</data>"
     root = ET.fromstring(content)
-    return root.iter("spectrum")
+    return filter(lambda item: cls.__cv_param__(item, "ms level") == 2, root.iter("spectrum"))
 
   def transform(self, stream: bytes, offset_bounds: Optional[OffsetBounds]) -> Tuple[bytes, Optional[OffsetBounds]]:
     start_index: int
