@@ -8,7 +8,7 @@ import random
 import sys
 import threading
 import time
-from typing import List, Tuple
+from typing import Any, Dict, List, MutableSet, Tuple
 currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
 parentdir = os.path.dirname(currentdir)
 sys.path.insert(0, parentdir)
@@ -49,108 +49,157 @@ class Job:
 
 
 Order = Tuple[Job, float]
+Token = Tuple[int, int, int, int, int, int]
 
 
-class Invoker(threading.Thread):
-  def __init__(self, invoker_queue, thread_id, params):
-    super(Invoker, self).__init__()
-    self.invoker_queue = invoker_queue
-    self.running = True
-    self.thread_id = thread_id
-    self.__setup_client__(params)
+class Queue(threading.Thread):
+  bucket_name: str
+  finished_tasks: MutableSet[Token]
+  pending_job_tokens: MutableSet[str]
+  logger_queue: queue.Queue
 
-  def __setup_client__(self, params):
-    s3 = boto3.resource("s3")
-    self.client = boto3.client("lambda")
+  def __init__(self, bucket_name: str, logger_queue, finished_tasks, pending_job_tokens, processed_logs):
+    super(Queue, self).__init__()
+    self.bucket_name = bucket_name
+    self.finished_tasks = finished_tasks
+    self.logger_queue = logger_queue
+    self.pending_job_tokens = pending_job_tokens
+    self.processed_logs = processed_logs
+    self.__setup_connections__()
 
-  def __invoke__(self, name, payload):
-    response = self.client.invoke(
-      FunctionName=name,
-      InvocationType="Event",
-      Payload=json.JSONEncoder().encode(payload)
-    )
-    assert(response["ResponseMetadata"]["HTTPStatusCode"] == 202)
+  def __setup_connections__(self):
+    self.s3 = boto3.resource("s3")
+    self.bucket = self.s3.Bucket(self.bucket_name)
+
+  def __fetch_objects__(self):
+    while True:
+      try:
+        objects = self.bucket.objects.all()
+        return objects
+      except Exception as e:
+        raise e
+        time.sleep(random.randint(0, 3))
+
+  def __get_objects__(self):
+    objects = self.__fetch_objects__()
+    for obj in objects:
+      key = obj.key
+      if key not in self.processed_logs:
+        self.processed_logs.add(key)
+        m = util.parse_file_name(key)
+        prefix: int = m["prefix"]
+        token: str = "{0:f}-{1:d}".format(m["timestamp"], m["nonce"])
+        identifier: Token = (token, m["prefix"], m["bin"], m["num_bins"], m["file"], m["num_files"])
+        self.pending_job_tokens.add(token)
+        self.finished_task.add(identifier)
+        self.logger_queue.put([key, identifier])
 
   def __running__(self):
     return True
 
   def run(self):
     while self.__running__():
-      name, payload = self.invoker_queue.get()
-      self.__invoke__(name, payload)
+      self.__get_objects__()
 
 
 class Logger(threading.Thread):
-  def __init__(self, bucket_name, queue):
+  def __init__(self, bucket_name, logger_queue, payload_map):
     super(Logger, self).__init__()
     self.bucket_name = bucket_name
-    self.queue = queue
-    self.__setup__()
+    self.logger_queue = logger_queue
+    self.__setup_connections_()
+
+  def __running__(self):
+    return True
+
+  def __setup_connections__(self):
+    self.s3 = boto3.resource("s3")
 
   def __get_log__(self, name):
     while not util.object_exists(self.s3, self.bucket_name, name):
       time.sleep(0.5)
-    obj = self.s3.Object(self.bucket_name, name)
-    body = json.loads(obj.get()["Body"].read().decode("utf-8"))
-    return body
 
-  def __setup__(self):
-    self.s3 = boto3.resource("s3")
-    self.bucket = self.s3.Bucket(self.bucket_name)
-
-  def __running__(self):
-    return True
+    while True:
+      try:
+        obj = self.s3.Object(self.bucket_name, name)
+        body = json.loads(obj.get()["Body"].read().decode("utf-8"))
+        return body
+      except Exception as e:
+        raise e
+        time.sleep(random.randint(0, 3))
 
   def run(self):
     while self.__running__():
-      [token, log_name, payload_map, stage_to_expected_num_files] = self.queue.get()
-      m = util.parse_file_name(log_name)
-      body = self.__get_log__(log_name)
+      [key, identifier] = self.logger_queue.get()
+      body = self.__get_log__(key)
       for payload in body["payloads"]:
+        token = identifier[0]
         if "log" in payload:
           child_identifier = tuple(payload["log"])
         else:
           c = util.parse_file_name(payload["Records"][0]["s3"]["object"]["key"])
           if "extra_params" in payload["Records"][0]["s3"]:
             c = {**c, **payload["Records"][0]["s3"]["extra_params"]}
-          child_identifier = (c["prefix"], c["bin"], c["file_id"])
-
-          if c["prefix"] not in stage_to_expected_num_files:
-            stage_to_expected_num_files[c["prefix"]] = (c["num_bins"], c["num_files"], c["num_bins"] * c["num_files"])
-        payload_map[child_identifier[0]][child_identifier] = payload
+          child_identifier = (token, c["prefix"], c["bin"], c["num_bins"], c["file_id"], c["num_files"])
+        self.payload_map[child_identifier] = payload
 
 
-class Task(threading.Thread):
-  def __init__(self, bucket_name, job, timeout, invoker_queue, logger_queue, tokens, params):
-    super(Task, self).__init__()
-    self.bucket_name = bucket_name
-    self.check_time = time.time()
-    self.expected_logs = set([(0, 1, 1)])
-    self.actual_logs = set()
-    self.job = job
-    self.key = job.key
-    self.logger_queue = logger_queue
-    self.params = params
-    self.payload_map = {}
-    for i in range(len(params["pipeline"])):
-      self.payload_map[i] = {}
+class Invoker(threading.Thread):
+  def __init__(self, invoker_queue):
+    super(Invoker, self).__init__()
     self.invoker_queue = invoker_queue
-    self.processed = set()
     self.running = True
-    self.stage = 0
-    self.stage_to_expected_num_files = {0: (0, 1, 1)}
-    self.timeout = timeout
-    self.token = job.key
-    self.tokens = tokens
-    self.__setup__()
+    self.__setup_connections__()
 
-  def __get_objects__(self, stage):
-    return self.bucket.objects.filter(Prefix="{0:d}/{1:s}/".format(stage, self.token))
+  def __invoke__(self, name, payload):
+    while True:
+      try:
+        response = self.client.invoke(
+          FunctionName=name,
+          InvocationType="Event",
+          Payload=json.JSONEncoder().encode(payload)
+        )
+        assert(response["ResponseMetadata"]["HTTPStatusCode"] == 202)
+        return
+      except Exception as e:
+        raise e
+        time.sleep(random.randint(0, 3))
 
   def __running__(self):
     return True
 
-  def __setup__(self):
+  def __setup_connections__(self):
+    self.client = boto3.client("lambda")
+
+  def run(self):
+    while self.__running__():
+      name, payload = self.invoker_queue.get()
+      self.__invoke__(name, payload)
+
+class Task(threading.Thread):
+  def __init__(self, bucket_name, job, timeout, invoker_queue, job_tokens, finished_tasks, payload_map, pipeline):
+    super(Task, self).__init__()
+    self.bucket_name = bucket_name
+    self.check_time = time.time()
+    self.expected_logs = set()
+    self.finished_tasks = finished_tasks
+    self.invoker_queue = invoker_queue
+    self.job = job
+    self.key = job.key
+    self.logger_queue = logger_queue
+    self.payload_map = payload_map
+    self.pipeline = pipeline
+    self.running = True
+    self.stage = 0
+    self.timeout = timeout
+    self.token = job.key
+    self.job_tokens = job_tokens
+    self.__setup_connections__()
+
+  def __running__(self):
+    return True
+
+  def __setup_connections__(self):
     self.s3 = boto3.resource("s3")
     self.bucket = self.s3.Bucket(self.bucket_name)
 
@@ -158,41 +207,34 @@ class Task(threading.Thread):
     [key, _, _] = upload.upload(self.job.destination_bucket, self.job.key, self.job.source_bucket, max(self.job.pause[0], 0))
     self.key = key
     self.token = key.split("/")[1]
-    self.tokens.add(self.token)
-    self.payload_map[0][(0, 1, 1)] = payload(self.job.destination_bucket, self.key)
+    self.job_tokens.add(tokens)
+    self.expected_logs.add([self.token, 0, 1, 1, 1, 1])
     self.check_time = time.time()
 
-  def check_for_updates(self):
-    for stage in range(self.stage, len(self.params["pipeline"])):
-      if stage not in self.payload_map:
-        self.payload_map[stage] = {}
-      logs = list(map(lambda obj: obj.key, self.__get_objects__(stage)))
-      lset = set(logs)
-      if stage not in self.stage_to_expected_num_files and len(logs) > 0:
-        m = util.parse_file_name(logs[0])
-        self.stage_to_expected_num_files[stage] = (m["num_bins"], m["num_files"], m["num_bins"] * m["num_files"])
+  def __stage_tasks__(self, stage):
+    return list(filter(lambda t: t[0] == self.token and t[1] == stage, self.finished_tasks))
 
-      if stage in self.stage_to_expected_num_files:
-        if stage == self.stage and len(logs) == self.stage_to_expected_num_files[stage][2]:
-          self.stage += 1
-          self.check_time = time.time()
-      missing_logs = lset.difference(self.processed)
-      if len(missing_logs) > 0:
-        print(self.token, "Stage", stage, "Adding", len(missing_logs), "Logs")
-      for log in missing_logs:
-        m = util.parse_file_name(log)
-        self.actual_logs.add((m["prefix"], m["bin"], m["file_id"]))
-        self.logger_queue.put([self.token, log, self.payload_map, self.stage_to_expected_num_files])
-      self.processed = self.processed.union(missing_logs)
+  def check_for_updates(self):
+    stage_tasks = self.__stage_tasks__(self.stage)
+    if len(stage_tasks) > 0:
+      num_files = stage_tasks[0][3] * stage_tasks[0][5]
+    else:
+      num_files = None
+
+    if num_files is not None and len(stage_tasks) == num_files:
+      self.stage += 1
+      self.check_time = time.time()
 
   def get_missing_logs(self):
-    for stage in self.stage_to_expected_num_files:
-      [num_bins, num_files, _] = self.stage_to_expected_num_files[stage]
-      for bin_id in range(1, num_bins + 1):
-        for file_id in range(1, num_files + 1):
-          self.expected_logs.add((stage, bin_id, file_id))
-    missing_logs = self.expected_logs.difference(self.actual_logs)
-    print(self.token, "Stage", self.stage, "Missing", len(missing_logs), "Expected", len(self.expected_logs))
+    for stage in range(self.stage, len(self.pipeline)):
+      stage_tasks = self.__stage_tasks__(stage)
+      if stage_tasks[0] not in self.expected_logs:
+        num_bins = stage_tasks[0][3]
+        num_files = stage_tasks[0][5]
+        for bin_id in range(1, num_bins + 1):
+          for file_id in range(1, num_files + 1):
+            self.expected_logs.add((self.token, stage, bin_id, num_bins, file_id, num_files))
+    missing_logs = self.expected_logs.difference(self.finished_tasks)
     return missing_logs
 
   def invoke(self, name, payload, unpause):
@@ -207,8 +249,8 @@ class Task(threading.Thread):
     if self.job.upload:
       self.__upload__()
 
-    print(self.token, "Starting stage", self.stage)
-    while self.__running__() and self.stage < len(self.params["pipeline"]):
+    print(self.token, "Starting stage", self.stage, "Timeout", self.timeout)
+    while self.__running__() and self.stage < self.pipeline_length:
       self.check_for_updates()
       ctime = time.time()
       if self.job.pause[0] != -1 and self.job.pause[0] < ctime and ctime < self.job.pause[1]:
@@ -220,59 +262,57 @@ class Task(threading.Thread):
           log_identifiers = self.get_missing_logs()
           count = 0
           for identifier in log_identifiers:
-            stage = identifier[0]
-            name = self.params["pipeline"][stage]["name"]
-            if stage in self.payload_map and identifier in self.payload_map[stage]:
-              self.invoke(name, self.payload_map[stage][identifier], self.job.pause[1] < ctime)
+            if identifier in self.payload_map:
+              self.invoke(name, self.payload_map[identifier], self.job.pause[1] < ctime)
               count += 1
-          print(self.token, "Invoked", count, "Payloads. First", log_identifiers[0])
           self.check_time = time.time()
-        time.sleep(5)
 
     print(self.token, "Done processing.")
 
-
 class Scheduler:
   def __init__(self, policy, timeout, params):
+    self.bucket_name = params["bucket"]
+    self.log_name = params["log"]
+    self.finished_tasks = set()
+    self.invoker_queue = queue.Queue()
     self.invokers = []
+    self.job_tokens = set()
+    self.logger_queue = queue.Queue()
     self.loggers = []
     self.max_tasks = 1000
-    self.messages = {}
-    self.next_job_id = 0
-    self.params = params
-    self.logger_queue = queue.Queue()
-    self.invoker_queue = queue.Queue()
+    self.payload_map = {}
+    self.pipeline = params["pipeline"]
+    self.pending_job_tokens = set()
     self.policy = policy
-    self.prefixes = set()
+    self.processed_logs = set()
+    self.queues = []
     self.running = True
-    self.__setup__()
     self.tasks = []
     self.timeout = timeout
-    self.tokens = set()
 
-  def __aws_connections__(self):
-    self.s3 = boto3.resource("s3")
-
-  def __add_invoker__(self, i):
-    self.invokers.append(Invoker(self.invoker_queue, i, self.params))
+  def __add_invoker__(self):
+    self.invokers.append(Invoker(self.invoker_queue))
     self.invokers[-1].start()
 
   def __add_task__(self, job):
-    self.tasks.append(Task(self.params["log"], job, self.timeout, self.invoker_queue, self.logger_queue, self.tokens, self.params))
+    self.tasks.append(Task(self.log_name, job, self.timeout, self.invoker_queue, self.job_tokens, self.finished_tasks, self.payload_map, self.pipeline))
+    self.tasks[-1].start()
 
-  def __add_logger__(self, i):
-    self.loggers.append(Logger(self.params["log"], self.logger_queue))
+  def __add_queue__(self):
+    self.queues.append(Queue(self.log_name, self.logger_queue, self.finished_tasks, self.pending_job_tokens, self.processed_logs))
+    self.queues[-1].start()
+
+  def __add_logger__(self):
+    self.loggers.append(Logger(self.log_name, self.logger_queue, self.payload_map))
     self.loggers[-1].start()
 
   def __check_tasks__(self):
-    self.__get_messages__(self.log_queue)
-    tokens = self.messages[0].keys() if 0 in self.messages else []
-    for token in tokens:
-      if token not in self.tokens:
-        job = Job("", self.params["bucket"], token, float(token.split("-")[0]))
+    for token in self.pending_job_tokens:
+      self.pending_job_tokens.remove(token)
+      if token not in self.job_tokens:
+        self.job_tokens.add(token)
+        job = Job("", self.bucket_name, token, float(token.split("-")[0]))
         self.__add_task__(job)
-        self.tasks[-1].start()
-        self.tokens.add(token)
 
     i = 0
     while i < len(self.tasks):
@@ -282,105 +322,8 @@ class Scheduler:
       else:
         i += 1
 
-  def __delete_message__(self, queue, message):
-    self.sqs.delete_message(QueueUrl=self.log_queue.url, ReceiptHandle=message["ReceiptHandle"])
-
-  def __get_messages__(self, queue):
-    messages = self.__fetch_messages__(self.log_queue)
-    for message in messages:
-      body = json.loads(message["Body"])
-      if "Records" in body:
-        for record in body["Records"]:
-          key = record["s3"]["object"]["key"]
-          parts = key.split("/")
-          prefix = int(parts[0])
-          token = parts[1]
-          self.prefixes.add(prefix)
-          if prefix not in self.messages:
-            self.messages[prefix] = {}
-          if token not in self.messages[prefix]:
-            self.messages[prefix][token] = []
-          assert(prefix in self.messages)
-          assert(prefix in self.prefixes)
-          self.messages[prefix][token].append(body)
-      self.__delete_message__(self.log_queue, message)
-
-  def __fetch_messages__(self, queue):
-    sqs = boto3.client("sqs", region_name=self.params["region"])
-    response = sqs.receive_message(
-      AttributeNames=["SentTimestamp"],
-      MaxNumberOfMessages=10,
-      QueueUrl=queue.url,
-      WaitTimeSeconds=1,
-    )
-    messages = response["Messages"] if "Messages" in response else []
-    return messages
-
   def __running__(self):
     return self.running
-
-  def __setup__(self):
-    self.__setup_sqs_queues__()
-    self.__aws_connections__()
-
-  def __setup_sqs_queue__(self, bucket_name, filter_prefix=None):
-    client = boto3.client("sqs", region_name=self.params["region"])
-    name = "sqs-" + bucket_name
-    response = client.list_queues(QueueNamePrefix=name)
-    urls = response["QueueUrls"] if "QueueUrls" in response else []
-    urls = list(map(lambda url: url == name, urls))
-    sqs = boto3.resource("sqs")
-    if len(urls) == 0:
-      print("Creating queue", name, "in", self.params["region"])
-      response = sqs.create_queue(QueueName=name, Attributes={"DelaySeconds": "5"})
-      print(response)
-      queue = sqs.get_queue_by_name(QueueName=name)
-    else:
-      queue = sqs.get_queue_by_name(QueueName=name)
-      # Remove stale SQS messages
-      client.purge_queue(QueueUrl=queue.url)
-
-    policy = {
-      "Statement": [{
-        "Effect": "Allow",
-        "Principal": {
-          "AWS": "*",
-        },
-        "Action": [
-            "SQS:SendMessage"
-        ],
-        "Resource": queue.attributes["QueueArn"],
-      }]
-    }
-
-    client.set_queue_attributes(QueueUrl=queue.url, Attributes={"Policy": json.dumps(policy)})
-    client = boto3.client("s3", region_name=self.params["region"])
-    configuration = client.get_bucket_notification_configuration(Bucket=bucket_name)
-    del configuration["ResponseMetadata"]
-    configuration["QueueConfigurations"] = [{
-      "Events": ["s3:ObjectCreated:*"],
-      "Id": "Notifications",
-      "QueueArn": queue.attributes["QueueArn"]
-    }]
-    if filter_prefix is not None:
-      configuration["QueueConfigurations"][0]["Filter"] = {
-        "Key": {
-          "FilterRules": [{
-            "Name": "Prefix",
-            "Value": filter_prefix,
-          }]
-        }
-      }
-
-    client.put_bucket_notification_configuration(
-      Bucket=bucket_name,
-      NotificationConfiguration=configuration
-    )
-    return queue
-
-  def __setup_sqs_queues__(self):
-    self.log_queue = self.__setup_sqs_queue__(self.params["log"], "0/")
-    self.sqs = boto3.client("sqs", region_name=self.params["region"])
 
   def add_jobs(self, jobs):
     for job in jobs:
@@ -390,9 +333,12 @@ class Scheduler:
 
   def listen(self, num_invokers, num_loggers):
     for i in range(num_invokers):
-      self.__add_invoker__(i)
+      self.__add_invoker__()
     for i in range(num_loggers):
-      self.__add_logger__(i)
+      self.__add_logger__()
+    for i in range(5):
+      self.__add_queue__()
+
     print("Listening")
     while self.__running__():
       self.__check_tasks__()
@@ -415,8 +361,8 @@ def simulation_deadline(jobs: List[Job], expected_job_duration: float, max_num_j
     timestamps.append((end_time, i, jobs[i], -1))
   timestamps = sorted(timestamps, key=lambda t: t[0])
 
-  running = {}
-  paused = {}
+  running: Dict[int, Any] = {}
+  paused: Dict[int, Any] = {}
   i = 0
   while i < len(timestamps):
     timestamp = timestamps[i]
