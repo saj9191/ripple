@@ -54,14 +54,17 @@ Token = Tuple[int, int, int, int, int, int]
 
 class Queue(threading.Thread):
   bucket_name: str
+  id: int
   finished_tasks: MutableSet[Token]
   pending_job_tokens: MutableSet[str]
   logger_queue: queue.Queue
 
-  def __init__(self, bucket_name: str, logger_queue, finished_tasks, pending_job_tokens, processed_logs):
+  def __init__(self, id: int, bucket_name: str, logger_queue, finished_tasks, pending_job_tokens, processed_logs):
     super(Queue, self).__init__()
     self.bucket_name = bucket_name
     self.finished_tasks = finished_tasks
+    self.id = id
+    self.marker = ""
     self.logger_queue = logger_queue
     self.pending_job_tokens = pending_job_tokens
     self.processed_logs = processed_logs
@@ -72,21 +75,24 @@ class Queue(threading.Thread):
     self.bucket = self.s3.Bucket(self.bucket_name)
 
   def __fetch_objects__(self):
+    prefix = str(self.id) + "/" 
+    if self.id in [2,3]:
+      print("Fetch prefix", prefix)
     while True:
       try:
-        objects = self.bucket.objects.all()
-        return objects
       except Exception as e:
-        raise e
+        if self.id in [2,3]:
+          print(self.id, "Fuck", e)
         time.sleep(random.randint(0, 3))
 
   def __get_objects__(self):
     objects = self.__fetch_objects__()
     count = 0
+    obj = None
     for obj in objects:
       key = obj.key
-      count += 1
       if key not in self.processed_logs:
+        count += 1
         self.processed_logs.add(key)
         m = util.parse_file_name(key)
         prefix: int = m["prefix"]
@@ -96,11 +102,19 @@ class Queue(threading.Thread):
         self.finished_tasks.add(identifier)
         self.logger_queue.put([key, identifier])
 
+    if obj is not None and self.marker == obj.key:
+      self.marker = ""
+    else:
+      self.marker = obj.key
+    if self.id in [2,3]:
+      print(self.id, "Marker", self.marker)
+      print(self.id, "Processed", count, "logs", len(self.processed_logs))
+
   def __running__(self):
     return True
 
   def run(self):
-    print("Queue started. Monitoring ", self.bucket_name)
+    print("Queue started. Monitoring ", self.bucket_name, "ID is", self.id)
     while self.__running__():
       self.__get_objects__()
       time.sleep(random.randint(0, 3))
@@ -130,7 +144,6 @@ class Logger(threading.Thread):
         body = json.loads(obj.get()["Body"].read().decode("utf-8"))
         return body
       except Exception as e:
-        raise e
         time.sleep(random.randint(0, 3))
 
   def run(self):
@@ -182,7 +195,6 @@ class Invoker(threading.Thread):
         assert(response["ResponseMetadata"]["HTTPStatusCode"] == 202)
         return
       except Exception as e:
-        raise e
         time.sleep(random.randint(0, 3))
 
   def __running__(self):
@@ -270,18 +282,25 @@ class Task(threading.Thread):
       time.sleep(sleep)
     if self.job.upload:
       self.__upload__()
-    self.expected_logs.add((self.token, 0, 1, 1, 1, 1))
+    identifier = (self.token, 0, 1, 1, 1, 1)
+    self.expected_logs.add(identifier)
+    self.payload_map[self.token][identifier] = payload(self.job.destination_bucket, self.key)
     self.check_time = time.time()
 
-    print(self.token, "Starting stage", self.stage)
+    print(self.token, "Starting stage", self.stage, self.job.pause)
     while self.__running__() and self.stage < len(self.pipeline):
       self.check_for_updates()
       ctime = time.time()
-      self.running = (self.token, 3, 1, 1, 1, 1) not in self.finished_tasks
+      self.running = (self.token, len(self.pipeline) - 1, 1, 1, 1, 1) not in self.finished_tasks
       if self.job.pause[0] != -1 and self.job.pause[0] < ctime and ctime < self.job.pause[1]:
         sleep = self.job.pause[1] - ctime
         print(self.token, "Sleeping for", sleep, "seconds")
         time.sleep(self.job.pause[1] - ctime)
+        print(self.token, "Waking up")
+        identifier = (self.token, 0, 1, 1, 1, 1)
+        name = self.pipeline[0]["name"]
+        self.invoke(name, self.payload_map[self.token][identifier], self.job.pause[1] < ctime)
+        self.check_time = time.time()
       else:
         if (ctime - self.check_time) > self.timeout:
           log_identifiers = self.get_missing_logs()
@@ -289,7 +308,7 @@ class Task(threading.Thread):
           for identifier in log_identifiers:
             if identifier in self.payload_map[self.token]:
               name = self.pipeline[identifier[1]]["name"]
-              self.invoke(name, self.payload_map[self.token][identifier], self.job.pause[1] < ctime)
+              self.invoke(name, self.payload_map[self.token][identifier], self.job.pause[1] != -1 and self.job.pause[1] < ctime)
               count += 1
           if count > 0:
             print(self.token, "Re-invoked", count, "payloads. Missing ", list(log_identifiers)[0])
@@ -327,8 +346,8 @@ class Scheduler:
     self.tasks.append(Task(self.log_name, job, self.timeout, self.invoker_queue, self.job_tokens, self.finished_tasks, self.payload_map, self.pipeline))
     self.tasks[-1].start()
 
-  def __add_queue__(self):
-    self.queues.append(Queue(self.log_name, self.logger_queue, self.finished_tasks, self.pending_job_tokens, self.processed_logs))
+  def __add_queue__(self, id):
+    self.queues.append(Queue(id, self.log_name, self.logger_queue, self.finished_tasks, self.pending_job_tokens, self.processed_logs))
     self.queues[-1].start()
 
   def __add_logger__(self):
@@ -360,15 +379,14 @@ class Scheduler:
     for job in jobs:
       job.upload = True
       self.__add_task__(job)
-      self.tasks[-1].start()
 
   def listen(self, num_invokers, num_loggers):
     for i in range(num_invokers):
       self.__add_invoker__()
     for i in range(num_loggers):
       self.__add_logger__()
-    for i in range(1):
-      self.__add_queue__()
+    for i in range(5):
+      self.__add_queue__(i)
 
     print("Listening")
     while self.__running__():
@@ -380,8 +398,8 @@ class Scheduler:
 
 def run(policy, timeout, params):
  scheduler = Scheduler(policy, timeout, params)
- params["num_invokers"] = 10
- params["num_loggers"] = 10
+ params["num_invokers"] = 100
+ params["num_loggers"] = 100
  scheduler.listen(params["num_invokers"], params["num_loggers"])
 
 
@@ -476,7 +494,7 @@ def main():
   parser.add_argument("--timeout", type=int, default=60, help="How long we should wait for a task to retrigger")
   args = parser.parse_args()
   params = json.loads(open(args.parameters).read())
-  setup.process_functions(params)
+  #setup.process_functions(params)
   params["s3"] = database.S3(params)
   run(args.policy, args.timeout, params)
 

@@ -278,7 +278,8 @@ def write_log(context, input_format, bucket_format, params):
   for key in ["name"]:
     log_results[key] = params[key]
 
-  params["database"].write(params["log"], file_name(bucket_format), str.encode(json.dumps(log_results)), {}, invoke=False)
+  if not params["database"].contains(params["log"], file_name(bucket_format)):
+    params["database"].write(params["log"], file_name(bucket_format), str.encode(json.dumps(log_results)), {}, invoke=False)
 
 
 def setup_client(service, params):
