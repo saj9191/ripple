@@ -28,7 +28,7 @@ def create_pivots(d: Database, format_lib: Any, iterator_class: Any, items: List
 def handle_pivots(database: Database, bucket_name, key, input_format, output_format, offsets, params):
   entry: Entry = database.get_entry(bucket_name, key)
 
-  format_lib = importlib.import_module(params["format"])
+  format_lib = importlib.import_module(params["input_format"])
   iterator_class = getattr(format_lib, "Iterator")
   if len(offsets) > 0:
     it = iterator_class(entry, OffsetBounds(offsets[0], offsets[1]))

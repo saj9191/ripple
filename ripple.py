@@ -5,6 +5,7 @@ import os
 import re
 import setup
 import sys
+import util
 currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
 from typing import Any, Dict, Optional
 
@@ -25,6 +26,9 @@ class Step:
 
   def combine(self, params={}, config={}):
     return self.pipeline.combine(self.format, params, config)
+
+  def sort(self, identifier, params={}, config={}):
+    return self.pipeline.sort(identifier, self.format, params, config)
 
   def split(self, params={}, config={}):
     return self.pipeline.split(self.format, params, config)
@@ -78,7 +82,7 @@ class Pipeline:
 
     if name in self.functions:
       assert(self.functions[name] == function_params)
-    self.pipeline.append(pipeline_params)
+    self.pipeline.append(dict(pipeline_params))
 
   def __get_formats__(self):
     folder = "{0:s}/formats/".format(currentdir)
@@ -152,11 +156,48 @@ class Pipeline:
     self.__add__(name, input_format, function_params, params, path)
     return Step(self, len(self.pipeline), output_format)
 
-  def split(self, format, params={}, config={}):
-    name = "split-file"
+  def partition(self, identifier, input_format, params={}, config={}):
+    name = "pivot_file"
     function_params = {**{
-      "file": "split_file"
+      "file": name,
+      "identifier": identifier,
+      "input_format": input_format,
+      "memory_size": self.memory_size,
     }, **config}
-    self.__add__(name, None, function_params, params, None)
+    self.__add__(name, input_format, function_params, params, None)
+    return Step(self, len(self.pipeline), format)
+
+  def sort(self, identifier: str, input_format, params={}, config={}):
+    step = self.split(input_format, dict(params), dict(config))
+    split_size = None
+    if "split_size" in params:
+      split_size = params["split_size"]
+      del params["split_size"]
+    step = self.partition(identifier, input_format, dict(params), dict(config))
+    self.combine("pivot", {**params, **{"sort": True}}, dict(config))
+    extra_params = {"ranges": True}
+    if split_size is not None:
+      extra_params["split_size"] = split_size
+    self.split(input_format, {**params, **extra_params}, dict(config))
+    name = "sort"
+    function_params = {**{
+      "file": name,
+      "identifier": identifier,
+      "input_format": input_format,
+      "memory_size": self.memory_size,
+    }, **config}
+    self.__add__(name, input_format, function_params, params, None)
+    if util.is_set(config, "combine"):
+      self.combine(output_format, {**params, **{"sort": True}}, config)
+    return Step(self, len(self.pipeline), input_format)
+
+  def split(self, input_format, params={}, config={}):
+    name = "split_file"
+    function_params = {**{
+      "file": name,
+      "memory_size": self.memory_size,
+      "split_size": 100*1000*1000,
+    }, **config}
+    self.__add__(name, input_format, function_params, params, None)
     return Step(self, len(self.pipeline), format)
 
