@@ -13,6 +13,7 @@ def run(database: Database, key: str, params, input_format, output_format, offse
   file_id = 1
 
   threads = []
+  token = "{0:f}-{1:d}".format(output_format["timestamp"], output_format["nonce"])
   while file_id <= num_files:
     offsets = [(file_id - 1) * split_size, min(content_length, (file_id) * split_size) - 1]
     extra_params = {**output_format, **{
@@ -22,7 +23,7 @@ def run(database: Database, key: str, params, input_format, output_format, offse
       "train_offsets": offsets,
     }}
     payload = database.create_payload(params["bucket"], util.file_name(input_format), extra_params)
-    payload["log"] = [output_format["prefix"], output_format["bin"], file_id]
+    payload["log"] = [token, output_format["prefix"], output_format["bin"], output_format["num_bins"], file_id, num_files]
 
     threads.append(threading.Thread(target=database.invoke, args=(params["output_function"], payload)))
     threads[-1].start()
