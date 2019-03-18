@@ -52,15 +52,13 @@ Order = Tuple[Job, float]
 Token = Tuple[int, int, int, int, int, int]
 
 
-MISSING = set()
-
 class Queue(threading.Thread):
   bucket_name: str
   id: int
   finished_tasks: MutableSet[Token]
   logger_queue: queue.Queue
 
-  def __init__(self, id: int, bucket_name: str, logger_queue, finished_tasks, pending_job_tokens, processed_logs, tokens, prefixes, key_queue):
+  def __init__(self, id: int, bucket_name: str, logger_queue, finished_tasks, pending_job_tokens, processed_logs, tokens, prefixes, key_queue, find_queue):
     super(Queue, self).__init__()
     self.bucket_name = bucket_name
     self.finished_tasks = finished_tasks
@@ -69,6 +67,7 @@ class Queue(threading.Thread):
     self.logger_queue = logger_queue
     self.marker = ""
     self.pending_job_tokens = pending_job_tokens
+    self.find_queue = find_queue
     self.prefixes = prefixes
     self.processed_logs = processed_logs
     self.thread_id = id
@@ -78,39 +77,49 @@ class Queue(threading.Thread):
     self.s3 = boto3.resource("s3")
     self.client = boto3.client("s3")
 
-  def __fetch_objects__(self):
+  def __fetch_objects__(self, file_name):
     while True:
       try:
-       # if self.marker == "":
-       #   prefix = str(random.sample(self.prefixes, 1)[0]) + "/"
-       #   if len(self.tokens) > 0:
-       #     prefix += random.sample(self.tokens, 1)[0] + "/"
-       # else:
-       #   prefix = ""
-        response = self.client.list_objects(Bucket=self.bucket_name, Marker=self.marker, MaxKeys=1000)#, Prefix=prefix)
+        response = self.client.list_objects(Bucket=self.bucket_name, Marker=file_name, MaxKeys=500)
         contents = response["Contents"] if "Contents" in response else []
         return contents
       except Exception as e:
         print(e)
-        time.sleep(random.randint(0, 3))
+        time.sleep(random.uniform(0, 1))
 
   def __get_objects__(self):
-    objects = self.__fetch_objects__()
+    if self.prefixes:
+      file_name = self.prefixes + "/"
+    else:
+      identifier = self.find_queue.get()
+      parts = identifier[0].split("-")
+      m = {
+        "prefix": identifier[1],
+        "timestamp": float(parts[0]),
+        "nonce": int(parts[1]),
+        "bin": identifier[2],
+        "num_bins": identifier[3],
+        "file_id": identifier[4],
+        "execute": 0,
+        "suffix": "0",
+        "num_files": identifier[5],
+        "ext": "log",
+      }
+      file_name = util.file_name(m)
+
+    objects = self.__fetch_objects__(file_name)
 
     count = 0
-    obj = None
-
+    found = False
     for obj in objects:
       key = obj["Key"]
+      found |= (key == file_name)
       if key not in self.processed_logs:
         count += 1
         self.key_queue.put(key)
 
-    if obj is not None:
-      if self.marker == obj["Key"]:
-        self.marker = ""
-      else:
-        self.marker = obj["Key"]
+    if not found and not self.prefixes:
+      self.find_queue.put(identifier)
 
   def __running__(self):
     return True
@@ -127,12 +136,13 @@ class Queue(threading.Thread):
 
 
 class Logger(threading.Thread):
-  def __init__(self, bucket_name, logger_queue, finished_tasks, payload_map):
+  def __init__(self, bucket_name, logger_queue, finished_tasks, payload_map, find_queue):
     super(Logger, self).__init__()
     self.bucket_name = bucket_name
     self.finished_tasks = finished_tasks
     self.logger_queue = logger_queue
     self.payload_map = payload_map
+    self.find_queue = find_queue
     self.__setup_connections__()
 
   def __running__(self):
@@ -168,6 +178,7 @@ class Logger(threading.Thread):
         if "extra_params" in s3:
           c = {**c, **s3["extra_params"]}
         child_identifier = (token, c["prefix"], c["bin"], c["num_bins"], c["file_id"], c["num_files"])
+      self.find_queue.put(child_identifier)
       assert(child_identifier[2] <= child_identifier[3] and child_identifier[4] <= child_identifier[5])
       self.payload_map[token][child_identifier] = payload
 
@@ -233,10 +244,11 @@ class Invoker(threading.Thread):
       self.__invoke__(name, payload, identifier)
 
 class Task(threading.Thread):
-  def __init__(self, bucket_name, job, timeout, invoker_queue, job_tokens, finished_tasks, payload_map, pipeline):
+  def __init__(self, bucket_name, job, timeout, invoker_queue, job_tokens, finished_tasks, payload_map, pipeline, find_queue):
     super(Task, self).__init__()
     self.bucket_name = bucket_name
     self.expected_logs = set()
+    self.find_queue = find_queue
     self.finished_tasks = finished_tasks
     self.invoker_queue = invoker_queue
     self.job = job
@@ -291,14 +303,11 @@ class Task(threading.Thread):
           for file_id in range(1, num_files + 1):
             assert(bin_id <= num_bins and file_id <= num_files)
             t = (self.token, stage, bin_id, num_bins, file_id, num_files)
-            self.expected_logs.add(t)
-    print("Payload Map", len(self.payload_map[self.token]))
-    print("Expected", len(self.expected_logs))
-    print("Finished", len(self.finished_tasks))
-    global MISSING
-    MISSING = self.expected_logs.difference(self.finished_tasks)
-    print("Missing_logs", len(MISSING))
-    return list(MISSING)
+            if t not in self.expected_logs:
+              self.expected_logs.add(t)
+              self.find_queue.add(t)
+    missing= self.expected_logs.difference(self.finished_tasks)
+    return list(missing)
 
   def invoke(self, name, payload, identifier, unpause):
     if unpause:
@@ -325,7 +334,7 @@ class Task(threading.Thread):
         for identifier in log_identifiers[:10]:
           if identifier in self.payload_map[self.token]:
             name = self.pipeline[identifier[1]]["name"]
-            self.invoke(name, self.payload_map[self.token][identifier], identifier, self.job.pause[1] != -1 and self.job.pause[1] < ctime)
+    #        self.invoke(name, self.payload_map[self.token][identifier], identifier, self.job.pause[1] != -1 and self.job.pause[1] < ctime)
             count += 1
         if count > 0:
           print(self.token, "Re-invoked", count, "payloads. Missing ", list(log_identifiers)[0])
@@ -338,6 +347,7 @@ class Task(threading.Thread):
     if self.job.upload:
       self.__upload__()
     identifier = (self.token, 0, 1, 1, 1, 1)
+#    self.find_queue.put(identifier)
     self.expected_logs.add(identifier)
     self.payload_map[self.token][identifier] = payload(self.job.destination_bucket, self.key)
     self.check_time = time.time() + random.randint(-self.offset, self.offset)
@@ -375,21 +385,22 @@ class Scheduler:
     self.tasks = []
     self.timeout = timeout
     self.tokens = []
+    self.find_queue = queue.Queue()
 
   def __add_invoker__(self):
     self.invokers.append(Invoker(self.invoker_queue, self.region, self.key_queue))
     self.invokers[-1].start()
 
   def __add_task__(self, job):
-    self.tasks.append(Task(self.log_name, job, self.timeout, self.invoker_queue, self.job_tokens, self.finished_tasks, self.payload_map, self.pipeline))
+    self.tasks.append(Task(self.log_name, job, self.timeout, self.invoker_queue, self.job_tokens, self.finished_tasks, self.payload_map, self.pipeline, self.find_queue))
     self.tasks[-1].start()
 
   def __add_queue__(self, id, prefixes):
-    self.queues.append(Queue(id, self.log_name, self.logger_queue, self.finished_tasks, self.pending_job_tokens, self.processed_logs, self.tokens, prefixes, self.key_queue))
+    self.queues.append(Queue(id, self.log_name, self.logger_queue, self.finished_tasks, self.pending_job_tokens, self.processed_logs, self.tokens, prefixes, self.key_queue, self.find_queue))
     self.queues[-1].start()
 
   def __add_logger__(self):
-    self.loggers.append(Logger(self.log_name, self.logger_queue, self.finished_tasks, self.payload_map))
+    self.loggers.append(Logger(self.log_name, self.logger_queue, self.finished_tasks, self.payload_map, self.find_queue))
     self.loggers[-1].start()
 
   def __check_tasks__(self):
@@ -397,7 +408,7 @@ class Scheduler:
     m = util.parse_file_name(key)
     token: str = "{0:f}-{1:d}".format(m["timestamp"], m["nonce"])
     identifier: Token = (token, m["prefix"], m["bin"], m["num_bins"], m["file_id"], m["num_files"])
-    if key not in self.processed_logs or identifier in MISSING:
+    if key not in self.processed_logs:
       self.processed_logs.add(key)
       self.finished_tasks.add(identifier)
       self.logger_queue.put([key, identifier])
@@ -430,11 +441,10 @@ class Scheduler:
     for i in range(num_loggers):
       self.__add_logger__()
 
-    for i in range(2): 
-      self.__add_queue__(i, [5])
+    for i in range(20): 
+      self.__add_queue__(i, None)
 
-    self.__add_queue__(i, [4])
-    self.__add_queue__(i, [0, 1, 2, 3])
+    self.__add_queue__(i, "0")
    # for i in range(10):
    #   self.__add_queue__(i, [4, 5])
 
