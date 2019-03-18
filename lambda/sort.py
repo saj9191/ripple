@@ -48,6 +48,7 @@ def handle_sort(database: Database, table_name: str, key: str, input_format: Dic
   bin_ranges = params["pivots"]
   binned_input = bin_input(sorted_items, bin_ranges)
   write_binned_input(database, binned_input, bin_ranges, extra, dict(output_format), iterator_class, params)
+  return True
 
 
 def handler(event, context):

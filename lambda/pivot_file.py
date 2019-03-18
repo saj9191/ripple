@@ -44,6 +44,7 @@ def handle_pivots(database: Database, bucket_name, key, input_format, output_for
   spivots = "\t".join(list(map(lambda p: str(p), pivots)))
   content = str.encode("{0:s}\n{1:s}\n{2:s}".format(bucket_name, key, spivots))
   database.write(params["bucket"], pivot_key, content, {})
+  return True
 
 
 def handler(event, context):
