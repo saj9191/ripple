@@ -13,7 +13,6 @@ currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentfram
 parentdir = os.path.dirname(currentdir)
 sys.path.insert(0, parentdir)
 import database
-import setup
 import upload
 import util
 
@@ -84,7 +83,6 @@ class Queue(threading.Thread):
         contents = response["Contents"] if "Contents" in response else []
         return contents
       except Exception as e:
-        print(e)
         time.sleep(random.uniform(0, 1))
 
   def __get_objects__(self):
@@ -125,7 +123,6 @@ class Queue(threading.Thread):
     return True
 
   def run(self):
-    print("Queue started. Monitoring ", self.bucket_name, "ID is", self.thread_id, "Prefixes are", self.prefixes)
     while self.__running__():
       st = time.time()
       self.__get_objects__()
@@ -215,7 +212,6 @@ class Invoker(threading.Thread):
         assert(response["ResponseMetadata"]["HTTPStatusCode"] == 202)
         return
       except Exception as e:
-        print("sigh", e)
         time.sleep(random.uniform(0, 1))
 
   def __running__(self):
@@ -303,9 +299,7 @@ class Task(threading.Thread):
     ctime = time.time()
     if self.job.pause[0] != -1 and self.job.pause[0] < ctime and ctime < self.job.pause[1]:
       sleep = self.job.pause[1] - ctime
-      print(self.token, "Sleeping for", sleep, "seconds")
       time.sleep(self.job.pause[1] - ctime)
-      print(self.token, "Waking up")
       identifier = (self.token, 0, 1, 1, 1, 1)
       name = self.pipeline[0]["name"]
       self.invoke(name, self.payload_map[self.token][identifier], self.job.pause[1] < ctime)
@@ -314,14 +308,10 @@ class Task(threading.Thread):
       if (ctime - self.check_time) > self.timeout:
         log_identifiers = self.get_missing_logs()
         log_identifiers.sort()
-        count = 0
         for identifier in log_identifiers[:random.randint(1,5)]:
           if identifier in self.payload_map[self.token]:
             name = self.pipeline[identifier[1]]["name"]
             self.invoke(name, self.payload_map[self.token][identifier], identifier, self.job.pause[1] != -1 and self.job.pause[1] < ctime)
-            count += 1
-        if count > 0:
-          print(self.token, "Re-invoked", count, "payloads. Missing ", list(log_identifiers)[0])
         self.check_time = time.time() + random.randint(-self.offset, self.offset)
 
   def run(self):
@@ -331,12 +321,10 @@ class Task(threading.Thread):
     if self.job.upload:
       self.__upload__()
     identifier = (self.token, 0, 1, 1, 1, 1)
-#    self.find_queue.put(identifier)
     self.expected_logs.add(identifier)
     self.payload_map[self.token][identifier] = payload(self.job.destination_bucket, self.key)
     self.check_time = time.time() + random.randint(-self.offset, self.offset)
 
-    print(self.token, "Starting stage", self.stage, self.job.pause)
     while self.__running__() and self.stage < len(self.pipeline):
       st = time.time()
       self.__process__()
@@ -429,15 +417,6 @@ class Scheduler:
       self.__add_queue__(i, None)
 
     self.__add_queue__(i, "0")
-   # for i in range(10):
-   #   self.__add_queue__(i, [4, 5])
-
-   # for i in range(5):
-   #   self.__add_queue__(i, [2, 3])
-
-#    for i in range(3):
-#      self.__add_queue__(i, [1])
-
     print("Listening")
     while self.__running__():
       self.__check_tasks__()
@@ -448,8 +427,6 @@ class Scheduler:
 
 def run(policy, timeout, params):
  scheduler = Scheduler(policy, timeout, params)
- params["num_invokers"] = 10
- params["num_loggers"] = 10
  scheduler.listen(params["num_invokers"], params["num_loggers"])
 
 
@@ -544,7 +521,6 @@ def main():
   parser.add_argument("--timeout", type=int, default=60, help="How long we should wait for a task to retrigger")
   args = parser.parse_args()
   params = json.loads(open(args.parameters).read())
-  #setup.process_functions(params)
   params["s3"] = database.S3(params)
   run(args.policy, args.timeout, params)
 
