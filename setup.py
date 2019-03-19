@@ -321,7 +321,7 @@ def setup_triggers(params):
     except Exception:
       pass
 
-    for prefix in prefixes[name]:
+    for prefix in [0]:
       configurations.append({
         "LambdaFunctionArn": name_to_arn[name],
         "Events": ["s3:ObjectCreated:*"],

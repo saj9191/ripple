@@ -89,7 +89,8 @@ def statistics(bucket_name, token, prefix, params, output_folder):
     objects = list(bucket.objects.all())
     objects = list(filter(lambda o: token == o.key.split("/")[1], objects))
   elif prefix is not None and token is None:
-    objects = list(bucket.objects.filter(Prefix=str(prefix)))
+    print("prefix", str(prefix) + "/")
+    objects = list(bucket.objects.filter(Prefix=str(prefix) + "/"))
   else:
     objects = list(bucket.objects.filter(Prefix=str(prefix) + "/" + token))
 

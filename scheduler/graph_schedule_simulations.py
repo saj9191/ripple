@@ -9,7 +9,45 @@ import matplotlib.pyplot as plt
 currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
 parentdir = os.path.dirname(currentdir)
 sys.path.insert(0, parentdir + "/ec2")
-import graph
+
+def graph(subfolder, numbers, colors, labels=None, start_range=None, end_range=None):
+  grid = plt.GridSpec(10, 1)
+  min_timestamp = None
+  max_timestamp = None
+  max_concurrency = None
+  handles = []
+  linestyle = [":", "-", "-.", "--"]
+  fig, ax = plt.subplots()
+  for i in range(len(numbers)):
+    num = numbers[i]
+    timestamps = list(map(lambda r: r[0], num))
+    min_t = min(timestamps)
+    max_t = max(timestamps)
+    total = list(map(lambda r: r[1], num))
+    max_c = max(total)
+    if min_timestamp:
+      min_timestamp = min(min_timestamp, min_t)
+      max_timestamp = max(max_timestamp, max_t)
+      max_concurrency = max(max_concurrency, max_c)
+    else:
+      min_timestamp = min_t
+      max_timestamp = max_t
+      max_concurrency = max_c
+    if labels:
+      handles.append(plt.plot(timestamps, total, color=colors[i % len(colors)], label=labels[i], linestyle=linestyle[i]))
+    else:
+      handles.append(plt.plot(timestamps, total, color=colors[i % len(colors)]))#, linestyle=linestyle[i], linewidth=2*(i + 1)))
+
+  ax.spines["right"].set_visible(False)
+  ax.spines["top"].set_visible(False)
+  plt.xlabel("Time (Seconds)")
+  plt.ylabel("Number of Concurrent Functions")
+  plot_name = subfolder + "/simulation.png"
+  plt.subplots_adjust(hspace=0.5)
+  print("Plot", plot_name)
+  plt.savefig(plot_name)
+  plt.close()
+
 
 
 def process(subfolder):
@@ -20,13 +58,19 @@ def process(subfolder):
   stage_to_token_to_duration = {}
   for f in os.listdir(subfolder):
     if f.endswith(".log"):
-      body = json.loads(open(subfolder + "/" + f, "r").read())
+      try:
+        body = json.loads(open(subfolder + "/" + f, "r").read())
+      except Exception as e:
+        continue
       start_time = body["start_time"]
       min_start_time = min([start_time, min_start_time]) if min_start_time else start_time
 
   for f in os.listdir(subfolder):
     if f.endswith(".log"):
-      body = json.loads(open(subfolder + "/" + f, "r").read())
+      try:
+        body = json.loads(open(subfolder + "/" + f, "r").read())
+      except Exception as e:
+        continue
       parts = f.split(".")
       stage = int(parts[0])
       if stage not in stage_to_token_to_range:
@@ -50,14 +94,6 @@ def process(subfolder):
       token_to_counts[token].append([start_time, 1])
       token_to_counts[token].append([end_time, -1])
 
-  for token in stage_to_token_to_range[0].keys():
-    for stage in range(len(stage_to_token_to_range)):
-      print("Stage", stage, "Token", token, stage_to_token_to_range[stage][token][0], stage_to_token_to_range[stage][token][1], stage_to_token_to_count[stage][token])
-      if stage_to_token_to_count[stage][token] != 0:
-        print("Average Duration", stage_to_token_to_duration[stage][token] / stage_to_token_to_count[stage][token])
-      else:
-        print("Average Duration", 0)
-
   numbers = []
   for token in token_to_counts.keys():
     counts = token_to_counts[token]
@@ -70,11 +106,11 @@ def process(subfolder):
       num_functions += counts[i][1]
       max_num = max(num_functions, max_num)
       ranges.append([counts[i][0], num_functions])
-    print(token, max_num)
     numbers.append(ranges)
 
-  colors = ["red", "blue", "gray", "purple", "green", "orange", "blue", "cyan", "pink", "brown"]
-  graph.graph(subfolder, numbers, colors, None, None, None)
+  colors = ['#ff3300', '#883300', '#000000']
+#          '#ff0044', '#00ffff', '#000000']
+  graph(subfolder, numbers, colors, None, None, None)
 
 
 def main():

@@ -272,8 +272,9 @@ class S3(Database):
             },
             "object": {
               "key": key
-            }
-          }
+            },
+            "ancestry": self.params["ancestry"],
+          },
         }]
       }
       if "reexecute" in self.params:
@@ -304,10 +305,12 @@ class S3(Database):
           "object": {
             "key": key
           },
-          "extra_params": extra
+          "extra_params": extra,
+          "ancestry": self.params["ancestry"],
         }
       }]
     }
+
     if "reexecute" in self.params:
       payload["execute"] = self.params["reexecute"]
     return payload

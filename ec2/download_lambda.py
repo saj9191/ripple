@@ -65,6 +65,8 @@ def old_subprocess(name, params, lambda_ranges, task_ranges):
     et = 0
     for j in range(len(stage["messages"])):
       message = stage["messages"][j]
+      if name == "pair-train":
+        name = "pair"
       memory = functions[message["name"]]["memory_size"]
       vcpus = 1
       start_time = message["start_time"]
@@ -88,13 +90,13 @@ def old_subprocess(name, params, lambda_ranges, task_ranges):
 def subprocess(name, params, lambda_ranges, task_ranges, cpus):
   message = json.loads(open(name).read())
   functions = params["functions"]
-  #pipeline = params["pipeline"]
-  #for stage in range(len(results["stats"])):
-  #  for message in results["stats"][stage]["messages"]:
+  pipeline = params["pipeline"]
+#  for stage in range(len(results["stats"])):
+#    for message in results["stats"][stage]["messages"]:
   start_time = message["start_time"]
-  cpus += message["cpu"]
   end_time = start_time + message["duration"] / 1000.0
-  memory = functions[message["name"]]["memory_size"]
+  name = message["name"]
+  memory = functions[name]["memory_size"]
   vcpus = (2 * memory) / 3008
   lambda_ranges.append([start_time, vcpus])
   lambda_ranges.append([end_time, -1*vcpus])
@@ -110,44 +112,50 @@ def process(subfolder, params, old):
   count = 0
   total_duration = 0
   cpu_averages = {}
-  for d in os.listdir(subfolder):
-    if d.endswith(".png"):
-      continue
-    if old:
-      name = subfolder + "/" + d
-      t = float(name.split("/")[-1].split("-")[0])
-      if name.endswith(".png") or name.endswith("README") or name.endswith("statistics") or name.endswith(".swp"):
+  token_to_start = {}
+  for root, _, files in os.walk(subfolder):
+    for f in files:
+      if f.endswith(".png"):
         continue
-      [start_time, end_time] = old_subprocess(name, params, lambda_ranges, task_ranges)
-      print(t, start_time, start_time - t)
-    else:
+      if f == "upload_stats":
+        continue
       start_time = None
       end_time = None
-      for f in os.listdir(subfolder + "/" + d):
-        name = subfolder + "/" + d + "/" + f
-        if name.endswith(".png") or name.endswith("README") or name.endswith("statistics") or name.endswith(".swp"):
-          continue
-        stage = int(f.split(".")[0])
-        if stage not in cpu_averages:
-          cpu_averages[stage] = []
-        print(f)
-        [st, et] = subprocess(name, params, lambda_ranges, task_ranges, cpu_averages[stage])
-        if start_time:
-          start_time = min(st, start_time)
-          end_time = max(et, end_time)
-        else:
-          start_time = st
-          end_time = et
-    duration = end_time - start_time
-    total_duration += duration
-    task_ranges.append([start_time, 1])
-    task_ranges.append([end_time, -1])
-    count += 1
+      name = root + "/" + f
+      if name.endswith(".png") or name.endswith("README") or name.endswith("statistics") or name.endswith(".swp") or name.endswith(".json") or name.endswith("stats"):
+        continue
+      parts = f.split(".")
+      stage = int(parts[0])
+      if stage not in cpu_averages:
+        cpu_averages[stage] = []
+      [st, et] = subprocess(name, params, lambda_ranges, task_ranges, cpu_averages[stage])
+      if stage == 0:
+        token = ".".join(parts[1:3])
+        token_to_start[token] = st
+      if start_time:
+        start_time = min(st, start_time)
+        end_time = max(et, end_time)
+      else:
+        start_time = st
+        end_time = et
+      duration = end_time - start_time
+      total_duration += duration
+      task_ranges.append([start_time, 1])
+      task_ranges.append([end_time, -1])
+      count += 1
+
+  idle_ranges = []
+  with open(subfolder + "/upload_stats") as f:
+    stats = json.loads(f.read())["stats"]
+    for [key, start_time, _] in stats:
+      token = key.split("/")[1]
+      idle_ranges.append([start_time, 1])
+      idle_ranges.append([token_to_start[token], -1])
 
   average_duration = float(total_duration) / count
   print("Average Duration", average_duration)
   start_time = min(list(map(lambda t: t[0], task_ranges)))
-  ranges = [lambda_ranges, task_ranges]
+  ranges = [lambda_ranges, task_ranges, idle_ranges]
   results = list(map(lambda r: [], ranges))
   print("Num tasks", len(lambda_ranges))
   for i in range(len(ranges)):
@@ -184,10 +192,10 @@ def main():
   params = json.loads(open(args.parameters).read())
   if args.download:
     download(args.subfolder, args.bucket, params)
-  numbers = process(args.subfolder, params, args.old)
-  colors = ["red", "blue"]
-  labels = ["Number of VCPUs", "Number of Running Jobs"]
-  graph.graph(args.subfolder, numbers, colors, labels, args.start_range, args.end_range)
+  [lambda_ranges, task_ranges, pending_tasks] = process(args.subfolder, params, args.old)
+  colors = ['#003300', '#ff3300', '#883300']
+  labels = ["Number of VCPUs", "Number of Running Jobs", "Number of Total Jobs"]
+  graph.graph(args.subfolder, [lambda_ranges, task_ranges], colors, pending_tasks, labels, args.start_range, args.end_range)
 
 if __name__ == "__main__":
   main()

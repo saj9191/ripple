@@ -30,7 +30,8 @@ class Iterator(iterator.Iterator[None]):
     pivots = list(pivots)
     pivots.sort()
     super_pivots: List[int] = []
-    num_bins = int((len(pivots) + cls.increment) / cls.increment)
+  #  num_bins = int((len(pivots) + cls.increment) / cls.increment)
+    num_bins = 10
     increment = float(len(pivots)) / num_bins
 
     i: int = 0

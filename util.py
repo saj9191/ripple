@@ -87,12 +87,15 @@ def object_exists(s3, bucket_name, key):
 
 def combine_instance(bucket_name, key, params={}):
   done = False
-  num_attempts = 10
+  num_attempts = 30
   m = parse_file_name(key)
   prefix = key_prefix(key) + "/"
   count = 0
   objects = params["database"].get_entries(bucket_name, prefix)
-  last_file = current_last_file(objects, key)
+  #last_file = current_last_file(objects, key)
+
+  m["file_id"] = m["num_files"]
+  last_file = file_name(m)
 
   while not done and last_file:
     done = have_all_files(objects, m)
@@ -143,6 +146,11 @@ def load_parameters(s3_dict, key_fields, start_time, event):
     s3 = S3(params)
     client = boto3.client("lambda")
 
+  if "ancestry" in s3_dict:
+    params["ancestry"] = s3_dict["ancestry"]
+  else:
+    params["ancestry"] = []
+
   params["database"] = s3
   return params
 
@@ -155,12 +163,14 @@ def handle(event, context, func):
   input_format = parse_file_name(key)
   params = load_parameters(s3_dict, input_format, start_time, event)
   if run_function(params, input_format):
-    cpu = []
-    monitor = Monitor(cpu)
-    monitor.start()
-    params["cpu"] = cpu
+#########    cpu = []
+#    monitor = Monitor(cpu)
+#    monitor.start()
+#    params["cpu"] = cpu
     [output_format, log_format] = get_formats(input_format, params)
+    token = "{0:f}-{1:d}".format(log_format["timestamp"], log_format["nonce"])
     entry = prior_execution(log_format, params)
+    params["ancestry"].append((token, log_format["prefix"], log_format["bin"], log_format["num_bins"], log_format["file_id"], log_format["num_files"]))
     if entry is None:
       if not is_set(event, "test"):
         clear_tmp(params)
@@ -170,7 +180,8 @@ def handle(event, context, func):
         if finished:
           write_log(context, input_format, log_format, params)
       except Exception as e:
-        monitor.running = False
+        print("Exception", e)
+        #monitor.running = False
         raise e
     else:
       count = 0
@@ -178,10 +189,10 @@ def handle(event, context, func):
       count += len(content["payloads"])
       for i in range(len(content["payloads"])):
         payload = content["payloads"][i]
-        if "reexecute" in params:
+        if "reexecute" in payload:
           payload["execute"] = params["reexecute"]
         params["database"].invoke(params["output_function"], payload)
-    monitor.running = False 
+#    monitor.running = False 
 
 
 def get_formats(input_format, params):
@@ -217,7 +228,7 @@ def prior_execution(bucket_format, params):
 
 
 def current_last_file(objects, current_key):
-  objects = sorted(objects, key=lambda obj: [obj.last_modified_at(), obj.key])
+  objects = sorted(objects, key=lambda obj: obj.key)
   keys = list(map(lambda obj: obj.key, objects))
   return keys[-1]
 
@@ -227,59 +238,21 @@ def have_all_files(objects, m):
   return num_files == len(objects)
 
 
-def lambda_setup(event, context):
-  start_time = time.time()
-  global FOUND
-  FOUND = False
-  if os.path.isfile("/tmp/warm"):
-    FOUND = True
-
-  s3 = event["Records"][0]["s3"]
-  bucket_name = s3["bucket"]["name"]
-  key = s3["object"]["key"]
-  key_fields = parse_file_name(key)
-  if "extra_params" in s3 and "prefix" in s3["extra_params"]:
-    prefix = s3["extra_params"]["prefix"]
-  else:
-    prefix = key_fields["prefix"]
-
-  params = json.loads(open("{0:d}.json".format(prefix)).read())
-  params["start_time"] = start_time
-  params["payloads"] = []
-  params["write_count"] = 0
-  params["prefix"] = prefix
-  params["token"] = random.randint(1, 100*1000*1000)
-  params["key_fields"] = key_fields
-  if is_set(event, "continue"):
-    params["continue"] = True
-
-  for value in ["object", "offsets", "pivots"]:
-    if value in s3:
-      params[value] = s3[value]
-
-  if "extra_params" in s3:
-    if "token" in s3["extra_params"]:
-      params["parent_token"] = s3["extra_params"]["token"]
-      s3["extra_params"]["token"] = params["token"]
-    params = {**params, **s3["extra_params"]}
-
-  return [bucket_name, key, params]
-
-
 def write_log(context, input_format, bucket_format, params):
   duration = params["timeout"] * 1000 - context.get_remaining_time_in_millis()
+  log_name = file_name(bucket_format)
 
   log_results = {**{
     "start_time": params["start_time"],
     "duration": duration,
-    "cpu": params["cpu"],
+    #"cpu": params["cpu"],
   },  **params["database"].get_statistics()}
 
   for key in ["name"]:
     log_results[key] = params[key]
 
   if not params["database"].contains(params["log"], file_name(bucket_format)):
-    params["database"].write(params["log"], file_name(bucket_format), str.encode(json.dumps(log_results)), {}, invoke=False)
+    params["database"].write(params["log"], log_name, str.encode(json.dumps(log_results)), {}, invoke=False)
 
 
 def setup_client(service, params):

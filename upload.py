@@ -54,7 +54,7 @@ def upload(bucket_name, key, input_bucket_name=None, execute=None):
     print("Uploading {0:s} to s3://{1:s}".format(key, bucket_name), flush=True)
     config = boto3.s3.transfer.TransferConfig(multipart_threshold=64*1024*1024, max_concurrency=10,
                                               multipart_chunksize=16*1024*1024, use_threads=False)
-    s3.upload_file(key, bucket_name, Config=config)
+    boto3.client("s3").upload_file(key, bucket_name, s3_key, Config=config)
 
   end = time.time()
 

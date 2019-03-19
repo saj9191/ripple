@@ -152,20 +152,24 @@ class Logger(threading.Thread):
     self.s3 = boto3.resource("s3")
 
   def __get_log__(self, name):
-    while not util.object_exists(self.s3, self.bucket_name, name):
-      time.sleep(random.randint(0, 3))
+    if not util.object_exists(self.s3, self.bucket_name, name):
+      return None
 
-    while True:
-      try:
-        obj = self.s3.Object(self.bucket_name, name)
-        body = json.loads(obj.get()["Body"].read().decode("utf-8"))
-        return body
-      except Exception as e:
-        time.sleep(random.uniform(0, 1))
+    try:
+      obj = self.s3.Object(self.bucket_name, name)
+      body = json.loads(obj.get()["Body"].read().decode("utf-8"))
+      return body
+    except Exception as e:
+      time.sleep(random.uniform(0, 1))
+      return None
 
   def __process_logs__(self):
     [key, identifier] = self.logger_queue.get()
     body = self.__get_log__(key)
+    if body is None:
+      self.logger_queue.put([key, identifier])
+      return
+
     for payload in body["payloads"]:
       token = identifier[0]
       s3 = payload["Records"][0]["s3"]
@@ -203,23 +207,6 @@ class Invoker(threading.Thread):
   def __invoke__(self, name, payload, identifier):
     while True:
       try:
-        parts = identifier[0].split("-")
-        m = {
-          "prefix": identifier[1],
-          "timestamp": float(parts[0]),
-          "nonce": int(parts[1]),
-          "bin": identifier[2],
-          "num_bins": identifier[3],
-          "file_id": identifier[4],
-          "execute": 0,
-          "suffix": "0",
-          "num_files": identifier[5],
-          "ext": "log",
-        }
-        file_name = util.file_name(m)
-        if util.object_exists(self.s3, "maccoss-log-east-1", file_name):
-          self.key_queue.put(file_name)
-          return
         response = self.client.invoke(
           FunctionName=name,
           InvocationType="Event",
@@ -285,12 +272,9 @@ class Task(threading.Thread):
     stage_tasks = self.__stage_tasks__(self.stage)
     if len(stage_tasks) > 0:
       num_files = stage_tasks[0][3] * stage_tasks[0][5]
-    else:
-      num_files = None
-
-    if num_files is not None and len(stage_tasks) == num_files:
-      self.stage += 1
-      self.check_time = time.time() + random.randint(-self.offset, self.offset)
+      if len(stage_tasks) == num_files:
+        self.stage += 1
+        self.check_time = time.time() + random.randint(0, self.offset)
 
   def get_missing_logs(self):
     self.expected_logs = self.expected_logs.union(set(self.payload_map[self.token].keys()))
@@ -306,7 +290,7 @@ class Task(threading.Thread):
             if t not in self.expected_logs:
               self.expected_logs.add(t)
               self.find_queue.add(t)
-    missing= self.expected_logs.difference(self.finished_tasks)
+    missing = self.expected_logs.difference(self.finished_tasks)
     return list(missing)
 
   def invoke(self, name, payload, identifier, unpause):
@@ -325,16 +309,16 @@ class Task(threading.Thread):
       identifier = (self.token, 0, 1, 1, 1, 1)
       name = self.pipeline[0]["name"]
       self.invoke(name, self.payload_map[self.token][identifier], self.job.pause[1] < ctime)
-      self.check_time = time.time() + random.randint(-self.offset, self.offset)
+      self.check_time = time.time() + random.randint(0, self.offset)
     else:
       if (ctime - self.check_time) > self.timeout:
         log_identifiers = self.get_missing_logs()
-        random.shuffle(log_identifiers)
+        log_identifiers.sort()
         count = 0
-        for identifier in log_identifiers[:10]:
+        for identifier in log_identifiers[:random.randint(1,5)]:
           if identifier in self.payload_map[self.token]:
             name = self.pipeline[identifier[1]]["name"]
-    #        self.invoke(name, self.payload_map[self.token][identifier], identifier, self.job.pause[1] != -1 and self.job.pause[1] < ctime)
+            self.invoke(name, self.payload_map[self.token][identifier], identifier, self.job.pause[1] != -1 and self.job.pause[1] < ctime)
             count += 1
         if count > 0:
           print(self.token, "Re-invoked", count, "payloads. Missing ", list(log_identifiers)[0])
@@ -441,7 +425,7 @@ class Scheduler:
     for i in range(num_loggers):
       self.__add_logger__()
 
-    for i in range(20): 
+    for i in range(50): 
       self.__add_queue__(i, None)
 
     self.__add_queue__(i, "0")

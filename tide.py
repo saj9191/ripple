@@ -22,4 +22,4 @@ params={
   "output": "peptides",
 }
 step = step.run("percolator", params=params)
-pipeline.compile("json/basic-tide.json", dry_run=True)
+pipeline.compile("json/basic-tide.json", dry_run=False)

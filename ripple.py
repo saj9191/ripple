@@ -187,8 +187,7 @@ class Pipeline:
       "memory_size": self.memory_size,
     }, **config}
     self.__add__(name, input_format, function_params, params, None)
-    if util.is_set(config, "combine"):
-      self.combine(output_format, {**params, **{"sort": True}}, config)
+    self.combine(input_format, params, config)
     return Step(self, len(self.pipeline), input_format)
 
   def split(self, input_format, params={}, config={}):

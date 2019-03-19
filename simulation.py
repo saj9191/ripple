@@ -97,6 +97,7 @@ class Request(threading.Thread):
         time.sleep(sleep)
         print("Thread", self.thread_id, "Wakeup", request_date_time)
         self.response_queue.put(upload.upload(self.params["bucket"], file_name, self.params["input_bucket"]))
+        time.sleep(random.randint(0, 10))
       except queue.Empty as e:
         pass
 

@@ -113,14 +113,17 @@ class Iterator(Generic[T]):
       content, metadata = cls.from_array(items, f, extra)
       f.write(content)
     else:
+      count = 0
       for i in range(len(entries)):
         entry = entries[i]
-        if i > 0 and cls.delimiter.position == DelimiterPosition.inbetween:
+        if entry.content_length() == 0:
+          continue
+        if count > 0 and cls.delimiter.position == DelimiterPosition.inbetween:
           f.seek(-1 * len(cls.delimiter.item_token), os.SEEK_END)
           end: str = f.read(len(cls.delimiter.item_token))
           if end != cls.delimiter.item_token:
             f.write(cls.delimiter.item_token)
-        if cls.options.has_header and i > 0:
+        if cls.options.has_header and count > 0:
           lines = entry.get_content().split(cls.delimiter.item_token)[1:]
           content = cls.delimiter.item_token.join(lines)
           f.write(content)
@@ -129,6 +132,7 @@ class Iterator(Generic[T]):
           # the entire file will write at the end. I need to figure out why because downloading,
           # loading into memory and then writing to disk is slower.
           f.write(entry.get_content())
+        count += 1
 
     return metadata
 

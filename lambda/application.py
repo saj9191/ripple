@@ -36,12 +36,9 @@ def run_application(d: Database, bucket_name: str, key: str, input_format: Dict[
     else:
       new_key = util.file_name(p)
 
-    if not d.contains(params["bucket"], new_key):
-      with open(output_file, "rb") as f:
-        d.put(params["bucket"], new_key, f, {})
-    else:
-      found = True
-  return not found
+    with open(output_file, "rb") as f:
+      d.put(params["bucket"], new_key, f, {})
+  return True
 
 
 def handler(event, context):

@@ -4,7 +4,9 @@ import matplotlib
 import os
 import re
 matplotlib.use('Agg')
+from matplotlib.lines import Line2D
 import matplotlib.pyplot as plt
+from matplotlib.ticker import MaxNLocator
 
 
 S3_REGEX = re.compile("S3 CREATED TIME: ([0-9\.]+)")
@@ -21,19 +23,20 @@ def graph(subfolder, numbers, colors, pending_tasks, labels=None, start_range=No
   ax.set_yticks([])
   ax.spines["right"].set_visible(False)
   ax.spines["top"].set_visible(False)
+#  ax.yaxis.set_major_locator(MaxNLocator(integer=True))
   ax1 = fig.add_subplot(grid[:8, 0])
   ax1.spines["right"].set_visible(False)
   ax1.spines["top"].set_visible(False)
   min_timestamp = None
   max_timestamp = None
   max_concurrency = None
-  handles = []
+  linestyle = [":", "-", "-.", "--"]
   for i in range(len(numbers)):
     num = numbers[i]
     timestamps = list(map(lambda r: r[0], num))
     min_t = min(timestamps)
     max_t = max(timestamps)
-    total = list(map(lambda r: r[1], num))
+    total = list(map(lambda r: int(r[1]), num))
     max_c = max(total)
     if min_timestamp:
       min_timestamp = min(min_timestamp, min_t)
@@ -44,24 +47,40 @@ def graph(subfolder, numbers, colors, pending_tasks, labels=None, start_range=No
       max_timestamp = max_t
       max_concurrency = max_c
     if labels:
-      handles.append(plt.plot(timestamps, total, color=colors[i % len(colors)], label=labels[i]))
+      plt.plot(timestamps, total, color=colors[i % len(colors)], linestyle=linestyle[i])
     else:
-      handles.append(plt.plot(timestamps, total, color=colors[i % len(colors)]))
+      plt.plot(timestamps, total, color=colors[i % len(colors)])
   print("max_timestamp", max_timestamp)
-#  if labels:
-#    plt.legend(loc="upper right", frameon=False)
-
-  plt.xticks([])
-  plt.ylim([0, max_concurrency * 1.15])
-  plt.xlim([min_timestamp, max_timestamp])
-  fig.add_subplot(grid[8:, 0])
-  timestamps = list(map(lambda r: r[0], pending_tasks))
-  total = list(map(lambda r: r[1], num))
-  handles.append(plt.plot(timestamps, total, color="gray", label="Number of Pending Jobs"))
+  colors.append('#ffcc66')
+  print(colors)
   if labels:
-    fig.legend(loc="upper right", frameon=False)
+    labels.append("Number of Pending Jobs")
+    handles = []
+    for i in range(len(labels)):
+      label = labels[i]
+      handles.append(Line2D([0], [0], color=colors[i], linestyle=linestyle[i]))
+    plt.legend(loc="upper right", frameon=False, handles=handles,  labels=labels, bbox_to_anchor=(1.10, 1.20))
+  max_timestamp = 13315.110265016556
+  yticks = range(0, 250, 50)
+  top_y = 250#max_concurrency * 1.05
+  bottom_y = 120
+  plt.xticks([])
+  plt.yticks(yticks)
+  plt.ylim([0, top_y])
+#  plt.ylim([0, max_concurrency * 1.05])
+  plt.xlim([min_timestamp, max_timestamp])
+  print("max", max_timestamp)
+  ax2 = fig.add_subplot(grid[8:, 0])
+  ax2.spines["top"].set_visible(False)
+  ax2.spines["right"].set_visible(False)
+  timestamps = list(map(lambda r: r[0], pending_tasks))
+  total = list(map(lambda r: r[1], pending_tasks))
+  plt.plot(timestamps, total, color='#ffcc66', linestyle="--")
+#  if labels:
+#    fig.legend(frameon=False, loc="upper right", bbox_to_anchor=(0.93, 0.95))
 
   plt.xlabel("Time (Seconds)")
+  plt.ylim([0, bottom_y])
   if start_range:
     min_timestamp = start_range
   if end_range:
@@ -70,6 +89,7 @@ def graph(subfolder, numbers, colors, pending_tasks, labels=None, start_range=No
   plt.xlim([min_timestamp, max_timestamp])
   print(max_concurrency)
   plot_name = subfolder + "/simulation.png"
+  plt.subplots_adjust(hspace=0.5)
   print("Plot", plot_name)
   plt.savefig(plot_name)
   plt.close()
@@ -192,8 +212,11 @@ def main():
   [active_tasks, pending_tasks, total_tasks] = process_tasks(start_time, args.subfolder)
 
   numbers = [num_nodes, active_tasks, total_tasks]
-  colors = ["red", "blue", "purple"]
-  labels = ["Number of VCPUs", "Number of Running Jobs", "Number of Total Jobs"]
+  #colors = ["red", "blue", "purple"]
+  colors = ['#003300', '#ff3300', '#883300']
+#  colors = ['#003300', '#ff3300']
+  #labels = ["Number of VCPUs", "Number of Running Jobs", "Number of Total Jobs"]
+  labels=None
   graph(args.subfolder, numbers, colors, pending_tasks, labels, args.start_range, args.end_range)
 
 

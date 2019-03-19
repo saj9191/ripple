@@ -27,7 +27,8 @@ def split_file(database: Database, bucket_name: str, key: str, input_format: Dic
   assert("ext" not in output_format or output_format["ext"] != "pivot")
   file_id = 1 
   content_length: int = obj.content_length()
-  num_files = int((content_length + split_size - 1) / split_size)
+#  num_files = int((content_length + split_size - 1) / split_size)
+  num_files = 10
 
   threads = []
   token = "{0:f}-{1:d}".format(output_format["timestamp"], output_format["nonce"])
@@ -38,6 +39,7 @@ def split_file(database: Database, bucket_name: str, key: str, input_format: Dic
       "num_files": num_files,
       "offsets": offsets,
     }}
+
     if util.is_set(params, "ranges"):
       extra_params["pivots"] = ranges
 
