@@ -29,7 +29,7 @@ def invoke(obj):
 
 s3 = boto3.resource("s3")
 bucket = s3.Bucket(bucket_name)
-objs = list(bucket.objects.filter(Prefix="0/"))[:100]
+objs = list(bucket.objects.filter(Prefix="0/"))[:20]
 threads = []
 for obj in objs:
   threads.append(threading.Thread(target=invoke, args=(obj,)) )

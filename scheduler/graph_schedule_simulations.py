@@ -44,6 +44,8 @@ def graph(subfolder, numbers, colors, labels=None, start_range=None, end_range=N
   plt.ylabel("Number of Concurrent Functions")
   plot_name = subfolder + "/simulation.png"
   plt.subplots_adjust(hspace=0.5)
+  if labels:
+    plt.legend(frameon=False, fontsize="large")
   print("Plot", plot_name)
   plt.savefig(plot_name)
   plt.close()
@@ -109,8 +111,9 @@ def process(subfolder):
     numbers.append(ranges)
 
   colors = ['#ff3300', '#883300', '#000000']
+  labels = ["Job 1", "Job 2", "Job 3"]
 #          '#ff0044', '#00ffff', '#000000']
-  graph(subfolder, numbers, colors, None, None, None)
+  graph(subfolder, numbers, colors, labels, None, None)
 
 
 def main():

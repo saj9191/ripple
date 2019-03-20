@@ -139,12 +139,21 @@ def load_parameters(s3_dict, key_fields, start_time, event):
   elif "extra_params" in s3_dict and "execute" in s3_dict["extra_params"]:
     params["reexecute"] = s3_dict["extra_params"]["execute"]
 
+  if random.randint(0, 100) < 10:
+    n = random.randint(60)
+    time.sleep(n)
+    print("Sleeping for", n, "seconds")
+    params["n"] = n
+
   if is_set(event, "test"):
     s3 = event["s3"]
     s3.params = params
   else:
     s3 = S3(params)
     client = boto3.client("lambda")
+
+  if is_set(event, "reinvoke"):
+    params["reinvoke"] = True
 
   if "ancestry" in s3_dict:
     params["ancestry"] = s3_dict["ancestry"]
@@ -163,10 +172,6 @@ def handle(event, context, func):
   input_format = parse_file_name(key)
   params = load_parameters(s3_dict, input_format, start_time, event)
   if run_function(params, input_format):
-#########    cpu = []
-#    monitor = Monitor(cpu)
-#    monitor.start()
-#    params["cpu"] = cpu
     [output_format, log_format] = get_formats(input_format, params)
     token = "{0:f}-{1:d}".format(log_format["timestamp"], log_format["nonce"])
     entry = prior_execution(log_format, params)
@@ -247,6 +252,11 @@ def write_log(context, input_format, bucket_format, params):
     "duration": duration,
     #"cpu": params["cpu"],
   },  **params["database"].get_statistics()}
+
+  if "reinvoke" in params:
+    log_results["invoke"] = True
+  if "n" in params:
+    log_results["n"] = params["n"]
 
   for key in ["name"]:
     log_results[key] = params[key]

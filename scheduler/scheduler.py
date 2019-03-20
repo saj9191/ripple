@@ -224,6 +224,7 @@ class Invoker(threading.Thread):
   def run(self):
     while self.__running__():
       name, payload, identifier = self.invoker_queue.get()
+      payload["reinvoke"] = True
       self.__invoke__(name, payload, identifier)
 
 class Task(threading.Thread):
@@ -427,6 +428,8 @@ class Scheduler:
 
 def run(policy, timeout, params):
  scheduler = Scheduler(policy, timeout, params)
+ params["num_invokers"] = 10
+ params["num_loggers"] = 10
  scheduler.listen(params["num_invokers"], params["num_loggers"])
 
 
