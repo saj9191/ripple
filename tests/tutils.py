@@ -118,9 +118,9 @@ class TestDatabase(S3):
   payloads: List[Dict[str, Any]]
   tables: Dict[str, TestTable]
 
-  def __init__(self):
+  def __init__(self, params):
     Database.__init__(self)
-    self.params = {}
+    self.params = params
     self.payloads = []
     self.tables = {}
     if not os.path.isdir("/tmp/s3"):

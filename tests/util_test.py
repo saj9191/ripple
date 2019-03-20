@@ -1,15 +1,8 @@
-import inspect
-import os
-import sys
-import unittest
 import tutils
+import unittest
+import util
 from unittest.mock import MagicMock
 from tutils import TestDatabase
-
-currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
-parentdir = os.path.dirname(currentdir)
-sys.path.insert(0, parentdir)
-import util
 
 
 class FileNameMethods(unittest.TestCase):
@@ -36,32 +29,31 @@ class ExecutionMethods(unittest.TestCase):
       "file": "application",
       "log": "log",
       "name": "util",
-      "test": True,
       "timeout": 60,
     }
 
-    s3 = TestDatabase()
+    s3 = TestDatabase(params)
     bucket1 = s3.create_table("bucket1")
     log = s3.create_table("log")
-    bucket1.add_entry("0/123.400000-13/1-1/1-1-0-suffix.txt", "")
-    bucket1.add_entry("1/123.400000-13/1-1/1-1-0-suffix.txt", "")
-    bucket1.add_entry("0/123.400000-13/1-1/2-1-1-suffix.txt", "")
-    bucket1.add_entry("1/123.400000-13/1-1/2-1-1-suffix.txt", "")
-    log.add_entry("0/123.400000-13/1-1/3-1-1-suffix.log", "")
-    log.add_entry("1/123.400000-13/1-1/3-1-1-suffix.log", "")
+    bucket1.add_entry("0/123.400000-13/1-1/1-0.0000-2-suffix.txt", "")
+    bucket1.add_entry("1/123.400000-13/1-1/1-0.0000-2-suffix.txt", "")
+    bucket1.add_entry("0/123.400000-13/1-1/2-0.0000-2-suffix.txt", "")
+    bucket1.add_entry("1/123.400000-13/1-1/2-0.0000-2-suffix.txt", "")
+    log.add_entry("0/123.400000-13/1-1/1-0.0000-1-suffix.log", "")
+    log.add_entry("1/123.400000-13/1-1/1-0.0000-1-suffix.log", "")
 
-    event = tutils.create_event(s3, bucket1.name, "0/123.4-13/1-1/1-1-0-suffix.txt", params)
+    event = tutils.create_event(s3, bucket1.name, "0/123.4-13/1-1/1-0.0000-2-suffix.txt", params)
     context = tutils.create_context(params)
 
     # Call on entry that doesn't have a log entry
-#    func = MagicMock()
-#    util.handle(event, context, func)
-#    self.assertTrue(func.called)
+    func = MagicMock()
+    util.handle(event, context, func)
+    self.assertTrue(func.called)
 
     # Call on entry that does have a log entry
     func = MagicMock()
     event["Records"][0]["s3"]["bucket"]["name"] = bucket1.name
-    event["Records"][0]["s3"]["object"]["key"] = "0/123.400000-13/1-1/3-1-1-suffix.txt"
+    event["Records"][0]["s3"]["object"]["key"] = "0/123.400000-13/1-1/1-0.0000-2-suffix.txt"
     util.handle(event, context, func)
     self.assertFalse(func.called)
 
