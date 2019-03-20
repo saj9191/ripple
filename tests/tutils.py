@@ -1,13 +1,9 @@
+import database
 import inspect
 import os
 import sys
 import time
 from typing import Any, BinaryIO, Dict, Iterable, List, Optional, Set, Union
-
-currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
-parentdir = os.path.dirname(currentdir)
-sys.path.insert(0, parentdir)
-import database
 from database import Database, Entry, Statistics, S3, Table
 
 
@@ -118,9 +114,9 @@ class TestDatabase(S3):
   payloads: List[Dict[str, Any]]
   tables: Dict[str, TestTable]
 
-  def __init__(self, params):
+  def __init__(self, params={}):
     Database.__init__(self)
-    self.params = params
+    self.params = dict(params)
     self.payloads = []
     self.tables = {}
     if not os.path.isdir("/tmp/s3"):

@@ -1,15 +1,11 @@
 import inspect
+import new_line
 import os
 import sys
 import unittest
 from iterator import OffsetBounds
 from tutils import TestDatabase, TestEntry, TestTable
 from typing import Any, Optional
-
-currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
-parentdir = os.path.dirname(currentdir)
-sys.path.insert(0, parentdir + "/formats")
-import new_line
 
 
 class TestIterator(new_line.Iterator):
