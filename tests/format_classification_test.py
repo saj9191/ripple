@@ -1,17 +1,9 @@
-import inspect
+import classification
 import numpy as np
-import os
-import sys
 import unittest
 from iterator import OffsetBounds
 from tutils import TestDatabase, TestEntry
 from typing import Any, Optional
-
-currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
-parentdir = os.path.dirname(currentdir)
-sys.path.insert(0, parentdir + "/formats")
-
-import classification
 
 
 class TestIterator(classification.Iterator):
