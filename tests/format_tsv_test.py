@@ -1,15 +1,10 @@
-import inspect
 import os
-import sys
+import tsv
 import unittest
 from iterator import OffsetBounds
-from tutils import TestEntry
 from typing import Any, Optional
+from tutils import TestEntry
 
-currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
-parentdir = os.path.dirname(currentdir)
-sys.path.insert(0, parentdir + "/formats")
-import tsv
 
 
 class TestIterator(tsv.Iterator):
