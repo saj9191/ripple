@@ -86,6 +86,47 @@ def object_exists(s3, bucket_name, key):
 
 
 def combine_instance(bucket_name, key, params={}):
+  # TODO: There's a race condition we need to figure out how to handle.
+  # Consider the series of events
+  # We have functions A and B. We want to combine the output of A and B
+  # A_1 runs and outputs S_A
+  # B_1 runs and outputs S_B
+  # A_2 runs (before A_1 finishes) and outputs S_A
+
+  # The combine phase triggered by the first S_A may see S_B and believe
+  # it is not the last file and terminate.
+  # The combine phase triggered by S_B may see the second S_A and 
+  # believe it is not the last file and terminate.
+  # The combine phase triggered by the second S_B may believe it is a
+  # duplicate entry and terminate.
+
+  # This will result in the file not being combined.
+  # Our goal is to minimize time without introducing too much cost overhead.
+  # There are a couple of solutions
+  # 1. For combine look for duplicate entry AND look to see if combine actually happened.
+  # -- This may require changes to how the functions are structured.
+  # -- We need to know what the output format looks like. We want to make this generalizable
+  # -- so we don't want to assume the next stage only has one file, etc.
+  # -- This violates, exactly once semantics, but we don't have much control over that.
+  # 2. For the function that performs the combine write all log files
+  # -- I considered just not writing a log entry if the function did not result in a combine.
+  # -- The problem with this is it will either complicate fault tolerance or in most cases
+  # -- we will needlessly re-execute these functions when the fault tolerance notices there's
+  # -- no log file. Both of these don't seem ideal. The fault tolerance shouldn't need to
+  # -- understand complicated dependencies and re-executing everything is a lot of wasted work.
+  # -- However, it would be fairly easy to change the combine logic to have one file write out
+  # -- the log files. The problem with this is we need statistics for experiments. This would
+  # -- be harder to gather, unless we write to different output files. One set of logs to just
+  # -- gather stats and another set for fault tolerance, duplicate execution logic.
+  # -- There could still be many duplicate executions.
+  # 3. If a function sees all files are present, just combine. This may result in duplicate
+  # -- work. There might still be a race condition where the last two functions finish at the
+  # -- same time and don't see each other.
+  # I think I like a mixture of #2 and #3. I think it would also give another incentive to
+  # create folders for data execution, logs, and then statistics.
+  # So the current plan is to to just combine if everything is present and have the combiner
+  # write the logs. This should prevent overwrites from affecting combines and allow fault
+  # tolerance to work.
   done = False
   num_attempts = 30
   m = parse_file_name(key)
