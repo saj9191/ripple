@@ -3,6 +3,7 @@ import inspect
 import os
 import sys
 import time
+import util
 from typing import Any, BinaryIO, Dict, Iterable, List, Optional, Set, Union
 from database import Database, Entry, Statistics, S3, Table
 
@@ -14,7 +15,8 @@ def equal_lists(list1, list2):
 
 
 def create_payload(table_name: str, key: str, prefix: int, file_id: Optional[int]=None, num_files: Optional[int]=None, offsets: Optional[List[int]]=None):
-  extra_params: Dict[str, Any] = {"prefix": prefix}
+  extra_params = util.parse_file_name(key)
+  extra_params["prefix"] = prefix
   if file_id:
     extra_params["file_id"] = file_id
     extra_params["num_files"] = num_files
