@@ -1,15 +1,8 @@
-import inspect
-import os
-import sys
+import knn
 import unittest
 from iterator import OffsetBounds
 from tutils import TestDatabase, TestEntry
 from typing import Any, Optional
-
-currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
-parentdir = os.path.dirname(currentdir)
-sys.path.insert(0, parentdir + "/formats")
-import knn
 
 
 class TestIterator(knn.Iterator):
