@@ -200,26 +200,33 @@ class Iterator(Generic[T]):
       self.remainder = b''
       more = False
     else:
-      token = self.delimiter.offset_token
-      index: int = stream.rindex(token) if token in stream else -1
-      if index != -1:
-        if self.delimiter.position == DelimiterPosition.inbetween:
-          index += len(self.delimiter.offset_token)
-        next_end_index -= (len(stream) - index)
+      if self.delimiter.regex:
+        it = list(self.delimiter.regex.finditer(stream))
+        index = it[-1].span()[1] + 1
         next_start_index -= len(self.remainder)
         self.remainder = stream[index:]
         stream = stream[:index]
-      else:
-        self.remainder = stream
         next_end_index -= len(self.remainder)
-        stream = b''
+      else:
+        token = self.delimiter.offset_token
+        index: int = stream.rindex(token) if token in stream else -1
+        if index != -1:
+          if self.delimiter.position == DelimiterPosition.inbetween:
+            index += len(self.delimiter.offset_token)
+          next_end_index -= (len(stream) - index)
+          next_start_index -= len(self.remainder)
+          self.remainder = stream[index:]
+          stream = stream[:index]
+        else:
+          self.remainder = stream
+          next_end_index -= len(self.remainder)
+          stream = b''
     self.next_index = min(next_end_index + len(self.remainder) + 1, self.get_offset_end_index())
     offset_bounds: Optional[OffsetBounds]
     if len(stream) == 0:
       offset_bounds = None
     else:
       offset_bounds = OffsetBounds(next_start_index, next_end_index)
-
     [stream, offset_bounds] = self.transform(stream, offset_bounds)
     return (self.to_array(stream), offset_bounds, more)
 

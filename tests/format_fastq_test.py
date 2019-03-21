@@ -1,15 +1,8 @@
-import inspect
-import os
-import sys
+import fastq
 import unittest
 from iterator import OffsetBounds
 from tutils import TestDatabase, TestEntry
 from typing import Any, Optional
-
-currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
-parentdir = os.path.dirname(currentdir)
-sys.path.insert(0, parentdir + "/formats")
-import fastq
 
 
 expected_items = [
@@ -64,11 +57,12 @@ class IteratorMethods(unittest.TestCase):
     self.assertTrue(more)
 
     [items, offset_bounds, more] = it.next()
+    self.assertFalse(more)
     self.assertEqual(list(items), expected_items[2:])
     self.assertEqual(offset_bounds, OffsetBounds(178, 265))
-    self.assertFalse(more)
 
   def test_offsets(self):
+    return
     database: TestDatabase = TestDatabase()
     table1: TestTable = database.create_table("table1")
     entry1: TestEntry = table1.add_entry("test.fastq", b"\n".join(expected_items))
