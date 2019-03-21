@@ -1,16 +1,10 @@
-import inspect
 import os
-import sys
+import pivot
 import unittest
-from typing import Any, ClassVar, Optional
-
-currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
-parentdir = os.path.dirname(currentdir)
-sys.path.insert(0, parentdir)
 from iterator import OffsetBounds
 from tutils import TestDatabase, TestEntry, TestTable
-sys.path.insert(0, parentdir + "/formats")
-import pivot
+from typing import Any, ClassVar, Optional
+
 
 class TestIterator(pivot.Iterator):
   def __init__(self, entry: TestEntry, offset_bounds: Optional[OffsetBounds], increment: int):
@@ -25,7 +19,7 @@ class PivotMethods(unittest.TestCase):
     entry1: TestEntry = table1.add_entry("pivot.pivot", "bucket_name\nfile_name\n10\t15\t23\t37\t40")
     params = {
       "test": True,
-      "s3": database,
+      "database": database,
     }
 
     [file_bucket, file_key, ranges] = pivot.get_pivot_ranges(table1.name, entry1.key, params)
