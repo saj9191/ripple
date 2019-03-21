@@ -92,7 +92,7 @@ def combine_instance(bucket_name, key, params={}):
   prefix = key_prefix(key) + "/"
   count = 0
   objects = params["database"].get_entries(bucket_name, prefix)
-  #last_file = current_last_file(objects, key)
+  last_file = current_last_file(objects, key)
 
   m["file_id"] = m["num_files"]
   last_file = file_name(m)
@@ -233,7 +233,7 @@ def prior_execution(bucket_format, params):
 
 
 def current_last_file(objects, current_key):
-  objects = sorted(objects, key=lambda obj: obj.key)
+  objects = sorted(objects, key=lambda obj: [obj.last_modified_at(), obj.key])
   keys = list(map(lambda obj: obj.key, objects))
   return keys[-1]
 
