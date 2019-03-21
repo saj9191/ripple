@@ -180,11 +180,11 @@ def load_parameters(s3_dict, key_fields, start_time, event):
   elif "extra_params" in s3_dict and "execute" in s3_dict["extra_params"]:
     params["reexecute"] = s3_dict["extra_params"]["execute"]
 
-  if random.randint(0, 100) < 10:
-    n = random.randint(60)
-    time.sleep(n)
-    print("Sleeping for", n, "seconds")
-    params["n"] = n
+  #if random.randint(0, 100) < 10:
+    #n = random.randint(60)
+    #time.sleep(n)
+    #print("Sleeping for", n, "seconds")
+    #params["n"] = n
 
   if is_set(event, "test"):
     s3 = event["s3"]
