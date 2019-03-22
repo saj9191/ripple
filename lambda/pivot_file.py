@@ -15,9 +15,9 @@ def create_pivots(d: Database, format_lib: Any, iterator_class: Any, items: List
   pivots.sort()
 
   max_identifier: float = float(pivots[-1] + 1)
-  num_bins = 64
-  #num_bins = 8
-  increment = int((len(items) + num_bins - 1) / num_bins)
+  # TODO: Competition between parameters and key parameters. Need to fix
+  num_bins = params["num_pivot_bins"]
+  increment = int(len(items) / num_bins)
   pivots = pivots[0::increment]
   if pivots[-1] == max_identifier - 1:
     pivots[-1] = max_identifier

@@ -3,6 +3,7 @@
 export PYTHONPATH="$PYTHONPATH:$PWD/formats"
 
 if [ "$1" == "lambda" ]; then
+  export PYTHONPATH="$PYTHONPATH:$PWD/lambda"
   if [ ${#2} == 0 ]; then
     pattern="lambda_*_test.py"
   else
