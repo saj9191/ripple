@@ -10,6 +10,8 @@ if [ "$1" == "lambda" ]; then
     pattern="lambda_${2}_test.py"
   fi
 elif [ "$1" == "applications" ]; then
+  export PYTHONPATH="$PYTHONPATH:$PWD/applications"
+  export PYTHONPATH="$PYTHONPATH:$PWD/lambda"
   if [ ${#2} == 0 ]; then
     pattern="applications_*_test.py"
   else
@@ -26,4 +28,5 @@ elif [ "$1" == "pipeline" ]; then
 elif [ ${#1} == 0 ]; then
 	pattern="*_test.py"
 fi
+
 python3.6 -m unittest discover -s tests -p $pattern
