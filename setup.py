@@ -21,10 +21,9 @@ def get_layers(region, account_id, imports):
       raise Exception("Cannot find layer for", imp)
   return layers
 
-def upload_function_code(client, zip_file, name, p, create):
+def upload_function_code(client, zip_file, name, account_id, p, create):
   zipped_code = open(zip_file, "rb").read()
   fparams = p["functions"][name]
-  account_id = int(boto3.client("sts").get_caller_identity().get("Account"))
   if create:
     response = client.create_function(
       FunctionName=name,
@@ -60,6 +59,7 @@ def upload_function_code(client, zip_file, name, p, create):
       )
     except Exception as e:
       print("Cannot remove permissions for", name, p["bucket"])
+      print(e)
 
 
 def create_parameter_files(zip_directory, function_name, params):
@@ -113,7 +113,7 @@ def zip_ripple_file(zip_directory, fparams):
 
 
 
-def upload_function(client, name, functions, params):
+def upload_function(client, name, account_id, functions, params):
   zip_directory = "lambda_dependencies"
   zip_file = "lambda.zip"
 
@@ -130,7 +130,7 @@ def upload_function(client, name, functions, params):
   os.chdir(zip_directory)
   subprocess.call("zip -r9 ../{0:s} .".format(zip_file), shell=True)
   os.chdir("..")
-  upload_function_code(client, zip_file, name, params, name not in functions)
+  upload_function_code(client, zip_file, name, account_id, params, name not in functions)
   os.remove(zip_file)
   shutil.rmtree(zip_directory)
 
@@ -235,18 +235,14 @@ def process_functions(params):
   params["pipeline"] = pipeline
 
 
-def upload_functions(client, params):
-  response = client.list_functions()
+def upload_functions(lclient, account_id, params):
+  response = lclient.list_functions()
   function_names = set(list(map(lambda f: f["FunctionName"], response["Functions"])))
-#  process_functions(params)
   for name in params["functions"]:
-    upload_function(client, name, function_names, params)
-  for i in range(len(params["pipeline"])):
-    print(i, params["pipeline"][i])
+    upload_function(lclient, name, account_id, function_names, params)
 
 
 def setup_notifications(client, bucket, config):
-  print(config)
   response = client.put_bucket_notification_configuration(
       Bucket=bucket,
       NotificationConfiguration=config
@@ -289,24 +285,14 @@ def function_arns(params):
   return name_to_arn
 
 
-def setup_triggers(params):
+def setup_triggers(sclient, lclient, params):
   name_to_arn = function_arns(params)
 
-  prefixes = {}
-  for name in params["functions"]:
-    prefixes[name] = []
-
-  for i in range(len(params["pipeline"])):
-    pparams = params["pipeline"][i]
-    prefixes[pparams["name"]].append(i)
-
-  client = util.setup_client("s3", params)
-  lambda_client = util.lambda_client(params)
   configurations = []
   account_id = boto3.client("sts").get_caller_identity().get("Account")
 
-
-  for name in [params["pipeline"][0]["name"]]:
+  for i in range(len(params["pipeline"])):
+    name = params["pipeline"][i]["name"]
     args = {
       "FunctionName": name,
       "StatementId": name + "-" + params["bucket"],
@@ -317,41 +303,89 @@ def setup_triggers(params):
     }
 
     try:
-      lambda_client.add_permission(**args)
+      lclient.add_permission(**args)
     except Exception:
       pass
 
-    for prefix in [0]:
-      configurations.append({
-        "LambdaFunctionArn": name_to_arn[name],
-        "Events": ["s3:ObjectCreated:*"],
-        "Filter": {
-          "Key": {
-            "FilterRules": [{"Name": "prefix", "Value": "{0:d}/".format(prefix)}]
-          }
-        }
-      })
-
-      if "suffix" in params["functions"][name]:
-        configurations[-1]["Filter"]["Key"]["FilterRules"].append(
-          {"Name": "suffix", "Value": params["functions"][name]["suffix"]}
-        )
+  configurations.append({
+    "LambdaFunctionArn": name_to_arn[params["pipeline"][0]["name"]],
+    "Events": ["s3:ObjectCreated:*"],
+    "Filter": {
+      "Key": {
+        "FilterRules": [{"Name": "prefix", "Value": "0/"}]
+      }
+    }
+  })
 
   config = {
     "LambdaFunctionConfigurations": configurations,
   }
-  setup_notifications(client, params["bucket"], config)
+  setup_notifications(sclient, params["bucket"], config)
+
+
+def create_role(role, account_id, region):
+  role_name = role.split("/")[-1]
+  client = boto3.client("iam")
+  roles = list(filter(lambda r: r["RoleName"] == role_name, client.list_roles()["Roles"]))
+  if len(roles) == 0:
+    client.create_role(
+      RoleName=role,
+      AssumeRolePolicyDocument=json.dumps({
+        "Version": "2012-10-17",
+        "Statement": [{
+          "Sid": "",
+          "Effect": "Allow",
+          "Principal": {
+            "Service": "lambda.amazonaws.com",
+            "Action": "sts:AssumeRole",
+          }
+        }]
+    }))
+
+    extra = {
+      "Version": "2012-10-17",
+      "Statement": [{
+        "Effect": "Allow",
+        "Action": [
+          "s3:ListBucket",
+          "s3:Put*",
+          "s3:Get*",
+          "s3:*MultipartUpload*",
+        ],
+        "Resource": "*",
+      }, {
+        "Effect": "Allow",
+        "Action": "logs:CreateLogGroup",
+        "Resource": "arn:aws:logs:{0:s}:{1:d}*".format(region, account_id)
+      }, {
+        "Effect": "Allow",
+        "Action": [
+          "logs:CreateLogStream",
+          "logs:PutLogEvents",
+        ],
+        "Resource": [
+          "arn:aws:logs:{0:s}:{1:d}:log-group:/aws/lambda/*:**".format(region, account_id)
+        ]
+      }, {
+        "Effect": "Allow",
+        "Action": "sts:AssumeRole",
+        "Resource": "arn:aws:iam::{0:d}:role/*".format(account_id)
+      }]
+    }
+    iam.RolePolicy(role).put(PolicyDocument=json.dumps(extra))
 
 
 def setup(params):
-  s3 = util.setup_client("s3", params)
-  create_bucket(s3, params["bucket"], params)
-  create_bucket(s3, params["log"], params)
-  clear_triggers(s3, params["bucket"], params)
+  account_id = int(boto3.client("sts").get_caller_identity().get("Account"))
+  sclient = boto3.client("s3")
+  lclient = boto3.client("lambda")
 
-  client = util.lambda_client(params)
-  upload_functions(client, params)
-  setup_triggers(params)
+  create_role(params["role"], account_id, params["region"])
+  create_bucket(sclient, params["bucket"], params)
+  create_bucket(sclient, params["log"], params)
+  clear_triggers(sclient, params["bucket"], params)
+  upload_functions(lclient, account_id, params)
+  setup_triggers(sclient, lclient, params)
 
 
 def main():
@@ -359,9 +393,6 @@ def main():
   parser.add_argument('--parameters', type=str, required=True, help="File containing parameters")
   args = parser.parse_args()
   params = json.loads(open(args.parameters).read())
-  [access_key, secret_key] = util.get_credentials("default")
-  params["access_key"] = access_key
-  params["secret_key"] = secret_key
   setup(params)
 
 
