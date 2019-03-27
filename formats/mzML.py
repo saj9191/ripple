@@ -5,6 +5,7 @@ import re
 import util
 import xml.etree.ElementTree as ET
 from enum import Enum
+from database import Entry
 from iterator import Delimiter, DelimiterPosition, OffsetBounds, Options
 from typing import Any, BinaryIO, ClassVar, Dict, Iterable, List, Optional, Pattern, Tuple
 
@@ -17,10 +18,9 @@ class Identifiers(Enum):
 class Iterator(iterator.Iterator[Identifiers]):
   chromatogram_end_index: ClassVar[int]
   chromatogram_list_close_tag: ClassVar[str] = "</chromotogramList>"
-  chromatogram_offset_regex: ClassVar[Pattern[str]] = re.compile('<offset idRef="TIC">(\d+)</offset>')
+  chromatogram_offset_regex: ClassVar[Pattern[str]] = re.compile('<offset idRef="TIC">([0-9]+)</offset>')
   chromatogram_start_index: ClassVar[int]
   delimiter: Delimiter = Delimiter("</spectrum>\n", "</offset>\n", DelimiterPosition.end)
-  chunk_size: ClassVar[int] = 1000
   footer_end_index: ClassVar[int]
   footer_start_index: ClassVar[int]
   header_end_index: ClassVar[int]
@@ -28,13 +28,13 @@ class Iterator(iterator.Iterator[Identifiers]):
   id_regex: ClassVar[Pattern[str]] = re.compile(".*scan=([0-9]+).*")
   identifiers: Identifiers
   index_list_offset: ClassVar[int]
-  index_list_offset_regex: ClassVar[Pattern[str]] = re.compile("<indexListOffset>(\d+)</indexListOffset>")
-  offset_regex: ClassVar[Pattern[str]] = re.compile("<offset[^>]*scan=[^>]*>(\d+)</offset>")
+  index_list_offset_regex: ClassVar[Pattern[str]] = re.compile("<indexListOffset>([0-9]+)</indexListOffset>")
+  offset_regex: ClassVar[Pattern[str]] = re.compile("<offset[^>]*scan=[^>]*>([0-9]+)</offset>")
   offset_end_index: int
   offset_start_index: int
   options: ClassVar[Options] = Options(has_header=True)
   spectrum_list_close_tag: ClassVar[str] = "</spectrumList>"
-  spectrum_list_count_regex: ClassVar[Pattern[str]] = re.compile('<spectrumList [\s\S]*count="(\d+)"')
+  spectrum_list_count_regex: ClassVar[Pattern[str]] = re.compile(r'<spectrumList [\s\S]*count="([0-9]+)"')
   num_spectra: int = -1
   xml_namespace: ClassVar[str] = "http://psi.hupo.org/ms/mzml"
 
@@ -45,7 +45,7 @@ class Iterator(iterator.Iterator[Identifiers]):
 
   @classmethod
   def __add_content__(cls: Any, content: str, f: BinaryIO) -> str:
-    f.write(content)
+    f.write(str.encode(content))
     return content
 
   @classmethod
@@ -88,42 +88,45 @@ class Iterator(iterator.Iterator[Identifiers]):
     return None
 
   def __get_header_offset__(self):
-    if "header_start_index" in self.obj.metadata:
-      self.header_start_index = int(self.obj.metadata["header_start_index"])
-      self.header_end_index = int(self.obj.metadata["header_end_index"])
+    metadata: Dict[str, str] = self.entry.get_metadata()
+    if "header_start_index" in metadata:
+      self.header_start_index = int(metadata["header_start_index"])
+      self.header_end_index = int(metadata["header_end_index"])
     else:
       self.header_start_index = 0
-      start_byte: int = max(0, self.index_list_offset - self.chunk_size)
-      end_byte: int = min(self.index_list_offset + self.chunk_size, self.obj.content_length)
-      stream: str = util.read(self.obj, start_byte, end_byte)
+      start_byte: int = max(0, self.index_list_offset - self.read_chunk_size)
+      end_byte: int = min(self.index_list_offset + self.read_chunk_size, self.entry.content_length())
+      stream: str = self.entry.get_range(start_byte, end_byte).decode("utf-8")
       offset_matches: List[Any] = list(self.offset_regex.finditer(stream))
       assert(len(offset_matches) > 0)
       self.header_end_index = int(offset_matches[0].group(1)) - 1
 
   def __get_footer_offset__(self):
-    if "footer_start_index" in self.obj.metadata:
-      self.footer_start_index = int(self.obj.metadata["footer_start_index"])
-      self.footer_end_index = int(self.obj.metadata["footer_end_index"])
+    metadata: Dict[str, str] = self.entry.get_metadata()
+    if "footer_start_index" in metadata:
+      self.footer_start_index = int(metadata["footer_start_index"])
+      self.footer_end_index = int(metadata["footer_end_index"])
     else:
       if self.chromatogram_start_index == -1:
-        start_byte = self.index_list_offset - self.chunk_size
+        start_byte = self.index_list_offset - self.read_chunk_size
       else:
-        start_byte = self.chromatogram_start_index - self.chunk_size
+        start_byte = self.chromatogram_start_index - self.read_chunk_size
       start_byte = max(0, start_byte)
-      end_byte = min(start_byte + self.chunk_size, self.obj.content_length)
-      stream = util.read(self.obj, start_byte, end_byte)
+      end_byte = min(start_byte + self.read_chunk_size, self.entry.content_length())
+      stream = self.entry.get_range(start_byte, end_byte).decode("utf-8")
       self.footer_start_index = start_byte + stream.rindex(self.spectrum_list_close_tag)
-      self.footer_end_index = self.obj.content_length
+      self.footer_end_index = self.entry.content_length()
 
   def __get_index_list_offset__(self):
-    if "index_list_offset" in self.obj.metadata:
-      self.index_list_offset = int(self.obj.metadata["index_list_offset"])
-      self.chromatogram_start_index = int(self.obj.metadata["chromatogram_start_index"])
-      self.chromatogram_end_index = int(self.obj.metadata["chromatogram_end_index"])
+    metadata: Dict[str, str] = self.entry.get_metadata()
+    if "index_list_offset" in metadata:
+      self.index_list_offset = int(metadata["index_list_offset"])
+      self.chromatogram_start_index = int(metadata["chromatogram_start_index"])
+      self.chromatogram_end_index = int(metadata["chromatogram_end_index"])
     else:
-      end_byte: int = self.obj.content_length
-      start_byte: int = end_byte - self.chunk_size
-      stream: str = util.read(self.obj, start_byte, end_byte)
+      end_byte: int = self.entry.content_length()
+      start_byte: int = max(0, end_byte - self.read_chunk_size)
+      stream: str = self.entry.get_range(start_byte, end_byte).decode("utf-8")
       m = self.index_list_offset_regex.search(stream)
       self.index_list_offset = int(m.group(1))
 
@@ -138,11 +141,11 @@ class Iterator(iterator.Iterator[Identifiers]):
   def __get_metadata__(self):
     self.__get_index_list_offset__()
     self.__get_header_offset__()
-    self.header = util.read(self.obj, self.header_start_index, self.header_end_index)
+    self.header = self.entry.get_range(self.header_start_index, self.header_end_index).decode("utf-8")
     self.__get_footer_offset__()
 
   def __get_offsets__(self, start_byte: int, end_byte: int, remainder: str=""):
-    stream = util.read(self.obj, start_byte, end_byte)
+    stream = self.entry.get_range(start_byte, end_byte).decode("utf-8")
     stream = remainder + stream
     offset_regex = list(self.offset_regex.finditer(stream))
     offsets = list(map(lambda r: int(r.group(1)), offset_regex))
@@ -174,7 +177,7 @@ class Iterator(iterator.Iterator[Identifiers]):
     last_match = None
     index: Optional[int] = None
     while start_byte < self.footer_end_index:
-      stream: str = util.read(self.obj, start_byte, end_byte)
+      stream: str = self.entry.get_range(start_byte, end_byte).decode("utf-8")
       stream = remainder + stream
       offset_matches = list(self.offset_regex.finditer(stream))
       index = start_byte - len(remainder)
@@ -231,13 +234,13 @@ class Iterator(iterator.Iterator[Identifiers]):
       self.spectra_end_index = self.footer_start_index - 1
 
   @classmethod
-  def combine(cls: Any, objs: List[Any], f: BinaryIO) -> Dict[str, str]:
+  def combine(cls: Any, entries: List[Entry], f: BinaryIO, extra: Dict[str, Any]) -> Dict[str, str]:
     metadata: Dict[str, str] = {}
     iterators = []
     count = 0
     header: str = ""
-    for obj in objs:
-      iterator = Iterator(obj)
+    for entry in entries:
+      iterator = Iterator(entry)
       iterators.append(iterator)
       count += iterator.get_item_count()
 
@@ -270,7 +273,7 @@ class Iterator(iterator.Iterator[Identifiers]):
     return metadata
 
   @classmethod
-  def from_array(cls: Any, items: List[Any], f: Optional[BinaryIO], extra: Dict[str, Any]) -> Dict[str, str]:
+  def from_array(cls: Any, items: List[Any], f: Optional[BinaryIO], extra: Dict[str, Any]) -> Tuple[str, Dict[str, str]]:
     metadata: Dict[str, str] = {}
     content: str = cls.__create_header__(f, extra["header"], len(items), metadata)
     offset = len(content)
@@ -288,10 +291,10 @@ class Iterator(iterator.Iterator[Identifiers]):
       count += 1
 
     cls.__add_footer__(f, content, offsets, metadata)
-    return metadata
+    return (content, metadata)
 
   def get_extra(self) -> Dict[str, Any]:
-    return { "header": self.header }
+    return {"header": self.header}
 
   @classmethod
   def get_identifier_value(cls: Any, item: str, identifier: Identifiers) -> float:
@@ -307,10 +310,11 @@ class Iterator(iterator.Iterator[Identifiers]):
     if self.num_spectra != -1:
       return self.num_spectra
 
-    if "num_spectra" in self.obj.metadata:
-      self.num_spectra = int(self.obj.metadata["num_spectra"])
+    metadata: Dict[str, str] = self.entry.get_metadata()
+    if "num_spectra" in metadata:
+      self.num_spectra = int(metadata["num_spectra"])
     else:
-      stream = util.read(self.obj, 0, self.header_end_index)
+      stream = self.entry.get_range(0, self.header_end_index).decode("utf-8")
       m = self.spectrum_list_count_regex.search(stream)
       assert(m is not None)
       self.num_spectra = int(m.group(1))
@@ -329,22 +333,23 @@ class Iterator(iterator.Iterator[Identifiers]):
     return self.offset_start_index
 
   @classmethod
-  def to_array(cls: Any, content: str) -> Iterable[Any]:
-    content = "<data>" + content + "</data>"
+  def to_array(cls: Any, content: bytes) -> Iterable[Any]:
+    content = "<data>" + content.decode("utf-8") + "</data>"
     root = ET.fromstring(content)
-    return root.iter("spectrum")
+    return filter(lambda item: cls.__cv_param__(item, "ms level") == 2, root.iter("spectrum"))
 
-  def transform(self, stream: str, offset_bounds: Optional[OffsetBounds]) -> Tuple[str, Optional[OffsetBounds]]:
+  def transform(self, stream: bytes, offset_bounds: Optional[OffsetBounds]) -> Tuple[bytes, Optional[OffsetBounds]]:
     start_index: int
     end_index: int
     if not offset_bounds:
       start_index = self.spectra_start_index
       end_index = self.spectra_end_index
     else:
-      offsets: List[int] = list(map(lambda r: int(r.group(1)), self.offset_regex.finditer(stream)))
+      s: str = stream.decode("utf-8")
+      offsets: List[int] = list(map(lambda r: int(r.group(1)), self.offset_regex.finditer(s)))
       assert(len(offsets) > 0)
-      stream = util.read(self.obj, offset_bounds.end_index, offset_bounds.end_index + self.chunk_size)
-      next_offsets: List[int] = list(map(lambda r: int(r.group(1)), self.offset_regex.finditer(stream)))
+      s = self.entry.get_range(offset_bounds.end_index, offset_bounds.end_index + self.read_chunk_size).decode("utf-8")
+      next_offsets: List[int] = list(map(lambda r: int(r.group(1)), self.offset_regex.finditer(s)))
       offset_bounds.start_index = offsets[0]
       if len(next_offsets) > 0:
         offset_bounds.end_index = next_offsets[0] - 1
@@ -353,5 +358,5 @@ class Iterator(iterator.Iterator[Identifiers]):
       start_index = offset_bounds.start_index
       end_index = offset_bounds.end_index
     assert(start_index <= end_index)
-    stream = util.read(self.obj, start_index, end_index)
+    stream = self.entry.get_range(start_index, end_index)
     return (stream, OffsetBounds(start_index, end_index))

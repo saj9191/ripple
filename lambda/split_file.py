@@ -1,63 +1,58 @@
 import boto3
 import pivot
+import threading
 import util
+from database import Database
 from typing import Any, Dict, List, Optional
 
 
-def create_payload(bucket: str, key: str, offsets: List[int], prefix: int, file_id: Optional[int]=None, num_files: Optional[int]=None):
-  payload = {
-    "Records": [{
-      "s3": {
-        "bucket": {
-          "name": bucket
-        },
-        "object": {
-          "key": key,
-        },
-        "extra_params": {
-          "prefix": prefix,
-          "offsets": offsets,
-        }
-      }
-    }]
-  }
-  if file_id is not None:
-    payload["Records"][0]["s3"]["extra_params"]["file_id"] = file_id
-  if num_files is not None:
-    payload["Records"][0]["s3"]["extra_params"]["num_files"] = num_files
-
-  return payload
-
-
-def split_file(bucket_name: str, key: str, input_format: Dict[str, Any], output_format: Dict[str, Any], offsets: List[int], params: Dict[str, Any]):
+def split_file(database: Database, bucket_name: str, key: str, input_format: Dict[str, Any], output_format: Dict[str, Any], offsets: List[int], params: Dict[str, Any]):
   split_size = params["split_size"]
 
-  s3 = params["s3"] if "s3" in params else boto3.resource("s3")
-  client = params["client"] if "client" in params else boto3.client("lambda")
-
+  input_bucket = bucket_name
   if util.is_set(params, "ranges"):
-    [input_bucket, input_key, ranges] = pivot.get_pivot_ranges(bucket_name, key)
+    if "input_prefix" in params:
+      obj = database.get_entries(bucket_name, params["input_prefix"])[0]
+      input_key = obj.key
+      pivot_key = database.get_entries(bucket_name, "4/")[0].key # TODO Unhardcode
+      [_, _, ranges] = pivot.get_pivot_ranges(bucket_name, pivot_key, params)
+    else:
+      [input_bucket, input_key, ranges] = pivot.get_pivot_ranges(bucket_name, key, params)
+      obj = database.get_entry(input_bucket, input_key)
   else:
-    input_bucket = bucket_name
     input_key = key
+    obj = database.get_entry(input_bucket, input_key)
 
-  obj = s3.Object(input_bucket, input_key)
+  output_format["ext"] = obj.key.split(".")[-1]
+  assert("ext" not in output_format or output_format["ext"] != "pivot")
+  file_id = 1 
+  content_length: int = obj.content_length()
+  #num_files = 10
+  num_files = int((content_length + split_size - 1) / split_size)
 
-  file_id = params["file_id"] if "file_id" in params else 1
-
-  num_files = int((obj.content_length + split_size - 1) / split_size)
-
+  threads = []
+  token = "{0:f}-{1:d}".format(output_format["timestamp"], output_format["nonce"])
   while file_id <= num_files:
-    offsets = [(file_id - 1) * split_size, min(obj.content_length, (file_id) * split_size) - 1]
-    payload = create_payload(input_bucket, input_key, offsets, output_format["prefix"], file_id, num_files)
-
-    s3_params = payload["Records"][0]["s3"]
+    offsets = [(file_id - 1) * split_size, min(content_length, (file_id) * split_size) - 1]
+    extra_params = {**output_format, **{
+      "file_id": file_id,
+      "num_files": num_files,
+      "offsets": offsets,
+    }}
 
     if util.is_set(params, "ranges"):
-      s3_params["extra_params"]["pivots"] = ranges
+      extra_params["pivots"] = ranges
 
-    util.invoke(client, params["output_function"], params, payload)
+    payload = database.create_payload(params["bucket"], input_key, extra_params)
+    payload["log"] = [token, output_format["prefix"], output_format["bin"], output_format["num_bins"], file_id, num_files]
+
+    threads.append(threading.Thread(target=database.invoke, args=(params["output_function"], payload)))
+    threads[-1].start()
     file_id += 1
+
+  for thread in threads:
+    thread.join()
+  return True
 
 
 def handler(event, context):

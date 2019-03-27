@@ -2,13 +2,13 @@
 	"agg_period": 5,
 	"bucket": "maccoss-tide",
   "distribution": "diurnal",
-	"duration": 7200,
-	"idle": 300,
+	"duration": 14400,
+	"idle": 1800,
 	"input_bucket": "tide-source-data",
 	"input_prefix": "DIA-Files",
-	"interval": 600,
-	"num_interval_requests": 5,
-	"num_threads": 5,
+	"interval": 1800,
+	"num_interval_requests": 15,
+	"num_threads": 20,
 	"region": "us-west-2",
 	"start_offset": 0
 }

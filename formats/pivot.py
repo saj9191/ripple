@@ -1,6 +1,7 @@
 import boto3
 import iterator
 import util
+from database import Entry
 from iterator import Delimiter, DelimiterPosition, OffsetBounds, Options
 from typing import Any, BinaryIO, ClassVar, Dict, List, Optional
 
@@ -8,26 +9,28 @@ from typing import Any, BinaryIO, ClassVar, Dict, List, Optional
 class Iterator(iterator.Iterator[None]):
   delimiter: Delimiter = Delimiter(item_token="\n\n", offset_token="\n\n", position=DelimiterPosition.inbetween)
   identifiers: None
-  increment: ClassVar[int] = 100  # TODO: Unhardcode
+  increment: ClassVar[int] = 25  # TODO: Unhardcode
 
-  def __init__(self, obj: Any, offset_bounds: Optional[OffsetBounds] = None):
-    iterator.Iterator.__init__(self, Iterator, obj, offset_bounds)
+  def __init__(self, entry: Any, offset_bounds: Optional[OffsetBounds] = None):
+    iterator.Iterator.__init__(self, Iterator, entry, offset_bounds)
 
   @classmethod
-  def combine(cls: Any, objs: List[Any], f: BinaryIO) -> Dict[str, str]:
-    pivots: List[int] = []
+  def combine(cls: Any, entries: List[Entry], f: BinaryIO, extra: Dict[str, Any]) -> Dict[str, str]:
+    pivots = set()
     file_key: Optional[str] = None
-    for obj in objs:
-      content: str = util.read(obj, 0, obj.content_length)
+    for entry in entries:
+      content: str = entry.get_content().decode("utf-8")
       [file_bucket, file_key, pivot_content] = content.split("\n")
       pivot_content: str = pivot_content.strip()
       if len(pivot_content) > 0:
-        new_pivots: List[int] = list(map(lambda p: float(p), pivot_content.split("\t")))
-        pivots += new_pivots
+        new_pivots = set(list(map(lambda p: float(p), pivot_content.split("\t"))))
+        pivots = pivots.union(new_pivots)
     assert(file_key is not None)
 
+    pivots = list(pivots)
     pivots.sort()
     super_pivots: List[int] = []
+    # num_bins = 10 # TODO: Figure out what to do if we want to hardcode this
     num_bins = int((len(pivots) + cls.increment) / cls.increment)
     increment = float(len(pivots)) / num_bins
 
@@ -46,14 +49,9 @@ class Iterator(iterator.Iterator[None]):
 
 
 def get_pivot_ranges(bucket_name, key, params={}):
-  if "s3" in params:
-    s3 = params["s3"]
-  else:
-    s3 = boto3.resource("s3")
   ranges = []
 
-  obj = s3.Object(bucket_name, key)
-  content = util.read(obj, 0, obj.content_length)
+  content: str = params["database"].get_entry(bucket_name, key).get_content().decode("utf-8")
   [file_bucket, file_key, pivot_content] = content.split("\n")
   pivots = list(map(lambda p: float(p), pivot_content.split("\t")))
 

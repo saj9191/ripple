@@ -8,10 +8,22 @@ import subprocess
 import util
 
 
-def upload_function_code(client, zip_file, name, p, create):
+def get_layers(region, account_id, imports):
+  layers = []
+  for imp in imports:
+    if imp  == "PIL":
+        layers.append("arn:aws:lambda:{0:s}:{1:d}:layer:PIL:2".format(region, account_id))
+    elif imp == "sklearn":
+      layers.append("arn:aws:lambda:{0:s}:{1:d}:layer:Sklearn:1".format(region, account_id))
+    elif imp == "numpy":
+      layers.append("arn:aws:lambda:{0:s}:{1:d}:layer:numpy:1".format(region, account_id))
+    else:
+      raise Exception("Cannot find layer for", imp)
+  return layers
+
+def upload_function_code(client, zip_file, name, account_id, p, create):
   zipped_code = open(zip_file, "rb").read()
   fparams = p["functions"][name]
-  account_id = int(boto3.client("sts").get_caller_identity().get("Account"))
   if create:
     response = client.create_function(
       FunctionName=name,
@@ -21,11 +33,9 @@ def upload_function_code(client, zip_file, name, p, create):
       Code={
         "ZipFile": zipped_code
       },
-      Tags={
-        "Application": p["tag"],
-      },
       Timeout=p["timeout"],
-      MemorySize=fparams["memory_size"]
+      MemorySize=fparams["memory_size"],
+      Layers=get_layers(p["region"], account_id, fparams["imports"])
     )
     assert(response["ResponseMetadata"]["HTTPStatusCode"] == 201)
 
@@ -35,17 +45,11 @@ def upload_function_code(client, zip_file, name, p, create):
       ZipFile=zipped_code
     )
     assert(response["ResponseMetadata"]["HTTPStatusCode"] == 200)
-    response = client.tag_resource(
-      Resource="arn:aws:lambda:{0:s}:{1:d}:function:{2:s}".format(p["region"], account_id, name),
-      Tags={
-        "Application": p["tag"],
-      }
-    )
-    assert(response["ResponseMetadata"]["HTTPStatusCode"] == 204)
     response = client.update_function_configuration(
       FunctionName=name,
       Timeout=p["timeout"],
-      MemorySize=fparams["memory_size"]
+      MemorySize=fparams["memory_size"],
+      Layers=get_layers(p["region"], account_id, fparams["imports"])
     )
     assert(response["ResponseMetadata"]["HTTPStatusCode"] == 200)
     try:
@@ -55,10 +59,10 @@ def upload_function_code(client, zip_file, name, p, create):
       )
     except Exception as e:
       print("Cannot remove permissions for", name, p["bucket"])
+      print(e)
 
 
 def create_parameter_files(zip_directory, function_name, params):
-  files = []
   for i in range(len(params["pipeline"])):
     pparams = params["pipeline"][i]
     if pparams["name"] == function_name:
@@ -72,8 +76,6 @@ def create_parameter_files(zip_directory, function_name, params):
       f = open(json_path, "w")
       f.write(json.dumps(p))
       f.close()
-      files.append(name)
-  return files
 
 
 def copy_file(directory, file_path):
@@ -83,45 +85,35 @@ def copy_file(directory, file_path):
   return file_name
 
 
-def zip_libraries(zip_directory):
-  files = []
-  for folder, subdir, ff in os.walk("libraries"):
-    if folder.count("/") == 0:
-      for d in subdir:
-        shutil.copytree("libraries/" + d, zip_directory + "/" + d)
-        files.append(d)
-  return files
+def zip_libraries(zip_directory, dependencies):
+  shutil.copytree(dependencies, zip_directory)
 
 
 def zip_formats(zip_directory, fparams, params):
-  files = []
   if "format" in fparams:
     form = fparams["format"]
     if "dependencies" in params and form in params["dependencies"]["formats"]:
       for file in params["dependencies"]["formats"][form]:
-        files.append(copy_file(zip_directory, file))
-    files.append(copy_file(zip_directory, "formats/{0:s}.py".format(form)))
-  return files
+        copy_file(zip_directory, file)
+    copy_file(zip_directory, "formats/{0:s}.py".format(form))
 
 
 def zip_application(zip_directory, fparams):
-  files = []
   if "application" in fparams:
-    files.append(copy_file(zip_directory, "applications/{0:s}.py".format(fparams["application"])))
-  return files
+    copy_file(zip_directory, "applications/{0:s}.py".format(fparams["application"]))
 
 
 def zip_ripple_file(zip_directory, fparams):
-  files = []
   file = "{0:s}.py".format(fparams["file"])
   shutil.copyfile("lambda/{0:s}".format(file), "{0:s}/{1:s}".format(zip_directory, file))
-  files.append(file)
-  for file in ["formats/iterator.py", "formats/pivot.py", "util.py"]:
-    files.append(copy_file(zip_directory, file))
-  return files
+  for file in ["formats/iterator.py", "formats/pivot.py", "database.py", "util.py"]:
+    copy_file(zip_directory, file)
+  for format in fparams["formats"]:
+    copy_file(zip_directory, "formats/{0:s}.py".format(format))
 
 
-def upload_function(client, name, functions, params):
+
+def upload_function(client, name, account_id, functions, params):
   zip_directory = "lambda_dependencies"
   zip_file = "lambda.zip"
 
@@ -129,21 +121,16 @@ def upload_function(client, name, functions, params):
     shutil.rmtree(zip_directory)
 
   fparams = params["functions"][name]
-  files = []
   os.makedirs(zip_directory)
-  if "knn" in params["folder"]:
-    raise Exception("Unhardcode")
-    files += zip_libraries(zip_directory)
 
-  files += zip_ripple_file(zip_directory, fparams)
-  files += zip_application(zip_directory, fparams)
-  files += zip_formats(zip_directory, fparams, params)
-  files += create_parameter_files(zip_directory, name, params)
+  zip_ripple_file(zip_directory, fparams)
+  zip_application(zip_directory, fparams)
+  zip_formats(zip_directory, fparams, params)
+  create_parameter_files(zip_directory, name, params)
   os.chdir(zip_directory)
-  subprocess.call("zip -r ../{0:s} {1:s}".format(zip_file, " ".join(files)), shell=True)
+  subprocess.call("zip -r9 ../{0:s} .".format(zip_file), shell=True)
   os.chdir("..")
-
-  upload_function_code(client, zip_file, name, params, name not in functions)
+  upload_function_code(client, zip_file, name, account_id, params, name not in functions)
   os.remove(zip_file)
   shutil.rmtree(zip_directory)
 
@@ -159,7 +146,6 @@ def add_sort_pipeline(sort_params):
       raise Exception("Cannot add sort pipeline. Function with name " + name + " already exists")
 
     function_params["memory_size"] = 1024
-    function_params["chunk_size"] = sort_params["chunk_size"]
     functions[name] = function_params
     pipeline_params["name"] = name
     pipeline.append(pipeline_params)
@@ -168,6 +154,7 @@ def add_sort_pipeline(sort_params):
     "file": "split_file",
     "format": fformat,
     "split_size": sort_params["chunk_size"],
+    "output_function": "pivot-" + fformat,
   }, {
     "ranges": False,
   })
@@ -175,7 +162,7 @@ def add_sort_pipeline(sort_params):
   add_function("pivot-" + fformat, {
     "file": "pivot_file",
     "format": fformat,
-    "identifier": sort_params["identifier"]
+    "identifier": sort_params["identifier"],
   }, {})
 
   add_function("combine-pivot-" + fformat, {
@@ -184,29 +171,43 @@ def add_sort_pipeline(sort_params):
     "sort": True,
   }, {})
 
-  pipeline.append({
-    "name": "split-" + fformat,
-    "ranges": True
-  })
+  name = "split-" + fformat
+  if name in functions:
+    pipeline.append({
+      "name": name,
+      "file": "split_file",
+      "ranges": True,
+      "output_function": "sort-" + fformat
+    })
+  else:
+    add_function(name, {
+      "file": "split_file",
+      "format": fformat,
+      "split_size": sort_params["chunk_size"],
+      "output_function": "pivot-" + fformat,
+    }, {
+      "ranges": True,
+    })
 
   add_function("sort-" + fformat, {
     "format": fformat,
     "file": "sort",
-    "identifier": sort_params["identifier"]
+    "identifier": sort_params["identifier"],
   }, {})
 
-  add_function("combine-" + fformat, {
-    "file": "combine_files",
-    "format": fformat,
-    "sort": False,
-  }, {})
+  if sort_params["combine"]:
+    add_function("combine-" + fformat, {
+      "format": fformat,
+      "file": "combine_files",
+      "sort": False,
+    }, {})
 
   return functions, pipeline
 
 
 def process_functions(params):
   pipeline = params["pipeline"]
-  variable_to_step = { "input": 0 }
+  variable_to_step = {"input": 0}
   i = 0
 
   while i < len(pipeline):
@@ -215,30 +216,34 @@ def process_functions(params):
       pipeline[i]["output_function"] = pipeline[i + 1]["name"]
 
     fn_params = params["functions"][name]
-    if "output" in fn_params:
-      variable_to_step[fn_params["output"]] = i + 1
-    if "input" in fn_params:
-      fn_params["input_prefix"] = variable_to_step[fn_params["input"]]
-    if params["functions"][name]["file"] == "sort":
+    if "output" in pipeline[i]:
+      variable_to_step[pipeline[i]["output"]] = i + 1
+    if "input" in pipeline[i]:
+      pipeline[i]["input_prefix"] = variable_to_step[pipeline[i]["input"]]
+    if False:#params["functions"][name]["file"] == "sort":
       del params["functions"][name]
-
       sort_functions, sort_pipeline = add_sort_pipeline(fn_params)
       pipeline = pipeline[:i] + sort_pipeline + pipeline[i+1:]
-      params["functions"] = { **params["functions"], **sort_functions }
+      params["functions"] = {**params["functions"], **sort_functions}
+      for j in range(len(sort_pipeline)):
+        pipeline[i + j - 1]["output_function"] = pipeline[i + j]["name"]
       i += len(sort_pipeline)
     else:
       i += 1
+    if i - 1 != len(pipeline) - 1:
+      pipeline[i - 1]["output_function"] = pipeline[i]["name"]
+
+    if "output_function" in pipeline[-1]:
+      del pipeline[-1]["output_function"]
 
   params["pipeline"] = pipeline
 
 
-def upload_functions(client, params):
-  response = client.list_functions()
+def upload_functions(lclient, account_id, params):
+  response = lclient.list_functions()
   function_names = set(list(map(lambda f: f["FunctionName"], response["Functions"])))
-  process_functions(params)
-
   for name in params["functions"]:
-    upload_function(client, name, function_names, params)
+    upload_function(lclient, name, account_id, function_names, params)
 
 
 def setup_notifications(client, bucket, config):
@@ -253,28 +258,27 @@ def clear_triggers(client, bucket, params):
   setup_notifications(client, bucket, {})
 
 
-def create_bucket(client, bucket_name, params):
+def bucket_exists(client, bucket_name):
   try:
-    client.create_bucket(
-      ACL="public-read-write",
-      Bucket=bucket_name,
-      CreateBucketConfiguration={
-        "LocationConstraint": params["region"],
-      }
-    )
+    client.head_bucket(Bucket=bucket_name)
+    return True
   except botocore.exceptions.ClientError as ex:
-    if "BucketAlreadyOwnedByYou" not in str(ex):
-      raise ex
+    return False
 
-  client.put_bucket_tagging(
-    Bucket=bucket_name,
-    Tagging={
-      "TagSet": [{
-        "Key": "Application",
-        "Value": params["tag"],
-      }]
-    }
-  )
+
+def create_bucket(client, bucket_name, params):
+  if not bucket_exists(client, bucket_name):
+    try:
+      client.create_bucket(
+        ACL="public-read-write",
+        Bucket=bucket_name,
+        CreateBucketConfiguration={
+          "LocationConstraint": params["region"],
+        }
+      )
+    except botocore.exceptions.ClientError as ex:
+      if "BucketAlreadyOwnedByYou" not in str(ex):
+        raise ex
 
 
 def function_arns(params):
@@ -285,23 +289,14 @@ def function_arns(params):
   return name_to_arn
 
 
-def setup_triggers(params):
+def setup_triggers(sclient, lclient, params):
   name_to_arn = function_arns(params)
 
-  prefixes = {}
-  for name in params["functions"]:
-    prefixes[name] = []
-
-  for i in range(len(params["pipeline"])):
-    pparams = params["pipeline"][i]
-    if i == 0 or "output_function" not in params["pipeline"][i - 1]:
-      prefixes[pparams["name"]].append(i)
-
-  client = util.setup_client("s3", params)
-  lambda_client = util.lambda_client(params)
   configurations = []
   account_id = boto3.client("sts").get_caller_identity().get("Account")
-  for name in params["functions"]:
+
+  for i in range(len(params["pipeline"])):
+    name = params["pipeline"][i]["name"]
     args = {
       "FunctionName": name,
       "StatementId": name + "-" + params["bucket"],
@@ -312,41 +307,89 @@ def setup_triggers(params):
     }
 
     try:
-      lambda_client.add_permission(**args)
+      lclient.add_permission(**args)
     except Exception:
       pass
 
-    for prefix in prefixes[name]:
-      configurations.append({
-        "LambdaFunctionArn": name_to_arn[name],
-        "Events": ["s3:ObjectCreated:*"],
-        "Filter": {
-          "Key": {
-            "FilterRules": [{"Name": "prefix", "Value": "{0:d}/".format(prefix)}]
-          }
-        }
-      })
-
-      if "suffix" in params["functions"][name]:
-        configurations[-1]["Filter"]["Key"]["FilterRules"].append(
-          {"Name": "suffix", "Value": params["functions"][name]["suffix"]}
-        )
+  configurations.append({
+    "LambdaFunctionArn": name_to_arn[params["pipeline"][0]["name"]],
+    "Events": ["s3:ObjectCreated:*"],
+    "Filter": {
+      "Key": {
+        "FilterRules": [{"Name": "prefix", "Value": "0/"}]
+      }
+    }
+  })
 
   config = {
     "LambdaFunctionConfigurations": configurations,
   }
-  setup_notifications(client, params["bucket"], config)
+  setup_notifications(sclient, params["bucket"], config)
+
+
+def create_role(role, account_id, region):
+  role_name = role.split("/")[-1]
+  client = boto3.client("iam")
+  roles = list(filter(lambda r: r["RoleName"] == role_name, client.list_roles()["Roles"]))
+  if len(roles) == 0:
+    client.create_role(
+      RoleName=role,
+      AssumeRolePolicyDocument=json.dumps({
+        "Version": "2012-10-17",
+        "Statement": [{
+          "Sid": "",
+          "Effect": "Allow",
+          "Principal": {
+            "Service": "lambda.amazonaws.com",
+            "Action": "sts:AssumeRole",
+          }
+        }]
+    }))
+
+    extra = {
+      "Version": "2012-10-17",
+      "Statement": [{
+        "Effect": "Allow",
+        "Action": [
+          "s3:ListBucket",
+          "s3:Put*",
+          "s3:Get*",
+          "s3:*MultipartUpload*",
+        ],
+        "Resource": "*",
+      }, {
+        "Effect": "Allow",
+        "Action": "logs:CreateLogGroup",
+        "Resource": "arn:aws:logs:{0:s}:{1:d}*".format(region, account_id)
+      }, {
+        "Effect": "Allow",
+        "Action": [
+          "logs:CreateLogStream",
+          "logs:PutLogEvents",
+        ],
+        "Resource": [
+          "arn:aws:logs:{0:s}:{1:d}:log-group:/aws/lambda/*:**".format(region, account_id)
+        ]
+      }, {
+        "Effect": "Allow",
+        "Action": "sts:AssumeRole",
+        "Resource": "arn:aws:iam::{0:d}:role/*".format(account_id)
+      }]
+    }
+    iam.RolePolicy(role).put(PolicyDocument=json.dumps(extra))
 
 
 def setup(params):
-  s3 = util.setup_client("s3", params)
-  create_bucket(s3, params["bucket"], params)
-  create_bucket(s3, params["log"], params)
-  clear_triggers(s3, params["bucket"], params)
+  account_id = int(boto3.client("sts").get_caller_identity().get("Account"))
+  sclient = boto3.client("s3")
+  lclient = boto3.client("lambda")
 
-  client = util.lambda_client(params)
-  upload_functions(client, params)
-  setup_triggers(params)
+  create_role(params["role"], account_id, params["region"])
+  create_bucket(sclient, params["bucket"], params)
+  create_bucket(sclient, params["log"], params)
+  clear_triggers(sclient, params["bucket"], params)
+  upload_functions(lclient, account_id, params)
+  setup_triggers(sclient, lclient, params)
 
 
 def main():
@@ -354,10 +397,6 @@ def main():
   parser.add_argument('--parameters', type=str, required=True, help="File containing parameters")
   args = parser.parse_args()
   params = json.loads(open(args.parameters).read())
-  process_functions(params)
-  [access_key, secret_key] = util.get_credentials("default")
-  params["access_key"] = access_key
-  params["secret_key"] = secret_key
   setup(params)
 
 

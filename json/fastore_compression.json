@@ -6,37 +6,75 @@
 	"folder": "fastore",
 	"tag": "fastore",
 	"timeout": 600,
-	"num_bins": 50,
-	"bucket": "jessie-try-fastore",
+	"bucket": "maccoss-methyl",
 	"storage_class": "STANDARD",
 	"credential_profile": "default",
-	"role": "lambda_basic_execution",
-	"log": "jessie-try-log",
-	"sample_input": true,
-	"sample_bucket": "jessie-fastore-source",
-	"stats": false,
-	"setup": true,
+	"role": "service-role/lambdaFullAccessRole",
+	"log": "maccoss-methyl-log",
 	"functions": {
-		"sort-fastq": {
-			"file": "sort",
-			"chunk_size": 1000,
+	  "initiate-reference": {
+		  "file": "initiate",
+			"memory_size": 1024,
+			"trigger_bucket": "maccoss-methyl-data",
+			"trigger_key": "reference.fastq"
+		},
+		"split-fastq": {
+		  "file": "split_file",
+			"format": "fastq",
+			"memory_size": 1024,
+			"split_size": 10000000
+		},
+		"pivot-fastq": {
+			"file": "pivot_file",
 			"format": "fastq",
 			"identifier": "signature",
 			"memory_size": 1024
+		},
+		"combine-pivot-fastq": {
+			"file": "combine_files",
+			"format": "pivot",
+			"memory_size": 1024,
+			"sort": true
+		},
+		"sort-fastq": {
+			"file": "sort",
+			"format": "fastq",
+			"identifier": "signature",
+			"memory_size": 1024
+		},
+		"combine-fastq": {
+			"file": "combine_files",
+			"format": "fastq",
+			"memory_size": 1024,
+			"sort": false
 		},
 		"compress-fastore": {
 			"file": "application",
 			"format": "fastq",
 			"application": "compress_fastore",
-			"program_bucket": "jessie-fastore-program",
-			"memory_size": 1024,
-			"action": "compress"
+			"program_bucket": "maccoss-methyl-data",
+			"memory_size": 3008
+		},
+	  "initiate-input": {
+		  "file": "initiate",
+			"memory_size": 1024
 		}
 	},
 	"pipeline": [{
+		"name": "split-fastq",
+		"ranges": false
+	}, {
+		"name": "pivot-fastq"
+	}, {
+		"name": "combine-pivot-fastq"
+	}, {
+    "name": "split-fastq",
+		"ranges": true
+	}, {
 		"name": "sort-fastq"
 	}, {
+		"name": "combine-fastq"
+	}, {
 		"name": "compress-fastore"
-	}
-	]
+	}]
 }

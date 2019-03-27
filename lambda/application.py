@@ -1,32 +1,31 @@
-import boto3
 import importlib
 import util
+from database import Database
 from iterator import OffsetBounds
 from typing import Any, Dict, List
 
 
-def run_application(bucket_name: str, key: str, input_format: Dict[str, Any], output_format: Dict[str, Any], offsets: List[int], params: Dict[str, Any]):
-  s3 = boto3.resource('s3')
+def run_application(d: Database, bucket_name: str, key: str, input_format: Dict[str, Any], output_format: Dict[str, Any], offsets: List[int], params: Dict[str, Any]):
   temp_file = "/tmp/{0:s}".format(key)
   util.make_folder(util.parse_file_name(key))
 
   if len(offsets) == 0:
-    with open(temp_file, "wb+") as fb:
-      s3.Bucket(bucket_name).download_fileobj(key, fb)
+    d.download(bucket_name, key, temp_file)
   else:
-    obj = s3.Object(bucket_name, key)
-    format_lib = importlib.import_module(params["format"])
+    obj = d.get_entry(bucket_name, key)
+    format_lib = importlib.import_module(params["input_format"])
     iterator_class = getattr(format_lib, "Iterator")
     iterator = iterator_class(obj, OffsetBounds(offsets[0], offsets[1]))
     items = iterator.get(iterator.get_start_index(), iterator.get_end_index())
-    with open(temp_file, "w+") as f:
+    with open(temp_file, "wb+") as f:
       items = list(items)
       iterator_class.from_array(list(items), f, iterator.get_extra())
 
   application_lib = importlib.import_module(params["application"])
   application_method = getattr(application_lib, "run")
-  output_files = application_method(temp_file, params, input_format, output_format, offsets)
+  output_files = application_method(d, temp_file, params, input_format, output_format, offsets)
 
+  found = False
   for output_file in output_files:
     p = util.parse_file_name(output_file.replace("/tmp/", ""))
     if p is None:
@@ -37,7 +36,9 @@ def run_application(bucket_name: str, key: str, input_format: Dict[str, Any], ou
     else:
       new_key = util.file_name(p)
 
-    util.write(params["bucket"], new_key, open(output_file, "rb"), {}, params)
+    with open(output_file, "rb") as f:
+      d.put(params["bucket"], new_key, f, {})
+  return True
 
 
 def handler(event, context):

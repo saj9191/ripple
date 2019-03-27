@@ -1,7 +1,7 @@
 import boto3
 import util
 
-num_entries_per_file = 90*1000
+num_entries_per_file = 180*1000
 num_entries = 370261379
 num_files = (num_entries + num_entries_per_file - 1) / num_entries_per_file
 
@@ -13,7 +13,7 @@ session = boto3.Session(
   region_name="us-west-2"
 )
 s3 = session.resource("s3")
-bucket_name = "ssw-database"
+bucket_name = "ssw-database-west-1"
 #bucket = s3.Bucket(bucket_name)
 #bucket.objects.all().delete()
 
@@ -24,7 +24,7 @@ def add(file_id, content):
 
 
 
-with open("data/uniprot-all.fasta", "r") as f:
+with open("../data/uniprot-all.fasta", "r") as f:
   count = 0
   file_id = 1
   content = ""

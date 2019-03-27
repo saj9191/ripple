@@ -47,9 +47,6 @@ class Master:
     self.total_node_count = 0
 
   def __check_for_new_items__(self):
-    if len(self.running_nodes) == 0:
-      return
-
     sqs = boto3.client("sqs", region_name=self.params["region"])
     response = sqs.receive_message(
       AttributeNames=["SentTimestamp"],
@@ -124,7 +121,7 @@ class Master:
     print("Number of Starting Nodes", len(self.starting_nodes))
     print("Number of Terminating Nodes", len(self.terminating_nodes))
     print("")
-    return (cpu_average, num_tasks, num_tasks_average)
+    return (max(cpu_average, mem_average), num_tasks, num_tasks_average)
 
   def __create_node__(self):
     self.starting_nodes.append(node.Node(self.total_node_count, self.s3_application_url, self.pending_tasks, self.results_folder, self.params))
@@ -132,24 +129,30 @@ class Master:
 
   def __scale_nodes__(self, cpu_average, num_tasks_average):
     if len(self.starting_nodes) == 0 and len(self.running_nodes) < self.params["max_nodes"]:
-      if (len(self.starting_nodes + self.running_nodes) == 0 and len(self.pending_tasks) > 0) or cpu_average >= self.params["scale_up_utilization"]:
+      if (len(self.starting_nodes + self.running_nodes) == 0 and len(self.pending_tasks) > 0):
+        self.__create_node__()
+        self.scale_up_start_time = time.time()
+      elif cpu_average >= self.params["scale_up_utilization"]:
         if self.scale_up_start_time is None:
           self.scale_up_start_time = time.time()
         if time.time() - self.scale_up_start_time > self.params["scale_time"]:
           self.__create_node__()
-          self.scale_up_start_time = time.time()
       else:
         self.scale_up_start_time = None
 
-    if len(self.terminating_nodes) == 0:
-      if cpu_average <= self.params["scale_down_utilization"] and len(self.running_nodes) > 0:
-        self.running_nodes = sorted(self.running_nodes, key=lambda n: n.cpu_utilization)
-        if self.scale_down_start_time is None:
-          self.scale_down_start_time = time.time()
-        if time.time() - self.scale_down_start_time > self.params["scale_time"]:
-          if len(self.running_nodes) > 1 or len(self.pending_tasks) == 0:
-            self.__terminate_node__()
+    if len(self.terminating_nodes) == 0 and len(self.running_nodes) > 0:
+      if cpu_average <= self.params["scale_down_utilization"]:
+        if len(self.running_nodes) > 1 or len(self.running_nodes[0].tasks) == 0:
+          self.running_nodes = sorted(self.running_nodes, key=lambda n: n.cpu_utilization)
+          if self.scale_down_start_time is None:
             self.scale_down_start_time = time.time()
+          now = time.time()
+          if now - self.scale_down_start_time > self.params["scale_time"]:
+            if len(self.running_nodes) > 1 or len(self.pending_tasks) == 0:
+              self.__terminate_node__()
+              self.scale_down_start_time = time.time()
+        else:
+          self.scale_down_start_time = None
       else:
         self.scale_down_start_time = None
 
@@ -188,11 +191,13 @@ class Master:
     self.running_nodes = []
     self.starting_nodes = []
     while len(self.terminating_nodes) > 0:
+      print("Shutting down!", self.running)
       self.__check_nodes__()
       time.sleep(10)
 
   def run(self):
-    while len(self.pending_tasks) > 0 or self.num_tasks > 0 or self.running:
+    nodes = self.starting_nodes + self.running_nodes + self.terminating_nodes
+    while len(self.pending_tasks) > 0 or self.num_tasks > 0 or len(nodes) > 0 or self.running:
       self.__check_for_new_items__()
       self.__check_nodes__()
       self.__start_tasks__()
