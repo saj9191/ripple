@@ -24,9 +24,15 @@ elif [ "$1" == "format" ]; then
     pattern="format_${2}_test.py"
 	fi
 elif [ "$1" == "pipeline" ]; then
-  pattern="pipeline_*_test.py"
+  export PYTHONPATH="$PYTHONPATH:$PWD/applications"
+  export PYTHONPATH="$PYTHONPATH:$PWD/lambda"
+	if [ ${#2} == 0 ]; then
+    pattern="pipeline_*_test.py"
+	else
+    pattern="pipeline_${2}_test.py"
+	fi
 elif [ ${#1} == 0 ]; then
 	pattern="*_test.py"
 fi
 
-python3.6 -m unittest discover -s tests -p $pattern
+python -m unittest discover -s tests -p $pattern

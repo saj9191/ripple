@@ -10,7 +10,7 @@ currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentfram
 from typing import Any, Dict, Optional
 
 
-IMPORT_REGEXES = [re.compile(r"import ([a-zA-Z\_\.]+)"), re.compile("from ([a-zA-Z\_\.]+) import .*")]
+IMPORT_REGEXES = [re.compile(r"import ([a-zA-Z\_\.]+)"), re.compile(r"from ([a-zA-Z\_\.]+) import .*")]
 SUPPORTED_LIBRARIES = set(["PIL", "numpy", "sklearn"])
 
 

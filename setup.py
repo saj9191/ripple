@@ -209,8 +209,12 @@ def process_functions(params):
   pipeline = params["pipeline"]
   variable_to_step = {"input": 0}
   i = 0
+
   while i < len(pipeline):
     name = pipeline[i]["name"]
+    if i != (len(pipeline) - 1):
+      pipeline[i]["output_function"] = pipeline[i + 1]["name"]
+
     fn_params = params["functions"][name]
     if "output" in pipeline[i]:
       variable_to_step[pipeline[i]["output"]] = i + 1
