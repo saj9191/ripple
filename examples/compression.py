@@ -9,4 +9,4 @@ pipeline = ripple.Pipeline(name="compression", table="s3://maccoss-tide-east-1",
 input = pipeline.input(format="bed")
 step = input.sort(identifier="start_position", params={"split_size": 500*1000*1000}, config={"memory_size": 3008})
 step = step.run("compress_methyl", params={"program_bucket": "maccoss-fasta-east-1"})
-pipeline.compile("json/compression.json")
+pipeline.compile("json/compression.json", dry_run=True)

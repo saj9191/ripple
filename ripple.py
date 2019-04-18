@@ -18,6 +18,24 @@ def serialize(obj):
   return obj.step
 
 
+class MapVariable:
+  def __init__(self, name, params):
+    self.name = name
+    self.params = params
+
+  def __getattr__(self, name):
+    print("get attr")
+    def method(*pargs, **kargs):
+      # Method was called. This is the input key to the next stage.
+      self.params[self.name] = "key"
+      if kargs:
+        if "params" in kargs:
+          for key in kargs["params"]:
+            if type(kargs["params"][key]) == MapVariable:
+              self.params[kargs["params"][key].name] = key
+    return method
+    
+
 class Step:
   def __init__(self, pipeline, step: int, format: Optional[str]=None):
     self.format = format
@@ -26,6 +44,9 @@ class Step:
 
   def combine(self, params={}, config={}):
     return self.pipeline.combine(self.format, params, config)
+
+  def map(self, table, func, params={},  config={}):
+    return self.pipeline.map(table, func, self.format, params, config)
 
   def sort(self, identifier, params={}, config={}):
     return self.pipeline.sort(identifier, self.format, params, config)
@@ -133,6 +154,7 @@ class Pipeline:
       setup.setup(json.loads(jconfig))
 
   def get_configuration(self, output_file):
+    output_file = "../" + output_file
     configuration = {**{
       "bucket": self.table.replace("s3://", ""),
       "log": self.log.replace("s3://", ""),
@@ -140,9 +162,35 @@ class Pipeline:
       "functions": self.functions,
       "pipeline": self.pipeline,
     }, **self.config}
+
+    print(configuration)
     with open(output_file, "w+") as f:
       f.write(json.dumps(configuration, indent=2, default=serialize))
     return configuration
+
+  def map(self, table, func, input_format, params={}, config={}):
+    input = MapVariable("input_key_value", params)
+    bucket = MapVariable("bucket_key_value", params)
+    func(input, bucket)
+
+    name = "map"
+    self.__add__(name, input_format, config, params, None)
+
+    if params["input_key_value"] == "key":
+      input = Step(self, len(self.pipeline), input_format)
+      bucket = params["bucket_key_value"]
+    else:
+      # TODO: For now assume the bucket key has the same format
+      # as the input key
+      input = params["input_key_value"]
+      bucket = Step(self, len(self.pipeline), input_format)
+    step = func(input, bucket)
+
+    if params["input_key_value"] != "key":
+      del self.pipeline[-1][params["input_key_value"]]
+    else:
+      del self.pipeline[-1][params["bucket_key_value"]]
+    return step
 
   def run(self, name, input_format, output_format=None, params={}, config={}):
     function_params = {**{
