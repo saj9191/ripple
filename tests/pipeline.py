@@ -47,8 +47,8 @@ class Worker(Thread):
   def __trigger__(self, payload: Dict[str, Any]):
     stage: int = get_stage(payload)
     if stage > self.stage:
+      print("Starting stage", stage)
       self.stage = stage
-
     if self.stage == len(self.pipeline):
       return
     function_name: str = self.pipeline[stage]["name"]

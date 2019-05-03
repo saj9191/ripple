@@ -21,7 +21,7 @@ def run_application(d: Database, bucket_name: str, key: str, input_format: Dict[
       items = list(items)
       iterator_class.from_array(list(items), f, iterator.get_extra())
 
-  application_lib = importlib.import_module(params["application"])
+  application_lib = importlib.import_module("applications." + params["application"])
   application_method = getattr(application_lib, "run")
   output_files = application_method(d, temp_file, params, input_format, output_format, offsets)
 
