@@ -27,7 +27,7 @@ class Tide(unittest.TestCase):
     actual_output: List[str] = sorted(entry.get_content().decode("utf-8").split("\n"))
     print("Checking Tide counts equal...")
     self.assertEqual(len(expected_output), len(actual_output))
-    print("Comparing Tide output (%d lines)...".format(len(expected_output)))
+    print("Comparing Tide output ({0:d} lines)...".format(len(expected_output)))
     self.assertListEqual(expected_output, actual_output)
 
     print("Comparing Percolator output...")
