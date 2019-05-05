@@ -79,9 +79,10 @@ def create_parameter_files(zip_directory, function_name, params):
 
 
 def copy_file(directory, file_path):
+  dir_path = os.path.dirname(os.path.realpath(__file__))
   index = file_path.rfind("/")
   file_name = file_path[index + 1:]
-  shutil.copyfile(file_path, "{0:s}/{1:s}".format(directory, file_name))
+  shutil.copyfile(dir_path + "/" + file_path, "{0:s}/{1:s}".format(directory, file_name))
   return file_name
 
 
@@ -105,7 +106,8 @@ def zip_application(zip_directory, fparams):
 
 def zip_ripple_file(zip_directory, fparams):
   file = "{0:s}.py".format(fparams["file"])
-  shutil.copyfile("lambda/{0:s}".format(file), "{0:s}/{1:s}".format(zip_directory, file))
+  dir_path = os.path.dirname(os.path.realpath(__file__))
+  shutil.copyfile(dir_path + "/lambda/{0:s}".format(file), "{0:s}/{1:s}".format(zip_directory, file))
   for file in ["formats/iterator.py", "formats/pivot.py", "database.py", "util.py"]:
     copy_file(zip_directory, file)
   for format in fparams["formats"]:

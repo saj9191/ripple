@@ -1,0 +1,107 @@
+{
+  "bucket": "maccoss-tide",
+  "log": "maccoss-log",
+  "timeout": 600,
+  "functions": {
+    "convert_to_pixels": {
+      "application": "convert_to_pixels",
+      "file": "application",
+      "input_format": "tif",
+      "memory_size": 3008,
+      "output_format": "pixel",
+      "formats": [],
+      "imports": [
+        "numpy",
+        "PIL"
+      ]
+    },
+    "pair": {
+      "application": "pair",
+      "file": "application",
+      "input_format": "pixel",
+      "memory_size": 3008,
+      "output_format": null,
+      "formats": [
+        "new_line",
+        "pixel"
+      ],
+      "imports": []
+    },
+    "run_knn": {
+      "application": "run_knn",
+      "file": "application",
+      "input_format": null,
+      "memory_size": 3008,
+      "output_format": "knn",
+      "formats": [
+        "classification",
+        "knn",
+        "new_line"
+      ],
+      "imports": [
+        "numpy",
+        "sklearn"
+      ]
+    },
+    "combine-knn-files": {
+      "file": "combine_files",
+      "formats": [
+        "knn",
+        "new_line"
+      ],
+      "memory_size": 3008,
+      "output_format": "knn",
+      "imports": []
+    },
+    "draw_borders": {
+      "application": "draw_borders",
+      "file": "application",
+      "input_format": "knn",
+      "memory_size": 3008,
+      "output_format": "tif",
+      "formats": [
+        "knn",
+        "new_line"
+      ],
+      "imports": [
+        "numpy",
+        "PIL"
+      ]
+    }
+  },
+  "pipeline": [
+    {
+      "pixels_per_bin": 1000,
+      "name": "convert_to_pixels",
+      "output_function": "pair"
+    },
+    {
+      "split_size": 10000000,
+      "name": "pair",
+      "output_function": "run_knn"
+    },
+    {
+      "k": 100,
+      "name": "run_knn",
+      "output_function": "combine-knn-files"
+    },
+    {
+      "k": 100,
+      "sort": true,
+      "name": "combine-knn-files",
+      "output_function": "combine-knn-files"
+    },
+    {
+      "k": 100,
+      "sort": false,
+      "name": "combine-knn-files",
+      "output_function": "draw_borders"
+    },
+    {
+      "image": 0,
+      "name": "draw_borders"
+    }
+  ],
+  "region": "us-west-2",
+  "role": "service-role/lambdaFullAccessRole"
+}
