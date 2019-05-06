@@ -162,7 +162,6 @@ class Pipeline:
       "pipeline": self.pipeline,
     }, **self.config}
 
-    print(configuration)
     with open(output_file, "w+") as f:
       f.write(json.dumps(configuration, indent=2, default=serialize))
     return configuration
