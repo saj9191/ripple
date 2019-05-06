@@ -73,7 +73,7 @@ A user can either upload a file from their computer or from S3, however using th
 ```
 input.combine(params={}, config={})
 ```
-Combines the output from the previous stage into one file.
+Combines the output from the previous stage into one file.<br/>
 **Parameters**
 1. **params**: Parameters to pass in to the application call.
 2. **config**: Configuration for the function such as memory size.
@@ -81,7 +81,7 @@ Combines the output from the previous stage into one file.
 ```
 input.map(table, func, params={}, config={})
 ```
-Applies the function specified by `func` to each item in `table`.
+Applies the function specified by `func` to each item in `table`.<br/>
 **Parameters**
 1. **table**: Name of table we're mapping over.
 2. **func**: Lambda function to apply to each item in `table`.
@@ -102,7 +102,7 @@ Runs the application file from the applications folder named `application-name`.
 ```
 input.sort(identifier, params={}, config={})
 ```
-Sorts the input based on the identifier.
+Sorts the input based on the identifier.<br/>
 **Parameters**
 1. **identifier**: Identifier to sort input by.
 2. **params**: Parameters to pass in to the application call.
@@ -112,7 +112,7 @@ Sorts the input based on the identifier.
 input.split(params={}, config={})
 ```
 Splits the input into multiple chunks to be analyzed in parallel. By default, splits into about 100MB segments.
-The user can change this by specifying `split_size` in `params`.
+The user can change this by specifying `split_size` in `params`.<br/>
 **Parameters**
 1. **params**: Parameters to pass in to the application call.
 2. **config**: Configuration for the function such as memory size.
