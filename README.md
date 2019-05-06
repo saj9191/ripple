@@ -6,63 +6,46 @@ Ripple allows the user to chain lambda functions using S3 triggers
 ## Setup
 Ripple works by chaining a series of Lambda functions together.
 By default, the next function in the pipeline is triggered by S3.
-However, for some functions such as `map` and `split`, a user specifies the next Lambda to invoke.
+However, for some functions such as `map and split, a user specifies the next Lambda to invoke.
 
-To set up an application pipeline, the user creates a json file such as the following:
+We'll walk through one simple Ripple example.
+
+### Copy File
+The first example will simply copy the input file that triggered the pipeline.
+To start, run `simple.py` in the examples folder.
+This file sets up a pipeline that calls an application called `echo`.
+`echo.py` can be found in the `applications` folder.
+It takes an input file that we specify to be new line delimited and writes it out to a new file.
+When ``simple.py`` is run, the pipeline is created and uploadedto Lambda.
+The pipeline is also written to a JSON file called `simple.json` to the json folder.
+The JSON file will look like the following.
+
 ```
 {
-  "input_name": "input-file.ext",
-  "region": "us-west-2",
-  "timeout": 300,
-  "num_bins": 40,
-  "bucket": "lambda-bucket",
-  "setup": true,
-  "dependencies": {
-    "common": [
-      "formats/iterator.py
-    ],
-    "formats": {
-      "mzML": [
-        "formats/mzML.py"
+  "bucket": "maccoss-tide",
+  "log": "maccoss-log",
+  "timeout": 600,
+  "functions": {
+    "echo": {
+      "application": "echo",
+      "file": "application",
+      "input_format": "new_line",
+      "memory_size": 1024,
+      "output_format": null,
+      "formats": [
+        "new_line"
       ],
-      "tsv": [
-        "formats/tsv.py",
-      ]
+      "imports": []
     }
   },
-  "functions": {
-    "split-mzML": {
-      "file": "split_file",
-      "format": "mzML",
-      "memory_size": 256
-    },
-    "tide": {
-      "file": "application",
-      "application": "tide",
-      "memory_size": 1024,
-      "database_bucket": "fasta"
-    },
-    "combine-tsv-files": {
-      "file": "combine_files",
-      "format": "tsv",
-      "memory_size": 1024,
+  "pipeline": [
+    {
+      "name": "echo"
     }
-  }
-  "pipeline": [{
-    "name": "split-mzML",
-    "chunk_size": 100000,
-    "ranges": false,
-    "output_function": "tide"
-  }, {
-    "name": "tide",
-    "num_threads": 0,
-  }, {
-    "name": "combine-tsv-files",
-    "chunk_size": 1000000,
-    "sort": false
-  }]
+  ],
+  "region": "us-west-2",
+  "role": "service-role/lambdaFullAccessRole"
 }
-```
 
 The `functions` part is the set of all Lambda functions needed by the pipeline.
 A function can be used multiple times in the pipeline.
@@ -71,30 +54,20 @@ This section specifies parameters that are applicable to every instance of the f
 The `pipeline` part specifies the order of execution of the Lambda functions.
 The parameters in the section are for only instances that occur in this stage of the pipeline.
 For example, you may want to call the same combine function twice in the pipeline, but only have one of them sort the output.
-If the `output_function` is not specified, then the lambda function will write a file in the bucket specified by the `bucket` parameter.
 
-The files written to S3 will have the format `<prefix>/<timestamp>-<nonce>/<bin_id>/<file_id>-<last>.<ext>.
-If you want to use a file that is already on S3, add the key "sample_bucket" where the value is the name of the bucket. Then set "sample_input" to true.
-Ripple will move the file from the sample bucket to the application bucket.
+The files written will have the format `<prefix>/<timestamp>-<nonce>/<bin_id>-<num_bins>/<file_id>-<execute>-<num_files>.<ext>.
 
 The prefix indicates the stage of the of the pipeline that wrote the file.
-In the above example, output from the `tide` function would be prefixed with "2", while output from the `combine-tsv-file` would be prefixed with "3".
+In the above example, the input that triggers the pipeline will have the prefix "0" and the output from the echo function will have the prefix "1".
 The timestamp indicates when a given run was instantiated and the nonce is an identifier for the run.
-The bin ID specifies which bin the file is in. The bins are mostly in place for sorting purposes.
+The bin ID specifies which bin the file is in. The bins are used to sort and combine subsets of data.
 Each file in a bin is given a number between 1 and the number of files in the bin.
-The `last` value indicates whether this is the maximum file ID associated with the bin. This is useful for combining files in bins.
+The execute value is used if we need to force a function to re-execute or to tell a function not to execute (this is used for deadline scheduling).
 
-## Scripts
-To setup a pipeline on Lambda, run:
-python3 setup.py --parameters <path-to-json-file>
-
-This creates the Lambda functions specified in the JSON file and sets up the necessary S3 triggers.
-
-
+## Trigger Pipeline
 To upload a file to a Lambda pipeline, run:
 python3 upload.py --destination_bucket_name <bucket-used-for-application> --key <name-of-file-to-upload> [--source_bucket_name <s3-bucket-input-file-is-located-in>
-
-A user can either upload a file from their computer or from S3. To update a file from your local computer, in this repos root directory, create a data folder and place the file in the data folder. If the file is already in S3, specify the S3 bucket the input file is located in.
+A user can either upload a file from their computer or from S3, however using the upload script is easier, as it handles formatting the file name.
 
 ## Functions
 ### Application
