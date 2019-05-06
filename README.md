@@ -5,9 +5,6 @@ Ripple allows the user to chain lambda functions using S3 triggers
 
 ## Setup
 Ripple works by chaining a series of Lambda functions together.
-By default, the next function in the pipeline is triggered by S3.
-However, for some functions such as `map and split, a user specifies the next Lambda to invoke.
-
 We'll walk through one simple Ripple example.
 
 ### Copy File
@@ -46,6 +43,7 @@ The JSON file will look like the following.
   "region": "us-west-2",
   "role": "service-role/lambdaFullAccessRole"
 }
+```
 
 The `functions` part is the set of all Lambda functions needed by the pipeline.
 A function can be used multiple times in the pipeline.
