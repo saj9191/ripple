@@ -15,7 +15,7 @@ def __distance__(p, clz):
   return math.sqrt((cr - pr) ** 2 + (cg - pg) ** 2 + (cb - pb) ** 2)
 
 
-def run(database: Database, test_key: str, params, input_format, output_format, offsets: List[int]):
+def run(database: Database, test_key: str, params, input_format, output_format):
   train_obj = database.get_entry("maccoss-spacenet", params["train_key"])
   train_it = classification.Iterator(train_obj, OffsetBounds(params["train_offsets"][0], params["train_offsets"][1]))
   train_x = []

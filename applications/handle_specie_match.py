@@ -3,7 +3,7 @@ import json
 import util
 
 
-def run(key, params, input_format, output_format, offsets):
+def run(key, params, input_format, output_format):
   objects = util.get_objects(params["bucket"], "0/", params)
   assert(len(objects) == 1)
   object_key = objects[0].key

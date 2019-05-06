@@ -3,7 +3,7 @@ import subprocess
 import util
 
 
-def run(database, file, params, input_format, output_format, offsets):
+def run(database, file, params, input_format, output_format):
   work_dir = "/tmp/{0:f}-{1:d}".format(input_format["timestamp"], input_format["nonce"])
   os.mkdir(work_dir)
   program_path = "{0:s}/output".format(work_dir)

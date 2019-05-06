@@ -12,7 +12,7 @@ def download(database, bucket, path, name):
    subprocess.call("chmod 755 " + path + name, shell=True)
 
 
-def run(database: Database, file: str, params, input_format, output_format, offsets: List[int]):
+def run(database: Database, file: str, params, input_format, output_format):
   print("compress", file)
   dir_path = "/tmp/fastore_test/"
   if not os.path.exists(dir_path):

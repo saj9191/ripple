@@ -4,7 +4,7 @@ import threading
 from typing import List
 
 
-def run(database: Database, key: str, params, input_format, output_format, offsets: List[int]):
+def run(database: Database, key: str, params, input_format, output_format):
   train_key = "train.classification.w1-h1"
   obj = database.get_entry("maccoss-spacenet", train_key)
   content_length: int = obj.content_length()

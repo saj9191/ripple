@@ -28,7 +28,7 @@ class DrawBorder(unittest.TestCase):
     output_format = dict(input_format)
     output_format["prefix"] = 6
     util.make_folder(output_format)
-    draw_borders.run(database, entry1.key, params, input_format, output_format, [])
+    draw_borders.run(database, entry1.key, params, input_format, output_format)
 
 
 if __name__ == "__main__":

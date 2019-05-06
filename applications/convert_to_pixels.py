@@ -27,7 +27,7 @@ def create_window(im, x, y, window_width, window_height, width, height):
   return window
 
 
-def run(database: Database, key: str, params, input_format, output_format, offsets: List[int]):
+def run(database: Database, key: str, params, input_format, output_format):
   im = Image.open(key)
   px = im.load()
   width, height = im.size

@@ -4,7 +4,7 @@ from database import Database
 from typing import List
 
 
-def run(database: Database, target_key: str, params, input_format, output_format, offsets: List[int]):
+def run(database: Database, target_key: str, params, input_format, output_format):
   with open("/tmp/ssw_test", "wb+") as f:
     database.download(params["program_bucket"], "ssw_test", f)
 

@@ -6,7 +6,7 @@ from database import Database
 from typing import List
 
 
-def run(database: Database, file: str, params, input_format, output_format, offsets: List[int]):
+def run(database: Database, file: str, params, input_format, output_format):
   if "species" in params:
     species = params["species"]
   else:

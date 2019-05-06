@@ -9,7 +9,7 @@ PHOSPHORYLATION = re.compile("INFO: Phosphorylation: detected")
 TMT = re.compile("INFO: TMT: ([0-9]+)-plex reporter ions detected")
 
 
-def run(file, params, input_format, output_format, offsets):
+def run(file, params, input_format, output_format):
   s3 = boto3.resource('s3')
   database_bucket = s3.Bucket(params["database_bucket"])
 
