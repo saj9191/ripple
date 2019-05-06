@@ -93,12 +93,27 @@ Applies the function specified by `func` to each item in `table`.
 ```
 input.run(application_name, params={}, config={})
 ```
-Runs the application file from the applications folder named `application-name`.
+Runs the application file from the applications folder named `application-name`.<br/>
 **Parameters**
 1. **application_name**: Name of the application file to run.
 2. **params**: Parameters to pass in to the application call.
 3. **config**: Configuration for the function such as memory size.
 
+```
+input.sort(identifier, params={}, config={})
+```
+Sorts the input based on the identifier.
+**Parameters**
+1. **identifier**: Identifier to sort input by.
+2. **params**: Parameters to pass in to the application call.
+3. **config**: Configuration for the function such as memory size.
 
-
+```
+input.split(params={}, config={})
+```
+Splits the input into multiple chunks to be analyzed in parallel. By default, splits into about 100MB segments.
+The user can change this by specifying `split_size` in `params`.
+**Parameters**
+1. **params**: Parameters to pass in to the application call.
+2. **config**: Configuration for the function such as memory size.
 
