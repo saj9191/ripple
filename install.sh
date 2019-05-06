@@ -1,7 +1,13 @@
 #!/bin/bash
-sudo python -m pip install --upgrade pip
-sudo python -m pip install -U mypy
-sudo python -m pip install boto3
+
+if [ "$EUID" -ne 0 ]
+  then echo "Please run script as root"
+	exit
+fi
+
+python -m pip install --upgrade pip
+python -m pip install -U mypy
+python -m pip install boto3
 
 cmd="export PYTHONPATH=\$PYTHONPATH:$PWD"
 echo $cmd >> ~/.bashrc
