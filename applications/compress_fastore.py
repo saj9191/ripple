@@ -48,7 +48,6 @@ def run(database: Database, file: str, params, input_format, output_format, offs
   command = "cd {0:s}; ./fastore_compress.sh --lossless --{1:s}".format(script_path, " --".join(arguments))
   print(command)
   subprocess.check_output(command, stderr=subprocess.STDOUT, shell=True)
-  print("after")
 
   output_files = ["OUT.cdata", "OUT.cmeta"]
   output_list = []

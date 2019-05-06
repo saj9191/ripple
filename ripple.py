@@ -24,7 +24,6 @@ class MapVariable:
     self.params = params
 
   def __getattr__(self, name):
-    print("get attr")
     def method(*pargs, **kargs):
       # Method was called. This is the input key to the next stage.
       self.params[self.name] = "key"

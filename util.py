@@ -227,7 +227,6 @@ def handle(event, context, func):
           write_log(context, input_format, log_format, params)
       except Exception as e:
         print("Exception", e)
-        #monitor.running = False
         raise e
     else:
       count = 0
@@ -238,7 +237,6 @@ def handle(event, context, func):
         if "reexecute" in payload:
           payload["execute"] = params["reexecute"]
         params["database"].invoke(params["output_function"], payload)
-#    monitor.running = False 
 
 
 def get_formats(input_format, params):
