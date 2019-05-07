@@ -16,7 +16,7 @@ class Element:
 
 def find_top(d: Database, table: str, key: str, input_format: Dict[str, Any], output_format: Dict[str, Any], offsets: List[int], params: Dict[str, Any]):
   entry = d.get_entry(table, key)
-  format_lib = importlib.import_module(params["format"])
+  format_lib = importlib.import_module(params["input_format"])
   iterator = getattr(format_lib, "Iterator")
   it = iterator(entry, offsets)
 

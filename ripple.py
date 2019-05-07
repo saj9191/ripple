@@ -47,15 +47,17 @@ class Step:
   def map(self, table, func, params={},  config={}):
     return self.pipeline.map(table, func, self.format, params, config)
 
+  def run(self, application: str, params={}, output_format=None, config={}):
+    return self.pipeline.run(application, self.format, output_format, params, config)
+
   def sort(self, identifier, params={}, config={}):
     return self.pipeline.sort(identifier, self.format, params, config)
 
   def split(self, params={}, config={}):
     return self.pipeline.split(self.format, params, config)
 
-  def run(self, application: str, params={}, output_format=None, config={}):
-    return self.pipeline.run(application, self.format, output_format, params, config)
-
+  def top(self, identifier: str, number: int, params={}, config={}):
+    return self.pipeline.top(identifier, number, self.format, params, config)
 
 class Pipeline:
   def __init__(self, name: str, table: str, log: str, timeout: int, config: Dict[str, Any]):
@@ -190,6 +192,17 @@ class Pipeline:
       del self.pipeline[-1][params["bucket_key_value"]]
     return step
 
+  def partition(self, identifier, input_format, params={}, config={}):
+    name = "pivot_file"
+    function_params = {**{
+      "file": name,
+      "identifier": identifier,
+      "input_format": input_format,
+      "memory_size": self.memory_size,
+    }, **config}
+    self.__add__(name, input_format, function_params, params, None)
+    return Step(self, len(self.pipeline), format)
+
   def run(self, name, input_format, output_format=None, params={}, config={}):
     function_params = {**{
       "application": name,
@@ -201,17 +214,6 @@ class Pipeline:
     path = "{0:s}/applications/{1:s}.py".format(currentdir, name)
     self.__add__(name, input_format, function_params, params, path)
     return Step(self, len(self.pipeline), output_format)
-
-  def partition(self, identifier, input_format, params={}, config={}):
-    name = "pivot_file"
-    function_params = {**{
-      "file": name,
-      "identifier": identifier,
-      "input_format": input_format,
-      "memory_size": self.memory_size,
-    }, **config}
-    self.__add__(name, input_format, function_params, params, None)
-    return Step(self, len(self.pipeline), format)
 
   def sort(self, identifier: str, input_format, params={}, config={}):
     step = self.split(input_format, dict(params), dict(config))
@@ -245,4 +247,21 @@ class Pipeline:
     }, **config}
     self.__add__(name, input_format, function_params, params, None)
     return Step(self, len(self.pipeline), format)
+
+  def top(self, identifier, number: int, input_format, params={}, config={}):
+    name = "top"
+    function_params = {**{
+      "file": name,
+      "identifier": identifier,
+      "input_format": input_format,
+      "memory_size": self.memory_size,
+      "split_size": 100*1000*1000,
+    }, **config}
+
+    params = {**{
+      "number": number,
+    }, **params}
+    self.__add__(name, input_format, function_params, params, None)
+    return Step(self, len(self.pipeline), format)
+
 

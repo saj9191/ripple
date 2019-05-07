@@ -2,6 +2,7 @@ import boto3
 import re
 import subprocess
 import util
+from database import Database
 
 ITRAQ = re.compile("INFO: iTRAQ: ([0-9]+)-plex reporter ions detected")
 SILAC = re.compile("INFO: SILAC: ([0-9]+)Da separation detected.")
@@ -9,7 +10,7 @@ PHOSPHORYLATION = re.compile("INFO: Phosphorylation: detected")
 TMT = re.compile("INFO: TMT: ([0-9]+)-plex reporter ions detected")
 
 
-def run(file, params, input_format, output_format):
+def run(database: Database, file: str, params, input_format, output_format):
   s3 = boto3.resource('s3')
   database_bucket = s3.Bucket(params["database_bucket"])
 
@@ -23,13 +24,9 @@ def run(file, params, input_format, output_format):
   print(output)
 
   phos = PHOSPHORYLATION.search(output)
-  print("phos", phos)
   itraq = ITRAQ.search(output)
-  print("itraq", itraq)
   silac = SILAC.search(output)
-  print("silac", silac)
   tmt = TMT.search(output)
-  print("tmt", tmt)
 
   map_bucket = None
   if tmt:
@@ -66,6 +63,6 @@ def run(file, params, input_format, output_format):
     }]
   }
 
-  util.invoke(params["output_function"], payload)
+  database.invoke(params["output_function"], payload)
 
   return []

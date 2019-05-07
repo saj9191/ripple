@@ -34,7 +34,8 @@
     },
     {
       "database_bucket": "maccoss-fasta",
-      "name": "parammedic"
+      "name": "parammedic",
+      "output_function": null
     }
   ],
   "region": "us-west-2",

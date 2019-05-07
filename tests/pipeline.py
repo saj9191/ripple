@@ -47,9 +47,9 @@ class Worker(Thread):
   def __trigger__(self, payload: Dict[str, Any]):
     stage: int = get_stage(payload)
     if stage > self.stage:
-      print("Starting stage", stage)
       self.stage = stage
     if self.stage == len(self.pipeline):
+      self.task_queue.put(payload)
       return
     function_name: str = self.pipeline[stage]["name"]
     function_params: Dict[str, Any] = {**self.params, **self.pipeline[stage], **self.functions[function_name]}
@@ -61,7 +61,7 @@ class Worker(Thread):
     function_module.handler(event, context)
 
   def run(self):
-    while self.stage < len(self.pipeline) or self.task_queue.qsize() > 0:
+    while self.stage < len(self.pipeline):
       payload = self.task_queue.get()
       self.__trigger__(payload)
     self.running = False

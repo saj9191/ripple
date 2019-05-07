@@ -1,0 +1,4 @@
+ALS_CSF_Biomarker_Study-1530309740015/TN_CSF_062617_01.mzML maccoss-normal-fasta
+ALS_CSF_Biomarker_Study-1530309740015/TN_CSF_062617_02.mzML maccoss-normal-fasta
+ALS_CSF_Biomarker_Study-1530309740015/TN_CSF_062617_03.mzML maccoss-normal-fasta
+ALS_CSF_Biomarker_Study-1530309740015/TN_CSF_062617_04.mzML maccoss-normal-fasta
