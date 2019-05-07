@@ -117,3 +117,12 @@ The user can change this by specifying `split_size` in `params`.<br/>
 1. **params**: Parameters to pass in to the application call.
 2. **config**: Configuration for the function such as memory size.
 
+```
+input.top(identifier, number, params={}, config={})
+```
+Returns the top `number` of items based on the value specified by the `identifier`.<br/>
+**Parameters**
+1. **identifier**: Identifier to sort input by.
+2. **number**: Number of top items to return.
+3. **params**: Parameters to pass in to the application call.
+4. **config**: Configuration for the function such as memory size.
