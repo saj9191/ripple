@@ -1,4 +1,6 @@
 import boto3
+import botocore
+import json
 from setup.setup import Setup
 
 class LambdaSetup(Setup):
@@ -31,7 +33,7 @@ class LambdaSetup(Setup):
       self.__setup_table_notification__(name, {})
 
   def __get_functions__(self):
-    lambda_client = boto3.client("lambda")
+    lambda_client = boto3.client("lambda", region_name=self.params["region"])
     functions = {}
     for function in lambda_client.list_functions()["Functions"]:
       functions[function["FunctionName"]] = function
@@ -104,8 +106,8 @@ class LambdaSetup(Setup):
             "Effect": "Allow",
             "Principal": {
               "Service": "lambda.amazonaws.com",
-              "Action": "sts:AssumeRole",
-            }
+            },
+            "Action": "sts:AssumeRole",
           }]
       }))
 
