@@ -11,6 +11,13 @@ if [ "$version" -lt 3 ]
   exit
 fi
 
+python -m pip --version
+RESULT=$?
+if [ $RESULT -ne 0  ]
+  then echo "Please install pip"
+  exit
+fi
+
 python -m pip install --upgrade pip
 python -m pip install -U mypy
 python -m pip install boto3
