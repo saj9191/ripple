@@ -64,7 +64,6 @@ class Setup:
     self.__zip_application__(zip_directory, function_params)
     self.__zip_formats__(zip_directory, function_params)
     self.__create_parameter_files__(zip_directory, name)
-    raise Exception("")
     os.chdir(zip_directory)
     subprocess.call("zip -r9 ../{0:s} .".format(zip_file), shell=True)
     os.chdir("..")
@@ -114,13 +113,13 @@ class Setup:
       self.__copy_file__(dest, "../formats/{0:s}.py".format(form))
 
   def __zip_ripple_file__(self, zip_directory, fparams):
-    dest = zip_directory + "/lambda"
+    dest = zip_directory + "/lambdas"
     if not os.path.isdir(dest):
       os.mkdir(dest)
 
     file = "{0:s}.py".format(fparams["file"])
     dir_path = os.path.dirname(os.path.realpath(__file__))
-    shutil.copyfile(dir_path + "/../lambda/{0:s}".format(file), "{0:s}/{1:s}".format(dest, file))
+    shutil.copyfile(dir_path + "/../lambdas/{0:s}".format(file), "{0:s}/{1:s}".format(dest, file))
 
     dest = zip_directory + "/database"
     if not os.path.isdir(dest):
