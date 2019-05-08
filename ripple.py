@@ -67,6 +67,7 @@ class Pipeline:
     self.log = log
     if "provider" in self.config:
       self.provider = self.config["provider"]
+      del self.config["provider"]
     else:
       self.provider = "lambda"
 
@@ -87,6 +88,7 @@ class Pipeline:
     return Step(self, 0, format)
 
   def __add__(self, name, input_format, function_params, pipeline_params, path: Optional[str]=None):
+    function_params["provider"] = self.provider
     self.functions[name] = function_params
     pipeline_params["name"] = name
     if len(self.pipeline) > 0:
