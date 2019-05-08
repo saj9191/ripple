@@ -34,9 +34,9 @@ class Statistics:
 class Entry:
   key: str
   resources: Any
-  statistics: Optional[Statistics]
+  statistics: Statistics
 
-  def __init__(self, key: str, resources: Any, statistics: Optional[Statistics]):
+  def __init__(self, key: str, resources: Any, statistics: Statistics):
     self.key = key
     self.resources = resources
     self.statistics = statistics
@@ -56,15 +56,17 @@ class Entry:
   def download(self, f: BinaryIO) -> int:
     count = 0
     done = False
+    content_length: int = -1
     while not done:
       self.statistics.read_count += 1
       try:
-        content_length: int = self.__download__(f)
-        return content_length
+        content_length = self.__download__(f)
+        done = True
       except Exception as e:
         count += 1
         if count == 3:
           raise e
+    return content_length
 
   def get_content(self) -> bytes:
     self.statistics.read_count += 1
@@ -107,10 +109,13 @@ class Database:
   def __get_entries__(self, table_name: str, prefix: Optional[str]=None) -> List[Entry]:
     raise Exception("Database::__get_entries__ not implemented")
 
-  def __put__(self, table_name: str, key: str, content: BinaryIO, metadata: Dict[str, str]):
+  def __put__(self, table_name: str, key: str, content: BinaryIO, metadata: Dict[str, str], invoke: bool):
     raise Exception("Database::__put__ not implemented")
 
-  def __write__(self, table_name: str, key: str, content: bytes, metadata: Dict[str, str]):
+  def __read__(self, table_name: str, key: str) -> bytes:
+    raise Exception("Database::__read__ not implemented")
+
+  def __write__(self, table_name: str, key: str, content: bytes, metadata: Dict[str, str], invoke: bool):
     raise Exception("Database::__write__ not implemented")
 
   def contains(self, table_name: str, key: str) -> bool:
@@ -122,16 +127,18 @@ class Database:
   def download(self, table_name: str, key: str, file_name: str) -> int:
     count = 0
     done = False
+    content_length: int = -1
     while not done:
       self.statistics.read_count += 1
       try:
         with open(file_name, "wb+") as f:
-          content_length: int = self.__download__(table_name, key, f)
-        return content_length
+          content_length = self.__download__(table_name, key, f)
+          done = True
       except Exception as e:
         count += 1
         if count == 3:
           raise e
+    return content_length
 
   def get_entry(self, table_name: str, key: str) -> Optional[Entry]:
     raise Exception("Database::key not implemented")
@@ -156,7 +163,7 @@ class Database:
   def invoke(self, name, payload):
     raise Exception("Database::invoke not implemented")
 
-  def put(self, table_name: str, key: str, content: BinaryIO, metadata: Dict[str, str], invoke=True):
+  def put(self, table_name: str, key: str, content: BinaryIO, metadata: Dict[str, str], invoke: bool):
     self.statistics.write_count += 1
     self.statistics.write_byte_count += os.path.getsize(content.name)
     self.__put__(table_name, key, content, metadata, invoke)
@@ -167,7 +174,7 @@ class Database:
     self.statistics.read_byte_count += len(content)
     return content
 
-  def write(self, table_name: str, key: str, content: bytes, metadata: Dict[str, str], invoke=True):
+  def write(self, table_name: str, key: str, content: bytes, metadata: Dict[str, str], invoke: bool):
     self.statistics.write_count += 1
     self.statistics.write_byte_count += len(content)
     self.__write__(table_name, key, content, metadata, invoke)

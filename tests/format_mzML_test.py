@@ -1,7 +1,7 @@
-import mzML
 import unittest
 import xml.etree.ElementTree as ET
-from iterator import OffsetBounds
+from formats import mzML
+from formats.iterator import OffsetBounds
 from tutils import TestDatabase, TestEntry, TestTable
 
 

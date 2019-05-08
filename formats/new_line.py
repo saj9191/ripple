@@ -1,7 +1,7 @@
 import boto3
-import iterator
 import util
-from iterator import Delimiter, DelimiterPosition, OffsetBounds, Options
+from formats import iterator
+from formats.iterator import Delimiter, DelimiterPosition, OffsetBounds, Options
 from typing import Any, ClassVar, Generic, Optional, TypeVar
 
 

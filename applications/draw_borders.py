@@ -1,6 +1,6 @@
-import knn
 import numpy as np
 import util
+from applications import run_knn
 from database.database import Database
 from enum import Enum
 from PIL import Image

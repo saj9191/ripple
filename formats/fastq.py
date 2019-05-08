@@ -1,8 +1,8 @@
-import iterator
 import re
 import util
 from enum import Enum
-from iterator import Delimiter, DelimiterPosition, OffsetBounds, Optional, Options
+from formats  import iterator
+from formats.iterator import Delimiter, DelimiterPosition, OffsetBounds, Optional, Options
 from typing import Any, ClassVar
 
 

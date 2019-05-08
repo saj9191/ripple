@@ -1,9 +1,9 @@
 import inspect
-import new_line
 import os
 import sys
 import unittest
-from iterator import OffsetBounds
+from formats  import new_line
+from formats.iterator import OffsetBounds
 from tutils import TestDatabase, TestEntry, TestTable
 from typing import Any, Optional
 

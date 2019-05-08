@@ -1,6 +1,6 @@
-import fasta
 import unittest
-from iterator import OffsetBounds
+from formats import fasta
+from formats.iterator import OffsetBounds
 from tutils import TestDatabase, TestEntry
 from typing import Any, Optional
 

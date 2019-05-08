@@ -1,7 +1,7 @@
 import os
-import pivot
 import unittest
-from iterator import OffsetBounds
+from formats import pivot
+from formats.iterator import OffsetBounds
 from tutils import TestDatabase, TestEntry, TestTable
 from typing import Any, ClassVar, Optional
 

@@ -77,10 +77,10 @@ class S3(Database):
     content = obj.get()["Body"].read()
     return content
 
-  def __write__(self, table_name: str, key: str, content: bytes, metadata: Dict[str, str], invoke=True):
+  def __write__(self, table_name: str, key: str, content: bytes, metadata: Dict[str, str], invoke: bool):
     self.__s3_write__(table_name, key, content, metadata, invoke)
 
-  def __s3_write__(self, table_name: str, key: str, content: Union[bytes, BinaryIO], metadata: Dict[str, str], invoke=True):
+  def __s3_write__(self, table_name: str, key: str, content: Union[bytes, BinaryIO], metadata: Dict[str, str], invoke: bool):
     done: bool = False
     while not done:
       try:

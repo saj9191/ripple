@@ -1,11 +1,11 @@
-import classification
-import knn
 import math
 import numpy as np
 import util
-from iterator import OffsetBounds
+from database.database import Database
+from formats import classification
+from formats import knn
+from formats.iterator import OffsetBounds
 from sklearn.neighbors import NearestNeighbors
-from database import Database
 from typing import List
 
 

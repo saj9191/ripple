@@ -1,11 +1,11 @@
 import boto3
 import hashlib
-import iterator
 import re
 import util
 import xml.etree.ElementTree as ET
 from enum import Enum
 from database.database import Entry
+from formats import iterator
 from formats.iterator import Delimiter, DelimiterPosition, OffsetBounds, Options
 from typing import Any, BinaryIO, ClassVar, Dict, Iterable, List, Optional, Pattern, Tuple
 

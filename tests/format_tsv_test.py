@@ -1,7 +1,7 @@
 import os
-import tsv
 import unittest
-from iterator import OffsetBounds
+from formats import tsv
+from formats.iterator import OffsetBounds
 from typing import Any, Optional
 from tutils import TestEntry
 

@@ -1,9 +1,9 @@
 import heapq
-import iterator
-import new_line
 import util
 from database.database import Entry
-from iterator import OffsetBounds, Optional, Options
+from formats import iterator
+from formats.iterator import OffsetBounds, Optional, Options
+from formats import new_line
 from typing import Any, BinaryIO, ClassVar, Dict, Iterable, List, Tuple
 
 

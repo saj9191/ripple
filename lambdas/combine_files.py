@@ -18,7 +18,7 @@ def combine(database: Database, table_name, key, input_format, output_format, of
     msg = msg.format(input_format["timestamp"], input_format["nonce"], input_format["bin"], input_format["file_id"])
     print(msg)
 
-    format_lib = importlib.import_module(params["output_format"])
+    format_lib = importlib.import_module("formats." + params["output_format"])
     iterator_class = getattr(format_lib, "Iterator")
     temp_name = "/tmp/{0:s}".format(file_name)
     # Make this deterministic and combine in the same order
@@ -34,7 +34,7 @@ def combine(database: Database, table_name, key, input_format, output_format, of
     found = database.contains(table_name, file_name)
     if not found:
       with open(temp_name, "rb") as f:
-        database.put(params["bucket"], file_name, f, metadata)
+        database.put(params["bucket"], file_name, f, metadata, True)
     os.remove(temp_name)
     return True
   else:

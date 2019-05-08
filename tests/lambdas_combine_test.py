@@ -26,7 +26,7 @@ class CombineFunction(unittest.TestCase):
     database.params = params
     event = tutils.create_event(database, table1.name, entry1.key)
     context = tutils.create_context(params)
-    combine_files.handler(event, context)
+    combine_files.main(event, context)
     entries: List[TestEntry] = database.get_entries(table1.name)
     self.assertEqual(len(entries), 3)
     combined_entry = entries[-1]

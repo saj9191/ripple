@@ -46,7 +46,7 @@ optimal_alignment_score: 193 suboptimal_alignment_score: 48""")
 
     event = tutils.create_event(s3, table1.name, entry1.key)
     context = tutils.create_context(params)
-    sort.handler(event, context)
+    sort.main(event, context)
 
     objs = s3.get_entries(table1.name)
     self.assertEqual(len(objs), 4)
@@ -107,7 +107,7 @@ optimal_alignment_score: 193 suboptimal_alignment_score: 48""")
 
     event = tutils.create_event(s3, table1.name, entry1.key)
     context = tutils.create_context(params)
-    sort.handler(event, context)
+    sort.main(event, context)
     entries = sorted(s3.get_entries(table1.name, "1/"), key=lambda e: e.key)
     self.assertEqual(len(entries), 3)
     self.assertEqual(entries[0].get_content().decode("utf-8"), """target_name: 1

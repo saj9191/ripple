@@ -29,13 +29,13 @@ def write_binned_input(database: Database, binned_input: List[Any], bin_ranges: 
     output_format["bin"] = bin_ranges[i]["bin"]
     output_format["num_bins"] = len(bin_ranges)
     bin_key = util.file_name(output_format)
-    database.write(params["bucket"], bin_key, content, metadata)
+    database.write(params["bucket"], bin_key, content, metadata, True)
 
 
 def handle_sort(database: Database, table_name: str, key: str, input_format: Dict[str, Any], output_format: Dict[str, Any], offsets: List[int], params: Dict[str, Any]):
   entry = database.get_entry(table_name, key)
   assert("ext" in output_format)
-  format_lib = importlib.import_module(params["input_format"])
+  format_lib = importlib.import_module("formats." + params["input_format"])
   iterator_class = getattr(format_lib, "Iterator")
   if len(offsets) > 0:
     it = iterator_class(entry, OffsetBounds(offsets[0], offsets[1]))

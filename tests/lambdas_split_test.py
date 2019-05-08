@@ -45,7 +45,7 @@ class SplitFunction(unittest.TestCase):
 
     event = tutils.create_event(database, table1.name, entry1.key)
     context = tutils.create_context(params)
-    split_file.handler(event, context)
+    split_file.main(event, context)
 
     invoke1 = get_invoke("an-output-function", table1.name, entry1.key, prefix=1, offsets=[0, 19], file_id=1, num_files=2)
     invoke2 = get_invoke("an-output-function", table1.name, entry1.key, prefix=1, offsets=[20, 35], file_id=2, num_files=2)

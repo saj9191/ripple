@@ -1,6 +1,6 @@
-import knn
 import unittest
-from iterator import OffsetBounds
+from formats import knn
+from formats.iterator import OffsetBounds
 from tutils import TestDatabase, TestEntry
 from typing import Any, Optional
 

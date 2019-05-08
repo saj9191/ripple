@@ -1,10 +1,10 @@
-import draw_borders
 import inspect
 import numpy as np
 import os
 import unittest
 import util
-from iterator import OffsetBounds
+from applications import draw_borders
+from formats.iterator import OffsetBounds
 from tutils import TestDatabase, TestEntry
 from typing import Any, Optional
 

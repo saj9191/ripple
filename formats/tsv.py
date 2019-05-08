@@ -1,5 +1,5 @@
-import new_line
-from iterator import OffsetBounds, Options
+from formats import new_line
+from formats.iterator import OffsetBounds, Options
 from typing import Any, ClassVar, Generic, List, Optional, TypeVar
 
 
