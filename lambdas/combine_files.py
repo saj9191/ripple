@@ -1,7 +1,7 @@
 import importlib
 import os
 import util
-from database import Database, Entry
+from database.database import Database, Entry
 from typing import Any, Dict, List
 
 

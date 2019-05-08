@@ -1,4 +1,4 @@
-import combine_files
+from lambdas import combine_files
 import unittest
 import tutils
 from tutils import TestDatabase, TestTable

@@ -2,7 +2,7 @@ import heapq
 import iterator
 import new_line
 import util
-from database import Entry
+from database.database import Entry
 from iterator import OffsetBounds, Optional, Options
 from typing import Any, BinaryIO, ClassVar, Dict, Iterable, List, Tuple
 

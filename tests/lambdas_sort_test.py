@@ -1,5 +1,5 @@
-import blast
-import sort
+from formats import blast
+from lambdas import sort
 import tutils
 import unittest
 from tutils import TestDatabase, TestTable, TestEntry

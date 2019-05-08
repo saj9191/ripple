@@ -6,7 +6,7 @@ import re
 import subprocess
 import threading
 import time
-from database import S3
+from database.s3 import S3
 from botocore.client import Config
 
 

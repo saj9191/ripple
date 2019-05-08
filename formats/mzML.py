@@ -5,8 +5,8 @@ import re
 import util
 import xml.etree.ElementTree as ET
 from enum import Enum
-from database import Entry
-from iterator import Delimiter, DelimiterPosition, OffsetBounds, Options
+from database.database import Entry
+from formats.iterator import Delimiter, DelimiterPosition, OffsetBounds, Options
 from typing import Any, BinaryIO, ClassVar, Dict, Iterable, List, Optional, Pattern, Tuple
 
 

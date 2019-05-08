@@ -1,5 +1,5 @@
 import json
-import split_file
+from lambdas import split_file
 import tutils
 import unittest
 import util

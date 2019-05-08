@@ -32,7 +32,7 @@ class Setup:
     dir_path = os.path.dirname(os.path.realpath(__file__))
     index = file_path.rfind("/")
     file_name = file_path[index + 1:]
-    shutil.copyfile(dir_path + "/" + file_path, "{0:s}/{1:s}".format(directory, file_name))
+    shutil.copyfile(file_path, "{0:s}/{1:s}".format(directory, file_name))
     return file_name
 
   # Creates a table / bucket to load data to.
@@ -64,6 +64,7 @@ class Setup:
     self.__zip_application__(zip_directory, function_params)
     self.__zip_formats__(zip_directory, function_params)
     self.__create_parameter_files__(zip_directory, name)
+    raise Exception("")
     os.chdir(zip_directory)
     subprocess.call("zip -r9 ../{0:s} .".format(zip_file), shell=True)
     os.chdir("..")
@@ -94,24 +95,40 @@ class Setup:
 
   def __zip_application__(self, zip_directory, fparams):
     if "application" in fparams:
-      self.__copy_file__(zip_directory, "../applications/{0:s}.py".format(fparams["application"]))
+      dest = zip_directory + "/applications"
+      if not os.path.isdir(dest):
+        os.mkdir(dest)
+      self.__copy_file__(dest, "../applications/{0:s}.py".format(fparams["application"]))
 
   def __zip_formats__(self, zip_directory, fparams):
+    dest = zip_directory + "/formats"
+    os.mkdir(dest)
+    for file in ["../formats/iterator.py", "../formats/pivot.py"]:
+      self.__copy_file__(dest, file)
+
     if "format" in fparams:
       form = fparams["format"]
       if "dependencies" in self.params and form in self.params["dependencies"]["formats"]:
         for file in self.params["dependencies"]["formats"][form]:
-          self.__copy_file__(zip_directory, file)
-      self.__copy_file__(zip_directory, "../formats/{0:s}.py".format(form))
+          self.__copy_file__(dest, file)
+      self.__copy_file__(dest, "../formats/{0:s}.py".format(form))
 
   def __zip_ripple_file__(self, zip_directory, fparams):
+    dest = zip_directory + "/lambda"
+    if not os.path.isdir(dest):
+      os.mkdir(dest)
+
     file = "{0:s}.py".format(fparams["file"])
     dir_path = os.path.dirname(os.path.realpath(__file__))
-    shutil.copyfile(dir_path + "/../lambda/{0:s}".format(file), "{0:s}/{1:s}".format(zip_directory, file))
-    for file in ["../formats/iterator.py", "../formats/pivot.py", "../database.py", "../util.py"]:
-      self.__copy_file__(zip_directory, file)
-    for format in fparams["formats"]:
-      self.__copy_file__(zip_directory, "../formats/{0:s}.py".format(format))
+    shutil.copyfile(dir_path + "/../lambda/{0:s}".format(file), "{0:s}/{1:s}".format(dest, file))
+
+    dest = zip_directory + "/database"
+    if not os.path.isdir(dest):
+      os.mkdir(dest)
+    for file in ["database", "s3"]:
+      self.__copy_file__(dest, "../database/{0:s}.py".format(file))
+ 
+    self.__copy_file__(zip_directory, "../util.py")
 
   def start(self):
     self.__setup_credentials__()

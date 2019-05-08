@@ -1,11 +1,11 @@
-import database
+from database.database import Database, Entry, Statistics, Table
+from database.s3 import S3
 import inspect
 import os
 import sys
 import time
 import util
 from typing import Any, BinaryIO, Dict, Iterable, List, Optional, Set, Union
-from database import Database, Entry, Statistics, S3, Table
 
 
 def equal_lists(list1, list2):
@@ -42,7 +42,7 @@ def create_payload(table_name: str, key: str, prefix: int, file_id: Optional[int
 
 
 class TestEntry(Entry):
-  def __init__(self, key: str, content: Optional[Union[str, bytes]], statistics: Optional[database.Statistics]=None):
+  def __init__(self, key: str, content: Optional[Union[str, bytes]], statistics: Optional[Statistics]=None):
     self.file_name = key.replace("/tmp/s3/", "")
     self.file_name = key.replace("/tmp/", "")
     self.file_name = self.file_name.replace("/", "-")
@@ -94,7 +94,7 @@ class TestEntry(Entry):
 class TestTable(Table):
   entries: Dict[str, TestEntry]
 
-  def __init__(self, name: str, statistics: database.Statistics, resources: Any):
+  def __init__(self, name: str, statistics: Statistics, resources: Any):
     Table.__init__(self, name, statistics, resources)
     self.entries = {}
 

@@ -1,5 +1,5 @@
-import blast
-import pivot_file
+from formats import blast
+from lambdas import pivot_file
 import tutils
 import unittest
 from tutils import TestDatabase, TestEntry, TestTable

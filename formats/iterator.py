@@ -3,7 +3,7 @@ import heapq
 import os
 import re
 import util
-from database import Entry
+from database.database import Entry
 from enum import Enum
 from typing import Any, BinaryIO, ClassVar, Dict, Generic, Iterable, List, Optional, Tuple, TypeVar
 

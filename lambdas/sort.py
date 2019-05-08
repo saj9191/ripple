@@ -1,7 +1,7 @@
 import importlib
 import util
-from database import Database
-from iterator import OffsetBounds
+from database.database import Database
+from formats.iterator import OffsetBounds
 from typing import Any, Dict, List, Tuple
 
 

@@ -1,7 +1,7 @@
 import knn
 import numpy as np
 import util
-from database import Database
+from database.database import Database
 from enum import Enum
 from PIL import Image
 from typing import List

@@ -1,8 +1,8 @@
 import boto3
 import importlib
 import util
-from database import Database, Entry
-from iterator import OffsetBounds
+from database.database import Database, Entry
+from formats.iterator import OffsetBounds
 from typing import Any, Dict, List
 
 

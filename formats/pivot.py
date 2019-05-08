@@ -1,8 +1,8 @@
 import boto3
 import iterator
 import util
-from database import Entry
-from iterator import Delimiter, DelimiterPosition, OffsetBounds, Options
+from database.database import Entry
+from formats.iterator import Delimiter, DelimiterPosition, OffsetBounds, Options
 from typing import Any, BinaryIO, ClassVar, Dict, List, Optional
 
 

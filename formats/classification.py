@@ -2,7 +2,7 @@ import iterator
 import new_line
 import numpy as np
 import re
-from database import Entry
+from database.database import Entry
 from iterator import Delimiter, DelimiterPosition, OffsetBounds, Options
 from typing import Any, BinaryIO, ClassVar, Dict, Generic, Iterable, List, Optional, Tuple, TypeVar, Union
 
