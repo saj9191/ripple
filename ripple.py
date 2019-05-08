@@ -3,7 +3,7 @@ import inspect
 import json
 import os
 import re
-import setup
+from setup.openwhisk_setup import OpenWhiskSetup
 import sys
 import util
 currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
@@ -152,7 +152,8 @@ class Pipeline:
     if dry_run:
       print(jconfig)
     else:
-      setup.setup(json.loads(jconfig))
+      s = OpenWhiskSetup(json.loads(jconfig))
+      s.start()
 
   def get_configuration(self, output_file):
     output_file = "../" + output_file

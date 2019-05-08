@@ -94,7 +94,7 @@ class Setup:
 
   def __zip_application__(self, zip_directory, fparams):
     if "application" in fparams:
-      self.__copy_file__(zip_directory, "applications/{0:s}.py".format(fparams["application"]))
+      self.__copy_file__(zip_directory, "../applications/{0:s}.py".format(fparams["application"]))
 
   def __zip_formats__(self, zip_directory, fparams):
     if "format" in fparams:
@@ -102,16 +102,16 @@ class Setup:
       if "dependencies" in self.params and form in self.params["dependencies"]["formats"]:
         for file in self.params["dependencies"]["formats"][form]:
           self.__copy_file__(zip_directory, file)
-      self.__copy_file__(zip_directory, "formats/{0:s}.py".format(form))
+      self.__copy_file__(zip_directory, "../formats/{0:s}.py".format(form))
 
   def __zip_ripple_file__(self, zip_directory, fparams):
     file = "{0:s}.py".format(fparams["file"])
     dir_path = os.path.dirname(os.path.realpath(__file__))
-    shutil.copyfile(dir_path + "/lambda/{0:s}".format(file), "{0:s}/{1:s}".format(zip_directory, file))
-    for file in ["formats/iterator.py", "formats/pivot.py", "database.py", "util.py"]:
+    shutil.copyfile(dir_path + "/../lambda/{0:s}".format(file), "{0:s}/{1:s}".format(zip_directory, file))
+    for file in ["../formats/iterator.py", "../formats/pivot.py", "../database.py", "../util.py"]:
       self.__copy_file__(zip_directory, file)
     for format in fparams["formats"]:
-      self.__copy_file__(zip_directory, "formats/{0:s}.py".format(format))
+      self.__copy_file__(zip_directory, "../formats/{0:s}.py".format(format))
 
   def start(self):
     self.__setup_credentials__()
@@ -319,9 +319,6 @@ class LambdaSetup(Setup):
       print("WARNING: Error adding function permissions")
 
 
-def setup(params):
-  s = LambdaSetup(params)
-  s.start()
 
 
 def main():
@@ -329,7 +326,7 @@ def main():
   parser.add_argument('--parameters', type=str, required=True, help="File containing parameters")
   args = parser.parse_args()
   params = json.loads(open(args.parameters).read())
-  setup(params)
+  #setup(params)
 
 
 if __name__ == "__main__":
