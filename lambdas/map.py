@@ -52,5 +52,5 @@ def map_file(database: Database, table: str, key: str, input_format: Dict[str, A
     database.invoke(params["output_function"], payload)
 
 
-def handler(event, context):
-  util.handle(event, context, map_file)
+def main(*argv):
+  util.handle(argv, map_file)

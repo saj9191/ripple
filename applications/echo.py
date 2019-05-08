@@ -1,6 +1,6 @@
 import shutil
 import util
-from database import Database
+from database.database import Database
 from typing import List
 
 def run(database: Database, file: str, params, input_format, output_format):

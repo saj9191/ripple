@@ -41,5 +41,5 @@ def combine(database: Database, table_name, key, input_format, output_format, of
     return database.contains(table_name, file_name) or key != last_file
 
 
-def handler(event, context):
-  util.handle(event, context, combine)
+def main(*argv):
+  util.handle(argv, combine)

@@ -48,5 +48,5 @@ def handle_pivots(database: Database, bucket_name, key, input_format, output_for
   return True
 
 
-def handler(event, context):
-  util.handle(event, context, handle_pivots)
+def main(*argv):
+  util.handle(argv, handle_pivots)

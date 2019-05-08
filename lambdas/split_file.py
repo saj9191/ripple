@@ -55,5 +55,5 @@ def split_file(database: Database, bucket_name: str, key: str, input_format: Dic
   return True
 
 
-def handler(event, context):
-  util.handle(event, context, split_file)
+def main(*argv):
+  util.handle(argv, split_file)

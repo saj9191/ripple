@@ -41,5 +41,5 @@ def find_top(d: Database, table: str, key: str, input_format: Dict[str, Any], ou
     d.put(table, file_name, f, metadata)
 
 
-def handler(event, context):
-  util.handle(event, context, find_top)
+def main(*argv):
+  util.handle(argv, find_top)

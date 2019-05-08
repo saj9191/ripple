@@ -29,5 +29,5 @@ def initiate(database: Database, bucket_name: str, key: str, input_format: Dict[
     database.invoke(params["output_function"], payload)
 
 
-def handler(event, context):
-  util.handle(event, context, initiate)
+def main(*argv):
+  util.handle(argv, initiate)

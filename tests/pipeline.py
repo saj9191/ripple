@@ -54,11 +54,11 @@ class Worker(Thread):
     function_name: str = self.pipeline[stage]["name"]
     function_params: Dict[str, Any] = {**self.params, **self.pipeline[stage], **self.functions[function_name]}
 
-    function_module = self.__import_function__(function_params["file"])
+    function_module = self.__import_function__("lambdas." + function_params["file"])
     self.database.params = function_params
     event = tutils.create_event_from_payload(self.database, payload)
     context = tutils.create_context({"timeout": 60})
-    function_module.handler(event, context)
+    function_module.main(event, context)
 
   def run(self):
     while self.stage < len(self.pipeline):

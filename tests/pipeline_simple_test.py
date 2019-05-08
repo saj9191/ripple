@@ -5,7 +5,7 @@ from tutils import TestEntry, TestTable
 from typing import Any, Dict
 
 
-class Tide(unittest.TestCase):
+class Simple(unittest.TestCase):
   def test_basic(self):
     pp: pipeline.Pipeline = pipeline.Pipeline("../json/simple.json")
 

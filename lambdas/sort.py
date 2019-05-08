@@ -51,5 +51,5 @@ def handle_sort(database: Database, table_name: str, key: str, input_format: Dic
   return True
 
 
-def handler(event, context):
-  util.handle(event, context, handle_sort)
+def main(*argv):
+  util.handle(argv, handle_sort)

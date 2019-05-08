@@ -38,5 +38,5 @@ def find_match(bucket_name, key, input_format, output_format, offsets, params):
     util.write(bucket_name, file_name, str.encode(best_match), {}, params)
 
 
-def handler(event, context):
-  util.handle(event, context, find_match)
+def main(*argv):
+  util.handle(argv, find_match)

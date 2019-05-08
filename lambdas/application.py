@@ -40,5 +40,5 @@ def run_application(database, bucket_name: str, key: str, input_format: Dict[str
   return True
 
 
-def handler(event, context):
-  util.handle(event, context, run_application)
+def main(*argv):
+  util.handle(argv, run_application)

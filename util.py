@@ -151,7 +151,7 @@ def combine_instance(bucket_name, key, params={}):
   return [done and last_file == key, last_file, keys]
 
 
-def load_parameters(s3_dict, key_fields, start_time, event):
+def load_parameters(s3_dict, key_fields, start_time):
   # For cases where the lambda is triggered by a split / map function
   # wee need to look at the parameters for the prefix value. Otherwise
   # we just use the key prefix.
@@ -160,8 +160,9 @@ def load_parameters(s3_dict, key_fields, start_time, event):
   else:
     prefix = key_fields["prefix"]
 
-  if is_set(event, "test"):
-    params = event["load_func"]()
+  if is_set(s3_dict, "test"):
+    params = s3_dict["load_func"]()
+    params["test"] = True
   else:
     params = json.loads(open("{0:d}.json".format(prefix)).read())
 
@@ -175,8 +176,8 @@ def load_parameters(s3_dict, key_fields, start_time, event):
 
   params["start_time"] = start_time
   params["payloads"] = []
-  if "execute" in event:
-    params["reexecute"] = event["execute"]
+  if "execute" in s3_dict:
+    params["reexecute"] = s3_dict["execute"]
   elif "extra_params" in s3_dict and "execute" in s3_dict["extra_params"]:
     params["reexecute"] = s3_dict["extra_params"]["execute"]
 
@@ -186,13 +187,13 @@ def load_parameters(s3_dict, key_fields, start_time, event):
     #print("Sleeping for", n, "seconds")
     #params["n"] = n
 
-  if is_set(event, "test"):
-    s3 = event["s3"]
+  if is_set(s3_dict, "test"):
+    s3 = s3_dict["s3"]
     s3.params = params
   else:
     s3 = S3(params)
 
-  if is_set(event, "reinvoke"):
+  if is_set(s3_dict, "reinvoke"):
     params["reinvoke"] = True
 
   if "ancestry" in s3_dict:
@@ -204,26 +205,47 @@ def load_parameters(s3_dict, key_fields, start_time, event):
   return params
 
 
-def handle(event, context, func):
-  start_time = time.time()
+def lambda_handle(event, context):
   s3_dict = event["Records"][0]["s3"]
   bucket_name = s3_dict["bucket"]["name"]
   key = s3_dict["object"]["key"]
+
+  s3_dict = {**event, **s3_dict}
+  return [bucket_name, key, s3_dict]
+
+
+def openwhisk_handle(params):
+  table = params["table"]
+  key = params["key"]
+  return [table, key, params]
+
+
+def handle(argv, func):
+  start_time = time.time()
+  # TODO: Need a better way to handle this
+  if len(argv) == 1:
+    # OpenWhisk
+    [table, key, params] = openwhisk_handle(argv[0])
+  elif len(argv) == 2:
+    # Lambda
+    [table, key, params] = lambda_handle(argv[0], argv[1])
+  else:
+    raise Exception("Unexpected number of arguments", len(argv))
   input_format = parse_file_name(key)
-  params = load_parameters(s3_dict, input_format, start_time, event)
+  params = load_parameters(params, input_format, start_time)
   if run_function(params, input_format):
     [output_format, log_format] = get_formats(input_format, params)
     token = "{0:f}-{1:d}".format(log_format["timestamp"], log_format["nonce"])
     entry = prior_execution(log_format, params)
     params["ancestry"].append((token, log_format["prefix"], log_format["bin"], log_format["num_bins"], log_format["file_id"], log_format["num_files"]))
     if entry is None:
-      if not is_set(event, "test"):
+      if not is_set(params, "test"):
         clear_tmp(params)
       make_folder(output_format)
       try:
-        finished = func(params["database"], bucket_name, key, input_format, output_format, params["offsets"], params)
+        finished = func(params["database"], table, key, input_format, output_format, params["offsets"], params)
         if finished:
-          write_log(context, input_format, log_format, params)
+          write_log(time.time() - start_time, input_format, log_format, params)
       except Exception as e:
         print("Exception", e)
         raise e
@@ -281,8 +303,8 @@ def have_all_files(objects, m):
   return num_files == len(objects)
 
 
-def write_log(context, input_format, bucket_format, params):
-  duration = params["timeout"] * 1000 - context.get_remaining_time_in_millis()
+def write_log(duration, input_format, bucket_format, params):
+  duration = duration * 1000
   log_name = file_name(bucket_format)
 
   log_results = {**{
