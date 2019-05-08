@@ -191,7 +191,6 @@ def load_parameters(s3_dict, key_fields, start_time, event):
     s3.params = params
   else:
     s3 = S3(params)
-    client = boto3.client("lambda")
 
   if is_set(event, "reinvoke"):
     params["reinvoke"] = True
