@@ -3,6 +3,7 @@ import inspect
 import json
 import os
 import re
+from setup.lambda_setup import LambdaSetup
 from setup.openwhisk_setup import OpenWhiskSetup
 import sys
 import util
@@ -64,6 +65,11 @@ class Pipeline:
     self.config = dict(config)
     self.functions = {}
     self.log = log
+    if "provider" in self.config:
+      self.provider = self.config["provider"]
+    else:
+      self.provider = "lambda"
+
     if "memory_size" in self.config:
       self.memory_size = self.config["memory_size"]
       del self.config["memory_size"]
@@ -152,7 +158,11 @@ class Pipeline:
     if dry_run:
       print(jconfig)
     else:
-      s = OpenWhiskSetup(json.loads(jconfig))
+      params = json.loads(jconfig)
+      if self.provider == "openwhisk":
+        s = OpenWhiskSetup(params)
+      else:
+        s = LambdaSetup(params)
       s.start()
 
   def get_configuration(self, output_file):
