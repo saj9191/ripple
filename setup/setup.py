@@ -120,12 +120,13 @@ class Setup:
       self.__copy_file__(dest, "../formats/{0:s}.py".format(form))
 
   def __zip_ripple_file__(self, zip_directory, fparams):
-    dest = zip_directory + "/lambdas"
-    self.__make_directory__(zip_directory, "lambdas")
-
-    file = "{0:s}.py".format(fparams["file"])
     dir_path = os.path.dirname(os.path.realpath(__file__))
-    shutil.copyfile(dir_path + "/../lambdas/{0:s}".format(file), "{0:s}/{1:s}".format(dest, file))
+    file = "{0:s}.py".format(fparams["file"])
+    if fparams["provider"] == "lambda":
+      dest = "/main.py"
+    else:
+      dest = "/__main__.py"
+    shutil.copyfile(dir_path + "/../lambdas/{0:s}".format(file), zip_directory + dest)
 
     dest = zip_directory + "/database"
     self.__make_directory__(zip_directory, "database")

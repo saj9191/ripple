@@ -1,6 +1,6 @@
 import importlib
 import util
-from iterator import OffsetBounds
+from formats.iterator import OffsetBounds
 from typing import Any, Dict, List
 
 

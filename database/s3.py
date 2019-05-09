@@ -1,7 +1,6 @@
 import boto3
 import botocore
 from database.database import Database, Entry, Table, Statistics
-import requests
 from typing import Any, BinaryIO, Dict, List, Optional, Union
 
 
