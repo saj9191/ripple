@@ -31,6 +31,7 @@ python -m pip install -U mypy
 python -m pip install boto3
 python -m pip install numpy
 python -m pip install Pillow
+python -m pip install sklearn
 
 cmd="export PYTHONPATH=\$PYTHONPATH:$PWD:$PWD/applications:$PWD/lambda:$PWD/formats"
 echo $cmd >> ~/.bashrc

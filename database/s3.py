@@ -1,6 +1,7 @@
 import boto3
 import botocore
 from database.database import Database, Entry, Table, Statistics
+import requests
 from typing import Any, BinaryIO, Dict, List, Optional, Union
 
 
@@ -145,10 +146,13 @@ class S3(Database):
     return payload
 
   def invoke(self, name, payload):
-    self.payloads.append(payload)
-    response = self.client.invoke(
-      FunctionName=name,
-      InvocationType="Event",
-      Payload=json.JSONEncoder().encode(payload)
-    )
-    assert(response["ResponseMetadata"]["HTTPStatusCode"] == 202)
+    if self.params["provider"] == "lambda":
+      self.payloads.append(payload)
+      response = self.client.invoke(
+        FunctionName=name,
+        InvocationType="Event",
+        Payload=json.JSONEncoder().encode(payload)
+      )
+      assert(response["ResponseMetadata"]["HTTPStatusCode"] == 202)
+    else:
+      raise Exception("s3::invoke: Unknown provider", self.params["provider"])
