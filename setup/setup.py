@@ -45,6 +45,13 @@ class Setup:
   def __get_functions__(self):
     raise Exception("Setup::__create_table__ not implemented")
 
+  def __make_directory__(self, zip_directory, name):
+    dest = zip_directory + "/" + name
+    if not os.path.isdir(dest):
+      os.mkdir(dest)
+    open(dest + "/__init__.py", "a").close()
+
+
   # Setup the account credientials
   @abc.abstractmethod
   def __setup_credentials__(self):
@@ -95,13 +102,13 @@ class Setup:
   def __zip_application__(self, zip_directory, fparams):
     if "application" in fparams:
       dest = zip_directory + "/applications"
-      if not os.path.isdir(dest):
-        os.mkdir(dest)
+      self.__make_directory__(zip_directory, "applications")
+      self.__copy_file__(dest, "../applications/__init__.py")
       self.__copy_file__(dest, "../applications/{0:s}.py".format(fparams["application"]))
 
   def __zip_formats__(self, zip_directory, fparams):
     dest = zip_directory + "/formats"
-    os.mkdir(dest)
+    self.__make_directory__(zip_directory, "formats")
     for file in ["../formats/iterator.py", "../formats/pivot.py"]:
       self.__copy_file__(dest, file)
 
@@ -114,20 +121,19 @@ class Setup:
 
   def __zip_ripple_file__(self, zip_directory, fparams):
     dest = zip_directory + "/lambdas"
-    if not os.path.isdir(dest):
-      os.mkdir(dest)
+    self.__make_directory__(zip_directory, "lambdas")
 
     file = "{0:s}.py".format(fparams["file"])
     dir_path = os.path.dirname(os.path.realpath(__file__))
     shutil.copyfile(dir_path + "/../lambdas/{0:s}".format(file), "{0:s}/{1:s}".format(dest, file))
 
     dest = zip_directory + "/database"
-    if not os.path.isdir(dest):
-      os.mkdir(dest)
+    self.__make_directory__(zip_directory, "database")
     for file in ["database", "s3"]:
       self.__copy_file__(dest, "../database/{0:s}.py".format(file))
  
     self.__copy_file__(zip_directory, "../util.py")
+    self.__copy_file__(zip_directory, "../__init__.py")
 
   def start(self):
     self.__setup_credentials__()
