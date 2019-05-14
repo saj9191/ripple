@@ -13,6 +13,10 @@ class Setup:
   def __init__(self, params):
     self.params = params
 
+  @abc.abstractmethod
+  def __add_additional_files__(self, zip_directory):
+    raise Exception("Setup::__add_additional_files__ not implemented")
+
   def __create_parameter_files__(self, zip_directory, function_name):
     for i in range(len(self.params["pipeline"])):
       pparams = self.params["pipeline"][i]
@@ -71,6 +75,7 @@ class Setup:
     self.__zip_application__(zip_directory, function_params)
     self.__zip_formats__(zip_directory, function_params)
     self.__create_parameter_files__(zip_directory, name)
+    self.__add_additional_files__(zip_directory)
     os.chdir(zip_directory)
     subprocess.call("zip -r9 ../{0:s} .".format(zip_file), shell=True)
     os.chdir("..")

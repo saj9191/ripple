@@ -7,6 +7,13 @@ class OpenWhiskSetup(Setup):
   def __init__(self, params):
     Setup.__init__(self, params)
 
+  def __add_additional_files__(self, zip_directory):
+    src = "~/.aws/"
+    dest = zip_directory + "/aws/"
+    os.mkdir(dest)
+    for file in ["credentials", "config"]:
+      shutil.copyfile(src + file, dest + file)
+
   def __create_table__(self, name):
     pass
 

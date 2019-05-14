@@ -215,6 +215,8 @@ def lambda_handle(event, context):
 
 
 def openwhisk_handle(params):
+  os.environ["AWS_SHARED_CREDENTIALS_FILE"] = "/action/aws/credentials"
+  os.environ["AWS_CONFIG_FILE"] = "/action/aws/config"
   table = params["table"]
   key = params["key"]
   return [table, key, params]

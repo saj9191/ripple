@@ -7,6 +7,9 @@ class LambdaSetup(Setup):
   def __init__(self, params):
     Setup.__init__(self, params)
 
+  def __add_additional_files__(self, zip_directory):
+    pass
+
   def __bucket_exists__(self, name):
     s3_client = boto3.client("s3")
     try:
