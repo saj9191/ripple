@@ -1,4 +1,6 @@
+import os
 import requests
+import shutil
 import subprocess
 from setup.setup import Setup
 
@@ -8,7 +10,7 @@ class OpenWhiskSetup(Setup):
     Setup.__init__(self, params)
 
   def __add_additional_files__(self, zip_directory):
-    src = "~/.aws/"
+    src = os.path.expanduser("~") + "/.aws/"
     dest = zip_directory + "/aws/"
     os.mkdir(dest)
     for file in ["credentials", "config"]:
