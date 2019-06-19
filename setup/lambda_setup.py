@@ -22,12 +22,15 @@ class LambdaSetup(Setup):
     s3_client = boto3.client("s3")
     if not self.__bucket_exists__(name):
       try:
+        create_bucket_kwargs = {}
+        if self.params["region"] != "us-east-1":
+          create_bucket_kwargs["CreateBucketConfiguration"] = {
+            "LocationConstraint": self.params["region"],
+          }
         s3_client.create_bucket(
           ACL="public-read-write",
           Bucket=name,
-          CreateBucketConfiguration={
-            "LocationConstraint": self.params["region"],
-          }
+          **create_bucket_kwargs
         )
       except botocore.exceptions.ClientError as ex:
         if "BucketAlreadyOwnedByYou" not in str(ex):
