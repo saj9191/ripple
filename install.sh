@@ -33,5 +33,5 @@ python -m pip install numpy
 python -m pip install Pillow
 python -m pip install sklearn
 
-cmd="export PYTHONPATH=\$PYTHONPATH:$PWD:$PWD/applications:$PWD/lambda:$PWD/formats"
+cmd="export PYTHONPATH=\$PYTHONPATH:$PWD:$PWD/applications:$PWD/lambda:$PWD/formats:$PWD/database"
 echo $cmd >> ~/.bashrc

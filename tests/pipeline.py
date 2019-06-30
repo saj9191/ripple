@@ -6,6 +6,7 @@ import queue
 import shutil
 import sys
 import time
+import traceback
 import tutils
 import util
 from threading import Thread
@@ -65,9 +66,10 @@ class Worker(Thread):
       while self.stage < len(self.pipeline):
         payload = self.task_queue.get()
         self.__trigger__(payload)
-    except:
+    except Exception as e:
+      print(traceback.print_exc())
       self.running = False
-      os.exit(1)
+      os._exit(1)
     self.running = False
 
 
