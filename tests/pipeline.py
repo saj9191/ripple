@@ -61,9 +61,13 @@ class Worker(Thread):
     function_module.main(event, context)
 
   def run(self):
-    while self.stage < len(self.pipeline):
-      payload = self.task_queue.get()
-      self.__trigger__(payload)
+    try:
+      while self.stage < len(self.pipeline):
+        payload = self.task_queue.get()
+        self.__trigger__(payload)
+    except:
+      self.running = False
+      os.exit(1)
     self.running = False
 
 
