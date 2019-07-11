@@ -162,7 +162,7 @@ class Database:
   def invoke(self, name, payload):
     raise Exception("Database::invoke not implemented")
 
-  def put(self, table_name: str, key: str, content: BinaryIO, metadata: Dict[str, str], invoke: bool):
+  def put(self, table_name: str, key: str, content: BinaryIO, metadata: Dict[str, str], invoke: bool = True):
     self.statistics.write_count += 1
     self.statistics.write_byte_count += os.path.getsize(content.name)
     self.__put__(table_name, key, content, metadata, invoke)

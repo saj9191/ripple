@@ -71,7 +71,7 @@ class S3(Database):
     return objects
 
   def __put__(self, table_name: str, key: str, content: BinaryIO, metadata: Dict[str, str], invoke=True):
-    self.__s3_write__(table_name, key, content, metadata)
+    self.__s3_write__(table_name, key, content, metadata, invoke)
 
   def __read__(self, table_name: str, key: str) -> bytes:
     obj = self.s3.Object(table_name, key)
