@@ -22,22 +22,27 @@ def process_objects(s3, bucket_name, objects, params, subfolder):
     statistics.append({"name": stage["name"], "messages": []})
 
   for objSum in objects:
-    name = subfolder + "/" + objSum.key.replace("/", ".")
+    if subfolder:
+      name = subfolder + "/" + objSum.key.replace("/", ".")
+    else:
+      name = None
     obj_format = util.parse_file_name(objSum.key)
-    if os.path.isfile(name):
+    if name and os.path.isfile(name):
       content = open(name, "r").read()
       if len(content.strip()) > 0:
         body = json.loads(open(name, "r").read())
       else:
         continue
     else:
-      Path(name).touch()
-      print("Not Found", name)
+      if name:
+        Path(name).touch()
+        print("Not Found", name)
       obj = s3.Object(bucket_name, objSum.key)
       x = obj.get()["Body"].read()
       body = json.loads(x.decode("utf-8"))
-      with open(name, "wb+") as f:
-        f.write(x)
+      if name:
+        with open(name, "wb+") as f:
+          f.write(x)
     duration = body["duration"]
     stage = obj_format["prefix"] - 1
 
