@@ -159,7 +159,7 @@ class LambdaSetup(Setup):
         FunctionName=name,
         Runtime="python3.6",
         Role="arn:aws:iam::{0:d}:role/{1:s}".format(account_id, self.params["role"]),
-        Handler="main.main".format(function_params["file"]),
+        Handler="main.main",
         Code={
           "ZipFile": zipped_code
         },
