@@ -117,12 +117,9 @@ class Setup:
     for file in ["../formats/iterator.py", "../formats/pivot.py"]:
       self.__copy_file__(dest, file)
 
-    if "format" in fparams:
-      form = fparams["format"]
-      if "dependencies" in self.params and form in self.params["dependencies"]["formats"]:
-        for file in self.params["dependencies"]["formats"][form]:
-          self.__copy_file__(dest, file)
-      self.__copy_file__(dest, "../formats/{0:s}.py".format(form))
+    if "formats" in fparams:
+      for format in fparams["formats"]:
+        self.__copy_file__(dest, "../formats/{0:s}.py".format(format))
 
   def __zip_ripple_file__(self, zip_directory, fparams):
     dir_path = os.path.dirname(os.path.realpath(__file__))
