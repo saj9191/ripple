@@ -11,7 +11,7 @@ currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentfram
 from typing import Any, Dict, Optional
 
 
-IMPORT_REGEXES = [re.compile(r"import ([a-zA-Z\_\.]+)"), re.compile(r"from ([a-zA-Z\_\.]+) import .*")]
+IMPORT_REGEXES = [re.compile(r"import ([a-zA-Z\_\.]+)"), re.compile(r"from ([a-zA-Z\_\.]+) import (.*)")]
 SUPPORTED_LIBRARIES = set(["PIL", "numpy", "sklearn"])
 
 
@@ -139,7 +139,12 @@ class Pipeline:
         for regex in IMPORT_REGEXES:
           m = regex.match(line)
           if m:
-            imports.add(m.group(1).split(".")[0])
+            # TODO: Figure out if there's a better way to handle imports
+            # Currently have to special case things like from formats import new_line
+            format = m.group(1).split(".")[0]
+            if format == "formats":
+              format = m.group(2)
+            imports.add(format)
             break
     return imports
 
