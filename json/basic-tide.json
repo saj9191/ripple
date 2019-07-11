@@ -3,10 +3,14 @@
   "log": "maccoss-log",
   "timeout": 600,
   "functions": {
-    "split-file": {
+    "split_file": {
       "file": "split_file",
       "memory_size": 128,
-      "formats": [],
+      "split_size": 100000000,
+      "provider": "lambda",
+      "formats": [
+        "mzML"
+      ],
       "imports": []
     },
     "tide": {
@@ -15,6 +19,7 @@
       "input_format": "mzML",
       "memory_size": 3008,
       "output_format": "tsv",
+      "provider": "lambda",
       "formats": [
         "mzML"
       ],
@@ -28,6 +33,7 @@
       ],
       "memory_size": 256,
       "output_format": "tsv",
+      "provider": "lambda",
       "imports": []
     },
     "percolator": {
@@ -36,6 +42,7 @@
       "input_format": "tsv",
       "memory_size": 3008,
       "output_format": null,
+      "provider": "lambda",
       "formats": [
         "tsv",
         "new_line"
@@ -45,8 +52,8 @@
   },
   "pipeline": [
     {
-      "split_size": 100000000,
-      "name": "split-file",
+      "split_size": 10000000,
+      "name": "split_file",
       "output_function": "tide"
     },
     {
