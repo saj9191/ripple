@@ -1,5 +1,4 @@
 import os
-import requests
 import shutil
 import subprocess
 from setup.setup import Setup

@@ -2,7 +2,7 @@ import os
 import shutil
 import subprocess
 import util
-from database import Database
+from database.database import Database
 from typing import List
 
 
