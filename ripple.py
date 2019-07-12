@@ -173,7 +173,7 @@ class Pipeline:
       s.start()
 
   def get_configuration(self, output_file):
-    output_file = "../" + output_file
+    output_file = os.path.dirname(os.path.realpath(__file__)) + "/" + output_file
     configuration = {**{
       "bucket": self.table.replace("s3://", ""),
       "log": self.log.replace("s3://", ""),

@@ -36,7 +36,7 @@ class Setup:
     dir_path = os.path.dirname(os.path.realpath(__file__))
     index = file_path.rfind("/")
     file_name = file_path[index + 1:]
-    shutil.copyfile(file_path, "{0:s}/{1:s}".format(directory, file_name))
+    shutil.copyfile(dir_path + "/" + file_path, directory + "/" + file_name)
     return file_name
 
   # Creates a table / bucket to load data to.
@@ -62,7 +62,8 @@ class Setup:
     raise Exception("Setup::__setup_credentials__ not implemented")
 
   def __setup_function__(self, name, create):
-    zip_directory = "lambda_dependencies"
+    dir_path = os.path.dirname(os.path.realpath(__file__))
+    zip_directory = dir_path + "/lambda_dependencies"
     zip_file = "lambda.zip"
 
     if os.path.isdir(zip_directory):
