@@ -63,7 +63,7 @@ class Setup:
 
   def __setup_function__(self, name, create):
     dir_path = os.path.dirname(os.path.realpath(__file__))
-    zip_directory = dir_path + "/lambda_dependencies"
+    zip_directory = dir_path + "/" + self.params["region"] + "/lambda_dependencies"
     zip_file = "lambda.zip"
 
     if os.path.isdir(zip_directory):
@@ -78,10 +78,9 @@ class Setup:
     self.__create_parameter_files__(zip_directory, name)
     self.__add_additional_files__(zip_directory)
     os.chdir(zip_directory)
-    subprocess.call("zip -r9 ../{0:s} .".format(zip_file), shell=True)
-    os.chdir("..")
+    subprocess.call("zip -q -r9 ../../{0:s} .".format(zip_file), shell=True)
+    os.chdir("../..")
     self.__upload_function__(name, zip_file, function_params, create)
-    os.remove(zip_file)
     shutil.rmtree(zip_directory)
 
   def __setup_functions__(self):

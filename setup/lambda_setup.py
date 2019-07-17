@@ -1,6 +1,7 @@
 import boto3
 import botocore
 import json
+import os
 from setup.setup import Setup
 
 class LambdaSetup(Setup):
@@ -150,45 +151,54 @@ class LambdaSetup(Setup):
     iam_resource = boto3.resource("iam")
     iam_resource.RolePolicy(role_name, role_name).put(PolicyDocument=json.dumps(extra))
 
+  def __create_function__(self, lambda_client, name, account_id, function_params, zipped_code):
+    response = lambda_client.create_function(
+      FunctionName=name,
+      Runtime="python3.6",
+      Role="arn:aws:iam::{0:d}:role/{1:s}".format(account_id, self.params["role"]),
+      Handler="main.main",
+      Code={
+        "ZipFile": zipped_code
+      },
+      Timeout=self.params["timeout"],
+      MemorySize=function_params["memory_size"],
+      Layers=self.__get_layers__(self.params["region"], account_id, function_params["imports"])
+    )
+    assert(response["ResponseMetadata"]["HTTPStatusCode"] == 201)
+
+  def __update_function__(self, lambda_client, name, account_id, function_params,  zipped_code):
+    response = lambda_client.update_function_code(
+      FunctionName=name,
+      ZipFile=zipped_code
+    )
+    assert(response["ResponseMetadata"]["HTTPStatusCode"] == 200)
+    response = lambda_client.update_function_configuration(
+      FunctionName=name,
+      Timeout=self.params["timeout"],
+      MemorySize=function_params["memory_size"],
+      Layers=self.__get_layers__(self.params["region"], account_id, function_params["imports"])
+    )
+    assert(response["ResponseMetadata"]["HTTPStatusCode"] == 200)
+    try:
+      statement_id = "{0:s}-{1:s}".format(name, self.params["bucket"])
+      lambda_client.remove_permission(
+        FunctionName=name,
+        StatementId=statement_id,
+      )
+    except Exception as e:
+      print("WARNING: Cannot remove permissions for", name)
+
   def __upload_function__(self, name, zip_file, function_params, create):
-    lambda_client = boto3.client("lambda")
+    lambda_client = boto3.client("lambda", region_name=self.params["region"])
     account_id = int(boto3.client("sts").get_caller_identity().get("Account"))
     zipped_code = open(zip_file, "rb").read()
     if create:
-      response = lambda_client.create_function(
-        FunctionName=name,
-        Runtime="python3.6",
-        Role="arn:aws:iam::{0:d}:role/{1:s}".format(account_id, self.params["role"]),
-        Handler="main.main",
-        Code={
-          "ZipFile": zipped_code
-        },
-        Timeout=self.params["timeout"],
-        MemorySize=function_params["memory_size"],
-        Layers=self.__get_layers__(self.params["region"], account_id, function_params["imports"])
-      )
-      assert(response["ResponseMetadata"]["HTTPStatusCode"] == 201)
-    else:
-      response = lambda_client.update_function_code(
-        FunctionName=name,
-        ZipFile=zipped_code
-      )
-      assert(response["ResponseMetadata"]["HTTPStatusCode"] == 200)
-      response = lambda_client.update_function_configuration(
-        FunctionName=name,
-        Timeout=self.params["timeout"],
-        MemorySize=function_params["memory_size"],
-        Layers=self.__get_layers__(self.params["region"], account_id, function_params["imports"])
-      )
-      assert(response["ResponseMetadata"]["HTTPStatusCode"] == 200)
       try:
-        statement_id = "{0:s}-{1:s}".format(name, self.params["bucket"])
-        lambda_client.remove_permission(
-          FunctionName=name,
-          StatementId=statement_id,
-        )
-      except Exception as e:
-        print("WARNING: Cannot remove permissions for", name)
+        self.__create_function__(lambda_client, name, account_id, function_params, zipped_code)
+      except lambda_client.exceptions.ResourceConflictException as e:
+        self.__update_function__(lambda_client, name, account_id, function_params, zipped_code)
+    else:
+      self.__update_function__(lambda_client, name, account_id, function_params, zipped_code)
 
     statement_id = "{0:s}-{1:s}".format(name, self.params["bucket"])
     args = {
