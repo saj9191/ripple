@@ -4,6 +4,7 @@ from database.s3 import S3
 import json
 import os
 import queue
+import random
 import ripple
 import statistics
 import threading
@@ -36,10 +37,11 @@ regions = [
   "us-west-2",
 ]
 
-num_iterations = 3
-
 done_queue = queue.Queue()
 log_queue = queue.Queue()
+
+class TimeoutError(Exception):
+  pass
 
 def setup(table, log, json_name, split_size, mem_size, region):
   config = {
@@ -75,19 +77,17 @@ def wait_for_execution_to_finish(db, table, key, num_steps):
   m["prefix"] = num_steps
   prefix = util.key_prefix(util.file_name(m))
   start_time = time.time()
-  print(table, prefix)
   while len(entries) == 0:
     entries = db.get_entries(table, prefix)
     if time.time() - start_time > num_steps * 60 * 2:
       print("Tiemout", num_steps * 60 * 2)
-      raise Exception("Timeout")
+      raise TimeoutError
     time.sleep(10)
 
 
 def profile(region):
   db = S3({})
   dir_path = os.path.dirname(os.path.realpath(__file__))
-  name = "PXD005709/150130-15_0321-01-AKZ-F01.mzML"
   suffix = "-".join(region.split("-")[1:])
   table = "maccoss-tide-" + suffix
   log = "maccoss-log-" + suffix
@@ -95,32 +95,37 @@ def profile(region):
   json_name = "json/basic-tide-" + suffix +".json"
   if region != "us-west-2":
     source_bucket += "-" + suffix
+ 
+  entries = db.get_entries(source_bucket)
+  random.shuffle(entries)
 
+  i = 0
   for split_size in split_sizes:
     print(region, "Profiling split size", split_size)
     for mem_size in memory_sizes:
       print(region, "Profiling mem size", mem_size)
+      entry  = entries[i % len(entries)]
+      name = entry.key
+      size = entry.content_length()
       num_steps = setup(table, log, json_name, split_size, mem_size, region)
-      for iteration in range(num_iterations):
-        print("Profile iteration", iteration)
-        key, _, _ = upload.upload(table, name, source_bucket)
-        token = key.split("/")[1]
-        try:
-          wait_for_execution_to_finish(db, table, key, num_steps)
-          params = json.loads(open(dir_path + "/" + json_name).read())
-          stats, costs, durations = statistics.statistics(log, token, None, params, None)
-          duration = durations[-1][1] - durations[-1][0]
-          cost = costs[-1]
-          m = f"{name},{region},{split_size},{mem_size},{iteration},{duration},{cost}\n"
-        except Exception as e:
-          print(e)
-          duration = -1.0
-          cost = -1.0
-          m = f"{name},{region},{split_size},{mem_size},{iteration},{duration},{cost}\n"
-        print(m)
-        log_queue.put(m)
-        clear.clear(table, token, None)
-        clear.clear(log, token, None)
+      key, _, _ = upload.upload(table, name, source_bucket)
+      token = key.split("/")[1]
+      try:
+        wait_for_execution_to_finish(db, table, key, num_steps)
+        params = json.loads(open(dir_path + "/" + json_name).read())
+        stats, costs, durations = statistics.statistics(log, token, None, params, None)
+        duration = durations[-1][1] - durations[-1][0]
+        cost = costs[-1]
+        m = f"{name},{size},{region},{split_size},{mem_size},{duration},{cost}\n"
+      except TimeoutError:
+        duration = -1.0
+        cost = -1.0
+        m = f"{name},{size},{region},{split_size},{mem_size},{duration},{cost}\n"
+      print(m)
+      log_queue.put(m)
+      clear.clear(table, token, None)
+      clear.clear(log, token, None)
+      i += 1
   done_queue.put("done")
 
 def averages(cost, duration, count):
@@ -179,8 +184,10 @@ def run():
     threads.append(threading.Thread(target=profile, args=(region,)))
     threads[-1].start()
 
-  with open("profile.csv", "a+") as f:
-    f.write("Name,Region,Split Size,Memory Size,Iteration,Total Duration,Total Cost\n")
+  file_name = "profile.csv"
+
+  with open(file_name, "a+") as f:
+    f.write("Name,Size,Region,Split Size,Memory Size,Total Duration,Total Cost\n")
     while done_queue.qsize() < len(threads):
       while not log_queue.empty():
         f.write(log_queue.get())
@@ -190,6 +197,6 @@ def run():
     for thread in threads:
       thread.join()
 
+  process(file_name)
 
-process("profile.csv")
-#run()
+run()
