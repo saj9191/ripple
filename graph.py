@@ -1,9 +1,12 @@
 import argparse
+from matplotlib.font_manager import FontProperties
+from collections import defaultdict
 import json
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import os
+import profile
 import sys
 
 memory = json.loads(open("json/memory.json").read())
@@ -110,7 +113,7 @@ def parse_logs(folder, params):
   plt.close()
 
 
-def main():
+def main1():
   parser = argparse.ArgumentParser()
   parser.add_argument("--folder", type=str)
   parser.add_argument("--parameters", type=str)
@@ -159,9 +162,87 @@ def main():
   print("Las non invoke", not_invoke_x[-1])
   plt.plot(not_invoke_x, not_invoke_y, label="Non-Straggler Tasks", color="green", linestyle="--")
   plot_name = "concurrency-1.png"
-  plt.legend(frameon=False, loc="upper right", fontsize="large")
+  plt.legend(frameon=False, loc="upper left", fontsize="large")
   plt.savefig(plot_name)
   plt.close()
+
+def size_fn(value, tick_number):
+  sizes = ["B", "KB", "MB", "GB"]
+  i = 0
+  while value > 1024:
+    value /= 1024
+    i += 1 
+  return "{0:.2f}{1:s}".format(value, sizes[i])
+ 
+def profile_plot(xaxis, yaxis, max_x, ylabel, file_name):
+  ax = plt.subplot(111)
+  colors = ["red", "blue", "green", "purple", "brown"]
+  linestyles = ['-', '--', '-.', ':']
+ 
+  i = 0 
+  keys = list(xaxis.keys())[:2]
+  width = 1.0 / len(keys)
+  offset = -1 * width
+  for label in keys:
+    ax.bar(range(len(yaxis[label])), yaxis[label], color=colors[i % len(colors)])
+  #  ax.bar(xaxis[label][:2], yaxis[label][:2], label=label, color=colors[i % len(colors)], align="center") #linestyle=linestyles[i % len(linestyles)])
+    i += 1
+
+#  xticks = []
+#  increment = 1024*1024*1024
+#  for i in range(0, int(max_x), increment):
+#    xticks.append(i)
+#  xticks.append(xticks[-1] + increment)
+
+#  ax.xaxis.set_major_formatter(plt.FuncFormatter(size_fn))
+#  plt.xticks(xticks)
+  fontP = FontProperties()
+  fontP.set_size("small")
+  plt.xlabel("File Size")
+  plt.ylabel(ylabel) 
+  plt.legend(bbox_to_anchor=(0, 1), loc="upper left",prop=fontP)
+  plt.savefig(file_name)
+  plt.close()
+
+def profile_graph(args):
+  assert(args.xaxis == "size" or args.xaxis == "split" or args.xaxis == "memory")
+  avg_with, avg_without = profile.process(args.file, args.xaxis)
+  if args.regions:
+    avg = avg_with
+  else:
+    avg = avg_without
+
+  xaxis = defaultdict(lambda: [])
+  ycost = defaultdict(lambda: []) 
+  yduration = defaultdict(lambda: [])
+
+  max_x = 0
+  for key in avg.keys():
+    parts = key.split(",")
+    xlabel = float(parts[0])
+    label = ",".join(parts[1:])
+    if avg[key][0] != float("inf"):
+      xaxis[label].append(xlabel)
+      max_x = max(max_x, xlabel)
+      ycost[label].append(avg[key][0])
+      yduration[label].append(avg[key][1])
+
+  profile_plot(xaxis, ycost, max_x, "Cost", "profile-cost.png")
+  profile_plot(xaxis, yduration, max_x, "Duration", "profile-duration.png")
+  #plt.plot(normal_x, normal_y, label="No Fault Tolerance", color="red", linestyle="-")
+
+
+
+def main():
+  parser = argparse.ArgumentParser()
+  parser.add_argument("--graph", type=str, required=True)
+  parser.add_argument("--file", type=str)
+  parser.add_argument("--xaxis", type=str)
+  parser.add_argument("--regions", action="store_true")
+  args = parser.parse_args()
+
+  if args.graph == "profile":
+    profile_graph(args)
 
 
 main()

@@ -39,6 +39,7 @@ regions = [
 
 done_queue = queue.Queue()
 log_queue = queue.Queue()
+num_iterations = 3
 
 class TimeoutError(Exception):
   pass
@@ -100,53 +101,51 @@ def profile(region):
   random.shuffle(entries)
 
   i = 0
-  for split_size in split_sizes:
-    print(region, "Profiling split size", split_size)
-    for mem_size in memory_sizes:
-      print(region, "Profiling mem size", mem_size)
-      entry  = entries[i % len(entries)]
-      name = entry.key
-      size = entry.content_length()
-      num_steps = setup(table, log, json_name, split_size, mem_size, region)
-      key, _, _ = upload.upload(table, name, source_bucket)
-      token = key.split("/")[1]
-      try:
-        wait_for_execution_to_finish(db, table, key, num_steps)
-        params = json.loads(open(dir_path + "/" + json_name).read())
-        stats, costs, durations = statistics.statistics(log, token, None, params, None)
-        duration = durations[-1][1] - durations[-1][0]
-        cost = costs[-1]
-        m = f"{name},{size},{region},{split_size},{mem_size},{duration},{cost}\n"
-      except TimeoutError:
-        duration = -1.0
-        cost = -1.0
-        m = f"{name},{size},{region},{split_size},{mem_size},{duration},{cost}\n"
-      print(m)
-      log_queue.put(m)
-      clear.clear(table, token, None)
-      clear.clear(log, token, None)
-      i += 1
+  for it in range(num_iterations):
+    for split_size in split_sizes:
+      print(region, "Profiling split size", split_size)
+      for mem_size in memory_sizes:
+        print(region, "Profiling mem size", mem_size)
+        entry  = entries[i % len(entries)]
+        name = entry.key
+        size = entry.content_length()
+        num_steps = setup(table, log, json_name, split_size, mem_size, region)
+        key, _, _ = upload.upload(table, name, source_bucket)
+        token = key.split("/")[1]
+        try:
+          wait_for_execution_to_finish(db, table, key, num_steps)
+          params = json.loads(open(dir_path + "/" + json_name).read())
+          stats, costs, durations = statistics.statistics(log, token, None, params, None)
+          duration = durations[-1][1] - durations[-1][0]
+          cost = costs[-1]
+          m = f"{name},{size},{region},{split_size},{mem_size},{duration},{cost}\n"
+        except TimeoutError:
+          duration = -1.0
+          cost = -1.0
+          m = f"{name},{size},{region},{split_size},{mem_size},{duration},{cost}\n"
+        print(m)
+        log_queue.put(m)
+        clear.clear(table, token, None)
+        clear.clear(log, token, None)
+        i += 1
   done_queue.put("done")
 
-def averages(cost, duration, count):
-  average_cost = {}
-  average_duration = {}
-  for key in duration.keys():
-    average_cost[key] = cost[key] / count[key]
-    average_duration[key] = duration[key] / count[key]
-  return average_cost, average_duration
+def averages(total, count):
+  average = {}
+  for key in total.keys():
+    average[key] = [total[key][0] / count[key], total[key][1] / count[key]]
+  return average
 
-def best(cost, duration):
-  best_cost = sorted(cost.keys(), key=lambda k: cost[k])[0]
-  best_duration = sorted(duration.keys(), key=lambda k: duration[k])[0]
-  print("Best cost", best_cost, cost[best_cost], "... Duration", duration[best_cost])
-  print("Best duration", best_duration, duration[best_duration], "... Cost", cost[best_duration])
+def best(average):
+  print(average)
+  best_cost = sorted(average.keys(), key=lambda k: average[k][0])[0]
+  best_duration = sorted(average.keys(), key=lambda k: average[k][1])[0]
+  print("Best cost", best_cost, average[best_cost][0], "... Duration", average[best_cost][1])
+  print("Best duration", best_duration, average[best_duration][1], "... Cost", average[best_duration][0])
 
-def process(file_name):
-  total_with_cost = defaultdict(lambda: 0)
-  total_without_cost = defaultdict(lambda: 0)
-  total_with_duration = defaultdict(lambda: 0)
-  total_without_duration = defaultdict(lambda: 0)
+def process(file_name, agg):
+  total_with = defaultdict(lambda: [0, 0])
+  total_without = defaultdict(lambda: [0, 0])
   with_count = defaultdict(lambda: 0)
   without_count = defaultdict(lambda: 0)
 
@@ -154,29 +153,40 @@ def process(file_name):
     lines = f.readlines()[1:]
   for line in lines[1:]:
     parts = line.split(",")
-    with_key = ",".join(parts[0:4])
-    without_key = parts[0] + "," + ",".join(parts[2:4])
+    try:
+      if agg == "":
+        with_key = ",".join(parts[0:4])
+        without_key = parts[0] + "," + ",".join(parts[2:4])
+      elif agg == "size":
+        agg_size = 1000*1000
+        size = int((int(parts[1]) / agg_size)) * agg_size
+        without_key = str(size) + "," + ",".join(parts[3:5])
+        with_key = without_key + "," + parts[2]
 
-    duration = float(parts[5])
-    cost = float(parts[6])
+      duration = float(parts[5])
+      cost = float(parts[6])
+    except:
+      continue
+ 
     if duration < 0:
       duration = float("inf")
       cost = float("inf")
-    total_with_duration[with_key] += duration
-    total_without_duration[without_key] += duration
-    total_with_cost[with_key] += cost
-    total_without_cost[without_key] += cost
+    total_with[with_key][0] += cost
+    total_without[without_key][0] += cost
+    total_with[with_key][1] += duration
+    total_without[without_key][1] += duration
     without_count[without_key] += 1
     with_count[with_key] += 1
 
-  avg_with_cost, avg_with_duration = averages(total_with_cost, total_with_duration, with_count)
-  avg_without_cost, avg_without_duration = averages(total_without_cost, total_without_duration, without_count)
+  avg_with = averages(total_with, with_count)
+  avg_without = averages(total_without, without_count)
 
   print("With Region")
-  best(avg_with_cost, avg_with_duration)
+  best(avg_with)
   print("")
   print("Without Region")
-  best(avg_without_cost, avg_without_duration)
+  best(avg_without)
+  return avg_with, avg_without
 
 def run():
   threads = []
@@ -184,7 +194,8 @@ def run():
     threads.append(threading.Thread(target=profile, args=(region,)))
     threads[-1].start()
 
-  file_name = "profile.csv"
+  dir_path = os.path.dirname(os.path.realpath(__file__))
+  file_name = dir_path + "/profile.csv"
 
   with open(file_name, "a+") as f:
     f.write("Name,Size,Region,Split Size,Memory Size,Total Duration,Total Cost\n")
@@ -196,7 +207,13 @@ def run():
 
     for thread in threads:
       thread.join()
+    time.sleep(10)
+    while not log_queue.empty():
+      f.write(log_queue.get())
+      f.flush()
 
-  process(file_name)
+  process(file_name, "")
 
-run()
+
+if __name__== "__main__":
+  run()
