@@ -1,3 +1,18 @@
+# This file is part of Ripple.
+
+# Ripple is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+
+# Ripple is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+
+# You should have received a copy of the GNU General Public License
+# along with Ripple.  If not, see <https://www.gnu.org/licenses/>.
+
 import clear
 from collections import defaultdict
 from database.s3 import S3
@@ -155,8 +170,8 @@ def process(file_name, agg):
     parts = line.split(",")
     try:
       if agg == "":
-        with_key = ",".join(parts[0:4])
-        without_key = parts[0] + "," + ",".join(parts[2:4])
+        with_key = ",".join(parts[0:5])
+        without_key = parts[0] + "," + ",".join(parts[2:5])
       elif agg == "size":
         agg_size = 1000*1000
         size = int((int(parts[1]) / agg_size)) * agg_size

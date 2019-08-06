@@ -174,70 +174,48 @@ def size_fn(value, tick_number):
     i += 1 
   return "{0:.2f}{1:s}".format(value, sizes[i])
  
-def profile_plot(xaxis, yaxis, max_x, ylabel, file_name):
-  ax = plt.subplot(111)
-  colors = ["red", "blue", "green", "purple", "brown"]
-  linestyles = ['-', '--', '-.', ':']
- 
-  i = 0 
-  keys = list(xaxis.keys())[:2]
-  width = 1.0 / len(keys)
-  offset = -1 * width
-  for label in keys:
-    ax.bar(range(len(yaxis[label])), yaxis[label], color=colors[i % len(colors)])
-  #  ax.bar(xaxis[label][:2], yaxis[label][:2], label=label, color=colors[i % len(colors)], align="center") #linestyle=linestyles[i % len(linestyles)])
-    i += 1
+def profile_plot(results, title, plot_name):
+  fig, ax = plt.subplots()
+  for name in results.keys():
+    values = sorted(results[name], key=sort)
+    xvalues = list(map(lambda v: v[0], values))
+    yvalues = list(map(lambda v: v[1], values))
+    ax.scatter(xvalues, yvalues, label=name)
 
-#  xticks = []
-#  increment = 1024*1024*1024
-#  for i in range(0, int(max_x), increment):
-#    xticks.append(i)
-#  xticks.append(xticks[-1] + increment)
-
-#  ax.xaxis.set_major_formatter(plt.FuncFormatter(size_fn))
-#  plt.xticks(xticks)
-  fontP = FontProperties()
-  fontP.set_size("small")
-  plt.xlabel("File Size")
-  plt.ylabel(ylabel) 
-  plt.legend(bbox_to_anchor=(0, 1), loc="upper left",prop=fontP)
-  plt.savefig(file_name)
+  plt.title(title)
+  plt.xticks(rotation=90)
+  fig.tight_layout()
+#  plt.legend(frameon=False, loc="upper right", fontsize="small")
+  plt.savefig(plot_name)
   plt.close()
 
+
+def sort(values):
+  return list(map(lambda v: float(v), values[0].split(",")))
+
+
 def profile_graph(args):
-  assert(args.xaxis == "size" or args.xaxis == "split" or args.xaxis == "memory")
-  avg_with, avg_without = profile.process(args.file, args.xaxis)
-  if args.regions:
-    avg = avg_with
-  else:
-    avg = avg_without
+  _, avg_without = profile.process(args.file, args.xaxis)
+  duration_plots = defaultdict(lambda: [])
+  cost_plots = defaultdict(lambda: [])
 
-  xaxis = defaultdict(lambda: [])
-  ycost = defaultdict(lambda: []) 
-  yduration = defaultdict(lambda: [])
-
-  max_x = 0
-  for key in avg.keys():
+  for key in avg_without.keys():
     parts = key.split(",")
-    xlabel = float(parts[0])
-    label = ",".join(parts[1:])
-    if avg[key][0] != float("inf"):
-      xaxis[label].append(xlabel)
-      max_x = max(max_x, xlabel)
-      ycost[label].append(avg[key][0])
-      yduration[label].append(avg[key][1])
+    name = parts[0]
+    xkey = ",".join(parts[2:])
 
-  profile_plot(xaxis, ycost, max_x, "Cost", "profile-cost.png")
-  profile_plot(xaxis, yduration, max_x, "Duration", "profile-duration.png")
-  #plt.plot(normal_x, normal_y, label="No Fault Tolerance", color="red", linestyle="-")
+    cost_plots[name].append([xkey, avg_without[key][0]])
+    duration_plots[name].append([xkey, avg_without[key][1]])
 
+  profile_plot(cost_plots, args.file, "profile-cost.png") 
+  profile_plot(duration_plots, args.file,  "profile-duration.png") 
 
 
 def main():
   parser = argparse.ArgumentParser()
   parser.add_argument("--graph", type=str, required=True)
   parser.add_argument("--file", type=str)
-  parser.add_argument("--xaxis", type=str)
+  parser.add_argument("--xaxis", type=str, default="")
   parser.add_argument("--regions", action="store_true")
   args = parser.parse_args()
 

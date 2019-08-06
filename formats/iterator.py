@@ -1,3 +1,18 @@
+# This file is part of Ripple.
+
+# Ripple is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+
+# Ripple is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+
+# You should have received a copy of the GNU General Public License
+# along with Ripple.  If not, see <https://www.gnu.org/licenses/>.
+
 import boto3
 import heapq
 import os
@@ -56,7 +71,7 @@ class Iterator(Generic[T]):
   adjust_chunk_size: ClassVar[int] = 1000
   next_index: int = -1
   options: ClassVar[Options]
-  read_chunk_size: ClassVar[int] = 10*1000*1000
+  read_chunk_size: ClassVar[int] = 1*1000*1000
   delimiter: Delimiter
   identifiers: T
 
@@ -192,6 +207,7 @@ class Iterator(Generic[T]):
       self.next_index = self.get_offset_start_index()
     next_start_index: int = self.next_index
     next_end_index: int = min(next_start_index + self.read_chunk_size, self.get_offset_end_index())
+    print("next", next_start_index, next_end_index)
     more: bool = True
     stream: bytes = self.entry.get_range(next_start_index, next_end_index)
     stream = self.remainder + stream
