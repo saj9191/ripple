@@ -3,7 +3,7 @@
   "log": "maccoss-log",
   "timeout": 600,
   "functions": {
-    "convert_to_pixels": {
+    "convert-to-pixels": {
       "application": "convert_to_pixels",
       "file": "application",
       "input_format": "tif",
@@ -15,7 +15,7 @@
         "PIL"
       ]
     },
-    "pair": {
+    "pair-train": {
       "application": "pair",
       "file": "application",
       "input_format": "pixel",
@@ -27,7 +27,7 @@
       ],
       "imports": []
     },
-    "run_knn": {
+    "knn": {
       "application": "run_knn",
       "file": "application",
       "input_format": null,
@@ -53,7 +53,7 @@
       "output_format": "knn",
       "imports": []
     },
-    "draw_borders": {
+    "draw-borders": {
       "application": "draw_borders",
       "file": "application",
       "input_format": "knn",

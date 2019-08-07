@@ -68,7 +68,7 @@ def old_subprocess(name, params, lambda_ranges, task_ranges):
       if name == "pair-train":
         name = "pair"
       memory = functions[message["name"]]["memory_size"]
-      vcpus = 1
+      vcpus = 2
       start_time = message["start_time"]
       end_time = start_time + message["duration"] / 1000.0
       st = min(start_time, st)
@@ -144,13 +144,15 @@ def process(subfolder, params, old):
       task_ranges.append([end_time, -1])
       count += 1
 
-  idle_ranges = []
-  with open(subfolder + "/upload_stats") as f:
-    stats = json.loads(f.read())["stats"]
-    for [key, start_time, _] in stats:
-      token = key.split("/")[1]
-      idle_ranges.append([start_time, 1])
-      idle_ranges.append([token_to_start[token], -1])
+  idle_ranges = None
+  if os.path.isfile(subfolder + "/upload_stats"):
+    idle_ranges = []
+    with open(subfolder + "/upload_stats") as f:
+      stats = json.loads(f.read())["stats"]
+      for [key, start_time, _] in stats:
+        token = key.split("/")[1]
+        idle_ranges.append([start_time, 1])
+        idle_ranges.append([token_to_start[token], -1])
 
   average_duration = float(total_duration) / count
   print("Average Duration", average_duration)
@@ -159,6 +161,8 @@ def process(subfolder, params, old):
   results = list(map(lambda r: [], ranges))
   print("Num tasks", len(lambda_ranges))
   for i in range(len(ranges)):
+    if not ranges[i]:
+      continue
     ranges[i] = sorted(ranges[i], key=lambda r: r[0])
     ranges[i] = list(map(lambda r: [r[0] - start_time, r[1]], ranges[i]))
     mcount = 0
@@ -185,17 +189,27 @@ def main():
   parser.add_argument("--subfolder", type=str, required=True, help="Subfolder to download results in")
   parser.add_argument("--parameters", type=str, required=True, help="Location of JSON parameter file")
   parser.add_argument("--start_range", type=int, help="Start timestamp of zoom region")
+  parser.add_argument("--pending", default=False, action="store_true")
   parser.add_argument("--end_range", type=int, help="End timestamp of zoom region")
+  parser.add_argument("--increment", type=int, required=True)
+  parser.add_argument("--max_y", type=int)
   parser.add_argument("--download", default=False, action="store_true", help="Download the data")
+  parser.add_argument("--legend", default=False, action="store_true")
   parser.add_argument("--old", default=False, action="store_true", help="Old save format")
   args = parser.parse_args()
   params = json.loads(open(args.parameters).read())
   if args.download:
     download(args.subfolder, args.bucket, params)
   [lambda_ranges, task_ranges, pending_tasks] = process(args.subfolder, params, args.old)
-  colors = ['#003300', '#ff3300', '#883300']
-  labels = ["Number of VCPUs", "Number of Running Jobs", "Number of Total Jobs"]
-  graph.graph(args.subfolder, [lambda_ranges, task_ranges], colors, pending_tasks, labels, args.start_range, args.end_range)
+  if args.pending:
+    colors = ['#003300', '#ff3300', '#883300']
+    labels = ["Number of VCPUs", "Number of Running Jobs", "Number of Total Jobs"]
+  else:
+    colors = ['#003300', '#ff3300']#, '#883300']
+    labels = ["Number of VCPUs", "Number of Running Jobs"]#, "Number of Total Jobs"]
+    pending_tasks = None
+  print(args.increment)
+  graph.graph(args.subfolder, [lambda_ranges, task_ranges], colors, pending_tasks, labels, args.start_range, args.end_range, args.max_y, args.increment, args.legend)
 
 if __name__ == "__main__":
   main()

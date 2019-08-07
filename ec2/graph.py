@@ -16,17 +16,22 @@ NODE_START_REGEX = re.compile("NODE START TIME: ([0-9\.]+)")
 NODE_END_REGEX = re.compile("NODE END TIME: ([0-9\.]+)")
 
 
-def graph(subfolder, numbers, colors, pending_tasks, labels=None, start_range=None, end_range=None):
+def graph(subfolder, numbers, colors, pending_tasks, labels=None, start_range=None, end_range=None, max_y=None, increment=None, legend=False):
+  print(increment)
+  labelsize=18
+  ticksize=14
   grid = plt.GridSpec(10, 1)
   fig, ax = plt.subplots()
-  ax.set_xticks([])
-  ax.set_yticks([])
-  ax.spines["right"].set_visible(False)
-  ax.spines["top"].set_visible(False)
+  plt.xticks(fontsize=ticksize)
+  plt.yticks(fontsize=ticksize)
 #  ax.yaxis.set_major_locator(MaxNLocator(integer=True))
-  ax1 = fig.add_subplot(grid[:8, 0])
-  ax1.spines["right"].set_visible(False)
-  ax1.spines["top"].set_visible(False)
+  if pending_tasks:
+    ax.set_xticks([])
+    ax.set_yticks([])
+    ax1 = fig.add_subplot(grid[:8, 0])
+    ax1.tick_params(axis="y", labelsize=ticksize)
+  else:
+    ax1 = ax
   min_timestamp = None
   max_timestamp = None
   max_concurrency = None
@@ -49,37 +54,47 @@ def graph(subfolder, numbers, colors, pending_tasks, labels=None, start_range=No
     if labels:
       plt.plot(timestamps, total, color=colors[i % len(colors)], linestyle=linestyle[i])
     else:
-      plt.plot(timestamps, total, color=colors[i % len(colors)])
+      plt.plot(timestamps, total, color=colors[i % len(colors)],  linestyle=linestyle[i])
   print("max_timestamp", max_timestamp)
   colors.append('#ffcc66')
   print(colors)
   if labels:
-    labels.append("Number of Pending Jobs")
+    if pending_tasks:
+      labels.append("Number of Pending Jobs")
     handles = []
     for i in range(len(labels)):
       label = labels[i]
       handles.append(Line2D([0], [0], color=colors[i], linestyle=linestyle[i]))
-    plt.legend(loc="upper right", frameon=False, handles=handles,  labels=labels, bbox_to_anchor=(1.10, 1.20))
-  max_timestamp = 13315.110265016556
-  yticks = range(0, 250, 50)
-  top_y = 250#max_concurrency * 1.05
-  bottom_y = 120
-  plt.xticks([])
+  #max_timestamp = end_range#13315.110265016556
+  yticks = range(0, max_y, increment)
+  top_y = max_y#250#max_concurrency * 1.05
+  if pending_tasks:
+    bottom_y = 120
+    plt.xticks([])
+  else:
+    bottom_y = max_y
+  print(yticks)
   plt.yticks(yticks)
   plt.ylim([0, top_y])
-#  plt.ylim([0, max_concurrency * 1.05])
-  plt.xlim([min_timestamp, max_timestamp])
-  print("max", max_timestamp)
-  ax2 = fig.add_subplot(grid[8:, 0])
-  ax2.spines["top"].set_visible(False)
-  ax2.spines["right"].set_visible(False)
-  timestamps = list(map(lambda r: r[0], pending_tasks))
-  total = list(map(lambda r: r[1], pending_tasks))
-  plt.plot(timestamps, total, color='#ffcc66', linestyle="--")
+  plt.xlim([start_range, end_range])
+  if legend:
+    plt.legend(loc="upper right", frameon=False, handles=handles,  labels=labels, bbox_to_anchor=(1.00, 1.00), prop={'size': 11}, ncol=2, labelspacing=0.1)
+  print(start_range, end_range)
+
+  if pending_tasks:
+    ax2 = fig.add_subplot(grid[8:, 0])
+    ax2.spines["top"].set_visible(False)
+    ax2.spines["right"].set_visible(False)
+    ax2.tick_params(axis="x", labelsize=ticksize)
+    ax2.tick_params(axis="y", labelsize=ticksize)
+    timestamps = list(map(lambda r: r[0], pending_tasks))
+    total = list(map(lambda r: r[1], pending_tasks))
+    plt.plot(timestamps, total, color='#ffcc66', linestyle="--")
+#    fig.legend(prop={'size': 6}, ncol=2)
 #  if labels:
 #    fig.legend(frameon=False, loc="upper right", bbox_to_anchor=(0.93, 0.95))
 
-  plt.xlabel("Time (Seconds)")
+  plt.xlabel("Time (Seconds)", fontsize=labelsize)
   plt.ylim([0, bottom_y])
   if start_range:
     min_timestamp = start_range
@@ -89,6 +104,7 @@ def graph(subfolder, numbers, colors, pending_tasks, labels=None, start_range=No
   plt.xlim([min_timestamp, max_timestamp])
   print(max_concurrency)
   plot_name = subfolder + "/simulation.png"
+  plt.tight_layout()
   plt.subplots_adjust(hspace=0.5)
   print("Plot", plot_name)
   plt.savefig(plot_name)
@@ -207,17 +223,27 @@ def main():
   parser.add_argument("--subfolder", type=str, required=True, help="Folder containing data to graph")
   parser.add_argument("--start_range", type=int, help="Start timestamp of zoom region")
   parser.add_argument("--end_range", type=int, help="End timestamp of zoom region")
+  parser.add_argument("--increment", type=int, required=True)
+  parser.add_argument("--pending", default=False, action="store_true")
+  parser.add_argument("--legend", default=False, action="store_true")
+  parser.add_argument("--max_y",  type=int)
   args = parser.parse_args()
   [start_time, num_nodes] = process_nodes(args.subfolder, args.parameters)
   [active_tasks, pending_tasks, total_tasks] = process_tasks(start_time, args.subfolder)
 
-  numbers = [num_nodes, active_tasks, total_tasks]
   #colors = ["red", "blue", "purple"]
   colors = ['#003300', '#ff3300', '#883300']
-#  colors = ['#003300', '#ff3300']
-  #labels = ["Number of VCPUs", "Number of Running Jobs", "Number of Total Jobs"]
-  labels=None
-  graph(args.subfolder, numbers, colors, pending_tasks, labels, args.start_range, args.end_range)
+  labels = ["Number of VCPUs", "Number of Running Jobs", "Number of Total Jobs"]
+  if not args.pending:
+    pending_tasks = None
+    numbers = [num_nodes, active_tasks]
+    colors = ['#003300', '#ff3300']
+    labels = ["Number of VCPUs", "Number of Running Jobs"]
+  else:
+    numbers = [num_nodes, active_tasks, total_tasks]
+    colors = ['#003300', '#ff3300', '#883300']
+    labels = ["Number of VCPUs", "Number of Running Jobs", "Number of Total Jobs"]
+  graph(args.subfolder, numbers, colors, pending_tasks, labels, args.start_range, args.end_range, args.max_y, args.increment, args.legend)
 
 
 if __name__ == "__main__":
