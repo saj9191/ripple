@@ -171,6 +171,8 @@ class Pipeline:
       "memory_size": self.memory_size,
       "output_format": output_format
     }, **config}
+    print("params", params)
+    print("config", config)
     self.__add__(name, output_format, function_params, params, None)
     return Step(self, len(self.pipeline), output_format)
 
@@ -225,13 +227,14 @@ class Pipeline:
       del self.pipeline[-1][params["bucket_key_value"]]
     return step
 
-  def partition(self, identifier, input_format, params={}, config={}):
+  def partition(self, identifier, input_format, num_bins, params={}, config={}):
     name = "pivot_file"
     function_params = {**{
       "file": name,
       "identifier": identifier,
       "input_format": input_format,
       "memory_size": self.memory_size,
+      "num_pivot_bins": num_bins
     }, **config}
     self.__add__(name, input_format, function_params, params, None)
     return Step(self, len(self.pipeline), format)
@@ -254,8 +257,10 @@ class Pipeline:
     if "split_size" in params:
       split_size = params["split_size"]
       del params["split_size"]
-    step = self.partition(identifier, input_format, dict(params), dict(config))
-    self.combine("pivot", {**params, **{"sort": True}}, dict(config))
+    num_bins = params["num_bins"]
+    del params["num_bins"]    
+    step = self.partition(identifier, input_format, num_bins, dict(params), dict(config))
+    self.combine("pivot", {**params, **{"sort": True, "num_pivot_bins": num_bins}}, dict(config))
     extra_params = {"ranges": True}
     if split_size is not None:
       extra_params["split_size"] = split_size
@@ -278,7 +283,10 @@ class Pipeline:
       "memory_size": self.memory_size,
       "split_size": 100*1000*1000,
     }, **config}
-    self.__add__(name, input_format, function_params, params, None)
+    p = dict(params)
+    if "num_bins" in p:
+      del p["num_bins"]
+    self.__add__(name, input_format, function_params, p, None)
     return Step(self, len(self.pipeline), format)
 
   def top(self, identifier, number: int, input_format, params={}, config={}):

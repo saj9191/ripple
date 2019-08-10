@@ -13,9 +13,9 @@
 # You should have received a copy of the GNU General Public License
 # along with Ripple.  If not, see <https://www.gnu.org/licenses/>.
 
-import new_line
+from formats import new_line
 from enum import Enum
-from iterator import OffsetBounds, Options
+from formats.iterator import OffsetBounds, Options
 from typing import Any, ClassVar, Generic, List, Optional, TypeVar
 
 
