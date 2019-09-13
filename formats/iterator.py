@@ -92,6 +92,11 @@ class Iterator(Generic[T]):
     assert(offset_index >= 0)
     return offset_index
 
+  def __adjust_header__(self):
+    content: bytes = self.entry.get_range(self.start_index + 1, self.start_index + 1 + self.adjust_chunk_size)
+    index = list(self.delimiter.offset_regex.finditer(content))[0].span()[0] + 1
+    self.start_index += index
+
   def __setup__(self):
     if self.offset_bounds:
       self.start_index = self.offset_bounds.start_index
@@ -101,6 +106,8 @@ class Iterator(Generic[T]):
         if self.delimiter.position != DelimiterPosition.start:
           # Don't include delimiter
           self.start_index += 1
+      elif self.options.has_header:
+        self.__adjust_header__()
       if self.end_index != (self.entry.content_length() - 1):
         self.end_index -= self.__adjust__(self.end_index, self.delimiter.offset_regex)
         if self.delimiter.position == DelimiterPosition.start:
@@ -108,6 +115,8 @@ class Iterator(Generic[T]):
     else:
       self.start_index = 0
       self.end_index = self.entry.content_length() - 1
+      if self.options.has_header:
+        self.__adjust_header__()
 
     assert(self.start_index <= self.end_index)
     self.content_length = self.end_index - self.start_index
@@ -207,7 +216,6 @@ class Iterator(Generic[T]):
       self.next_index = self.get_offset_start_index()
     next_start_index: int = self.next_index
     next_end_index: int = min(next_start_index + self.read_chunk_size, self.get_offset_end_index())
-    print("next", next_start_index, next_end_index)
     more: bool = True
     stream: bytes = self.entry.get_range(next_start_index, next_end_index)
     stream = self.remainder + stream

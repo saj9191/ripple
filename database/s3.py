@@ -54,6 +54,7 @@ class S3(Database):
   def __init__(self, params):
     self.s3 = boto3.resource("s3")
     self.client = boto3.client("lambda")
+    self.list = boto3.client("s3")
     self.params = params
     self.sleep_time = 1
     Database.__init__(self)
@@ -84,6 +85,14 @@ class S3(Database):
         self.sleep_time *= 2
 
     return objects
+
+  def __get_folders__(self, table_name: str, prefix: Optional[str]) -> List[str]:
+    if prefix:
+      objects = self.list.list_objects(Bucket=table_name, Delimiter="/", Prefix=prefix)
+    else:
+      objects = self.list.list_objects(Bucket=table_name, Delimiter="/")
+    print(objects)
+    return list(map(lambda obj: obj["Prefix"][:-1], objects["CommonPrefixes"]))
 
   def __put__(self, table_name: str, key: str, content: BinaryIO, metadata: Dict[str, str], invoke=True):
     self.__s3_write__(table_name, key, content, metadata, invoke)

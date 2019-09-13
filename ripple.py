@@ -60,8 +60,11 @@ class Step:
   def combine(self, params={}, config={}):
     return self.pipeline.combine(self.format, params, config)
 
-  def map(self, table, func, params={},  config={}):
-    return self.pipeline.map(table, func, self.format, params, config)
+  def map(self, func, params={}, config={}):
+    return self.pipeline.map(func, self.format, params, config)
+
+  def match(self, identifier, params={}, config={}):
+    return self.pipeline.match(identifier, self.format, params, config)
 
   def run(self, application: str, params={}, output_format=None, config={}):
     return self.pipeline.run(application, self.format, output_format, params, config)
@@ -203,13 +206,17 @@ class Pipeline:
       f.write(json.dumps(configuration, indent=2, default=serialize))
     return configuration
 
-  def map(self, table, func, input_format, params={}, config={}):
+  def map(self, func, input_format, params={}, config={}):
     input = MapVariable("input_key_value", params)
     bucket = MapVariable("bucket_key_value", params)
     func(input, bucket)
 
     name = "map"
-    self.__add__(name, input_format, config, params, None)
+    function_params = {**{
+      "file": "map",
+      "memory_size": self.memory_size,
+    }, **config}
+    self.__add__(name, input_format, function_params, params, None)
 
     if params["input_key_value"] == "key":
       input = Step(self, len(self.pipeline), input_format)
@@ -226,6 +233,17 @@ class Pipeline:
     else:
       del self.pipeline[-1][params["bucket_key_value"]]
     return step
+
+  def match(self, identifier, input_format, params={}, config={}):
+    name = "match"
+    function_params = {**{
+      "file": name,
+      "identifier": identifier,
+      "input_format": input_format,
+      "memory_size": self.memory_size,
+    }, **config}
+    self.__add__(name, input_format, function_params, params, None)
+    return Step(self, len(self.pipeline), format)
 
   def partition(self, identifier, input_format, num_bins, params={}, config={}):
     name = "pivot_file"

@@ -22,11 +22,17 @@ def map_file(database: Database, table: str, key: str, input_format: Dict[str, A
   prefix: str = util.key_prefix(key)
 
   if "map_bucket_key_prefix" in params:
-    items: List[Entry] = database.get_entries(params["map_bucket"], prefix=params["map_bucket_key_prefix"])
-    keys: List[str] = list(set(map(lambda item: item.key, items)))
+    if params["directories"]:
+      keys: List[str] = database.get_folders(params["map_bucket"], prefix=params["map_bucket_key_prefix"])
+    else:
+      items: List[Entry] = database.get_entries(params["map_bucket"], prefix=params["map_bucket_key_prefix"])
+      keys: List[str] = list(set(map(lambda item: item.key, items)))
   else:
-    items: List[Entry] = database.get_entries(params["map_bucket"])
-    keys: List[str] = list(set(map(lambda item: item.key, items)))
+    if params["directories"]:
+      keys: List[str] = database.get_folders(params["map_bucket"])
+    else:
+      items: List[Entry] = database.get_entries(params["map_bucket"])
+      keys: List[str] = list(set(map(lambda item: item.key, items)))
 
   file_id = 0
   num_files = len(keys)

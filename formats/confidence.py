@@ -34,7 +34,7 @@ class Iterator(tsv.Iterator[Identifiers]):
 
   @classmethod
   def get_identifier_value(cls: Any, item: str, identifier: Identifiers) -> float:
-    return float(cls.to_tsv_array(item)[identifier])
+    return float(item.decode("utf-8").split(cls.item_delimiter)[identifier.value])
 
   def sum(self, identifier: Identifiers) -> int:
     [count, total] = self.fraction(identifier)

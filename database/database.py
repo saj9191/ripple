@@ -123,6 +123,9 @@ class Database:
   def __get_entries__(self, table_name: str, prefix: Optional[str]=None) -> List[Entry]:
     raise Exception("Database::__get_entries__ not implemented")
 
+  def __get_folders__(self, table_name: str, prefix: Optional[str]=None) -> List[str]:
+    raise Exception("Database::__get_folders__ not implemented")
+
   def __put__(self, table_name: str, key: str, content: BinaryIO, metadata: Dict[str, str], invoke: bool):
     raise Exception("Database::__put__ not implemented")
 
@@ -160,6 +163,10 @@ class Database:
   def get_entries(self, table_name: str, prefix: Optional[str]=None) -> List[Entry]:
     self.statistics.list_count += 1
     return self.__get_entries__(table_name, prefix)
+
+  def get_folders(self, table_name: str, prefix: Optional[str]=None) -> List[str]:
+    self.statistics.list_count += 1
+    return self.__get_folders__(table_name, prefix)
 
   def get_statistics(self) -> Dict[str, Any]:
     return {
