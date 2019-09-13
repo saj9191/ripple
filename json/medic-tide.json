@@ -1,115 +1,110 @@
 {
-	"input_name": "Coon-HeLa-APD-Data/ASH_20170314_HELA_120MIN.mzML",
-	"model": "lambda",
-	"iterations": 1,
-	"region": "us-west-2",
-	"folder": "tide",
-	"tag": "tide",
-	"timeout": 600,
-	"num_bins": 50,
-	"bucket": "maccoss-tide",
-	"storage_class": "STANDARD",
-	"credential_profile": "maccoss",
-	"role": "service-role/lambdaFullAccessRole",
-	"log": "maccoss-log",
-	"sample_input": true,
-	"sample_bucket": "tide-source-data",
-	"stats": false,
-	"setup": true,
-	"dependencies": {
-		"formats": {
-			"percolator": [
-				"formats/tsv.py"
-			],
-			"confidence": [
-				"formats/tsv.py"
-			]
-		}
-	},
-	"functions": {
-		"confidence": {
-			"file": "application",
-			"application": "confidence",
-			"database_bucket": "maccoss-fasta",
-			"memory_size": 512
-		},
-		"find-species-match": {
-			"file": "match",
-			"format": "confidence",
-			"memory_size": 128,
-	    "identifier": "q-value",
-	    "find": "max sum",
-	    "chunk_size": 100000
-		},
-		"map-species": {
-			"file": "map",
-			"memory_size": 128,
-		  "input_key_value": "key",
-			"bucket_key_value": "species",
-			"ranges": false,
-			"directories": true
-		},
-		"param-medic": {
-			"file": "application",
-			"application": "parammedic",
-			"memory_size": 1024,
-	    "database_bucket": "maccoss-fasta"
-		},
-		"tide": {
-			"file": "application",
-			"application": "tide",
-			"memory_size": 3008,
-			"database_bucket": "maccoss-fasta",
-	    "num_threads": 0
-		},
-		"top-mzML": {
-			"file": "top",
-			"format": "mzML",
-			"memory_size": 3008,
-		  "identifier": "tic",
-		  "number": 1000,
-		  "chunk_size": 500000
-		},
-		"combine-tsv-files": {
-			"file": "combine_files",
-			"format": "tsv",
-			"memory_size": 256,
-			"chunk_size": 10000000,
-	    "sort": false
-		},
-		"percolator": {
-			"file": "application",
-			"application": "percolator",
-			"database_bucket": "maccoss-fasta",
-			"memory_size": 3008,
-	    "max_train": 10000,
-	    "output": "peptides"
-		},
-		"handle-specie-match": {
-			"file": "application",
-			"application": "handle_specie_match",
-			"memory_size": 128
-		}
-	},
-	"pipeline": [{
-		"name": "top-mzML"
-	}, {
-	  "name": "param-medic"
-	}, {
-		"name": "map-species"
-	}, {
-	  "name": "tide"
-	}, {
-	  "name": "confidence"
-	}, {
-	  "name": "find-species-match"
-	}, {
-	  "name": "handle-specie-match"
-	}, {
-	  "name": "tide"
-	}, {
-	  "name": "combine-tsv-files"
-	}, {
-	  "name": "percolator"
-	}]
+  "bucket": "maccoss-tide",
+  "log": "maccoss-log",
+  "timeout": 600,
+  "functions": {
+    "top": {
+      "file": "top",
+      "identifier": "tic",
+      "input_format": "mzML",
+      "memory_size": 3008,
+      "split_size": 100000000,
+      "provider": "lambda",
+      "formats": [
+        "mzML"
+      ],
+      "imports": []
+    },
+    "parammedic": {
+      "application": "parammedic",
+      "file": "application",
+      "input_format": "mzML",
+      "memory_size": 3008,
+      "output_format": "mzML",
+      "provider": "lambda",
+      "formats": [
+        "mzML"
+      ],
+      "imports": []
+    },
+    "map": {
+      "file": "map",
+      "memory_size": 3008,
+      "provider": "lambda",
+      "formats": [
+        "mzML"
+      ],
+      "imports": []
+    },
+    "tide": {
+      "application": "tide",
+      "file": "application",
+      "input_format": "mzML",
+      "memory_size": 3008,
+      "output_format": null,
+      "provider": "lambda",
+      "formats": [
+        "mzML"
+      ],
+      "imports": []
+    },
+    "confidence": {
+      "application": "confidence",
+      "file": "application",
+      "input_format": null,
+      "memory_size": 3008,
+      "output_format": "confidence",
+      "provider": "lambda",
+      "formats": [],
+      "imports": []
+    },
+    "match": {
+      "file": "match",
+      "identifier": "qvalue",
+      "input_format": "confidence",
+      "memory_size": 3008,
+      "provider": "lambda",
+      "formats": [
+        "tsv",
+        "confidence"
+      ],
+      "imports": []
+    }
+  },
+  "pipeline": [
+    {
+      "number": 1000,
+      "name": "top",
+      "output_function": "parammedic"
+    },
+    {
+      "database_bucket": "maccoss-fasta",
+      "name": "parammedic",
+      "output_function": "map"
+    },
+    {
+      "directories": true,
+      "input_key_value": "key",
+      "bucket_key_value": "species",
+      "name": "map",
+      "output_function": "tide"
+    },
+    {
+      "database_bucket": "maccoss-fasta",
+      "num_threads": 0,
+      "output_format": "tsv",
+      "name": "tide",
+      "output_function": "confidence"
+    },
+    {
+      "database_bucket": "maccoss-fasta",
+      "name": "confidence",
+      "output_function": "match"
+    },
+    {
+      "name": "match"
+    }
+  ],
+  "region": "us-west-2",
+  "role": "service-role/lambdaFullAccessRole"
 }

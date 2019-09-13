@@ -79,16 +79,22 @@ Combines the output from the previous stage into one file.<br/>
 2. **config**: Configuration for the function such as memory size.
 
 ```
-input.map(table, func, params={}, config={})
+input.map(func, params={}, config={})
 ```
-Applies the function specified by `func` to each item in `table`.<br/>
+Applies the function specified by `func` to each item.<br/>
 **Parameters**
-1. **table**: Name of table we're mapping over.
 2. **func**: Lambda function to apply to each item in `table`.
   The lambda function should take the name of the input key and item key as parameters.<br/>
   ``lambda input_key, bucket_key: input_key.run("train", params={"train_data": bucket_key, "test_data": input_key})``
 3. **params**: Parameters to pass in to the application call.
 4. **config**: Configuration for the function such as memory size.
+
+```
+input.match(identifier, params={}, config={})
+```
+Finds the file with the top score based on the specified identifier.<br/>
+**Parameters**
+1. **identifier**: Identifier to compare items by.
 
 ```
 input.run(application_name, params={}, config={})
