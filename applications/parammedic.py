@@ -1,8 +1,7 @@
-import boto3
 import re
 import subprocess
 import util
-from database import Database
+from database.database import Database
 
 ITRAQ = re.compile("INFO: iTRAQ: ([0-9]+)-plex reporter ions detected")
 SILAC = re.compile("INFO: SILAC: ([0-9]+)Da separation detected.")
@@ -11,12 +10,7 @@ TMT = re.compile("INFO: TMT: ([0-9]+)-plex reporter ions detected")
 
 
 def run(database: Database, file: str, params, input_format, output_format):
-  s3 = boto3.resource('s3')
-  database_bucket = s3.Bucket(params["database_bucket"])
-
-  with open("/tmp/crux", "wb") as f:
-    database_bucket.download_fileobj("crux", f)
-
+  database.download(params["database_bucket"], "crux", "/tmp/crux")
   subprocess.call("chmod 755 /tmp/crux", shell=True)
 
   command = "cd /tmp; ./crux param-medic {0:s}".format(file)

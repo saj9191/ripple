@@ -16,7 +16,7 @@
 import heapq
 import importlib
 import util
-from database import Database
+from database.database import Database
 from typing import Any, Dict, List
 
 
@@ -31,9 +31,12 @@ class Element:
 
 def find_top(d: Database, table: str, key: str, input_format: Dict[str, Any], output_format: Dict[str, Any], offsets: List[int], params: Dict[str, Any]):
   entry = d.get_entry(table, key)
-  format_lib = importlib.import_module(params["input_format"])
-  iterator = getattr(format_lib, "Iterator")
-  it = iterator(entry, offsets)
+  format_lib = importlib.import_module("formats." + params["input_format"])
+  iterator_class = getattr(format_lib, "Iterator")
+  if len(offsets) > 0:
+    it = iterator_class(entry, OffsetBounds(offsets[0], offsets[1]))
+  else:
+    it = iterator_class(entry, None)
 
   top = []
   more = True
@@ -50,7 +53,7 @@ def find_top(d: Database, table: str, key: str, input_format: Dict[str, Any], ou
   temp_name = "/tmp/{0:s}".format(file_name)
   items = list(map(lambda t: t.value, top))
   with open(temp_name, "wb+") as f:
-    [content, metadata] = iterator.from_array(items, f, it.get_extra())
+    [content, metadata] = iterator_class.from_array(items, f, it.get_extra())
 
   with open(temp_name, "rb") as f:
     d.put(table, file_name, f, metadata)

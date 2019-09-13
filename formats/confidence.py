@@ -13,10 +13,10 @@
 # You should have received a copy of the GNU General Public License
 # along with Ripple.  If not, see <https://www.gnu.org/licenses/>.
 
-import tsv
+from formats import tsv
 import util
 from enum import Enum
-from iterator import OffsetBounds
+from formats.iterator import OffsetBounds, Options
 from typing import Any, BinaryIO, ClassVar, Dict, List, Optional, Tuple
 
 

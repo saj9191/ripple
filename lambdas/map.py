@@ -13,9 +13,8 @@
 # You should have received a copy of the GNU General Public License
 # along with Ripple.  If not, see <https://www.gnu.org/licenses/>.
 
-import pivot
 import util
-from database import Database, Entry
+from database.database import Database, Entry
 from typing import Any, Dict, List
 
 

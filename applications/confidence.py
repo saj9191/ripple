@@ -1,17 +1,13 @@
-import boto3
 import os
+import shutil
 import subprocess
 import util
+from database.database import Database
+from typing import List
 
 
-def run(file, params, input_format, output_format):
-  util.print_read(input_format, file, params)
-
-  s3 = boto3.resource('s3')
-  database_bucket = s3.Bucket(params["database_bucket"])
-
-  with open("/tmp/crux", "wb") as f:
-    database_bucket.download_fileobj("crux", f)
+def run(database: Database, file: str, params, input_format, output_format):
+  database.download(params["database_bucket"], "crux", "/tmp/crux")
 
   subprocess.call("chmod 755 /tmp/crux", shell=True)
   output_dir = "/tmp/confidence-crux-output-{0:f}-{1:d}".format(input_format["timestamp"], input_format["nonce"])
