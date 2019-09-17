@@ -57,6 +57,8 @@ def run(database: Database, file: str, params, input_format, output_format):
     }]
   }
 
+  output_file = util.file_name(output_format)
+  database.write(params["bucket"], output_file, output, {}, False)
   database.invoke(params["output_function"], payload)
 
   return []
