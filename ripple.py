@@ -119,7 +119,7 @@ class Pipeline:
     formats = formats.intersection(set(self.formats.keys()))
     imports = set()
     if path:
-      modules = self.__get_imports__(path)
+      modules = self.__get_imports__(path, "/".join(path.split("/")[:-1]))
       imports = modules.intersection(SUPPORTED_LIBRARIES)
       formats = formats.union(modules.intersection(set(self.formats.keys())))
 
@@ -144,12 +144,12 @@ class Pipeline:
 
     for file in files:
       path = folder + file + ".py"
-      imports  = self.__get_imports__(path)
+      imports  = self.__get_imports__(path, folder)
       formats[file] = imports.intersection(files)
 
     return formats
 
-  def __get_imports__(self, path):
+  def __get_imports__(self, path, folder):
     imports = set()
     with open(path, "r") as f:
       lines = f.readlines()
@@ -163,6 +163,9 @@ class Pipeline:
             if format == "formats":
               format = m.group(2)
             imports.add(format)
+            dep = folder + format + ".py"
+            if os.path.isfile(dep):
+              imports = imports.union(self.__get_imports__(dep, folder))
             break
     return imports
 
