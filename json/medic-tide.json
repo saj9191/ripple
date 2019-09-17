@@ -65,6 +65,7 @@
       "memory_size": 3008,
       "provider": "lambda",
       "formats": [
+        "new_line",
         "tsv",
         "confidence"
       ],

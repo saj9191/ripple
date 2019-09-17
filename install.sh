@@ -1,9 +1,9 @@
 #!/bin/bash
 
-if [ "$EUID" -ne 0 ]
-  then echo "Please run script as root"
-	exit
-fi
+#if [ "$EUID" -ne 0 ]
+#  then echo "Please run script as root"
+#	exit
+#fi
 
 version=`python -c 'import sys; print(sys.version_info[:][0:2])'`
 if [ ${version:1:1} -lt 3 ]
