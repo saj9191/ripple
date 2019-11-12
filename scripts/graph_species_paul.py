@@ -1,81 +1,94 @@
 import matplotlib
 import os
-
-matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+#  matplotlib.use('Agg')
 
 
-def parse_file(file):
-    specie_scores = {}
-    f = open(file)
-    lines = f.readlines()
-    cost = sum(list(map(lambda c: float(c), lines[1].split(",")[1:])))
-    lines = lines[1:]
-    for line in lines:
-        parts = line.strip().split(",")
-        assert (len(parts) == 2)
-        fasta = parts[0]
-        if len(parts[1]) == 0:
-            score = 0
-        else:
-            score = int(parts[1])
-        specie_scores[fasta] = score
-    return [specie_scores, cost]
+def main():
+
+    # TODO: We need a spectral count threshold for a confident (species) identification
+    #  For now, exclude files based on this threshold
+
+    # If something is added here, please comment a reason
+    datasets_to_exclude = (
+        'PXD001873',  # This is SILAC human phospho
+        'PXD002801-TMT10',  # This one uses MS3, so exclude
+        'PXD003177',  # no data for this one
+        'PXD005323'  # This is use of 4 reagents (117, 118, 119, 121) from 8plex and will trick medic
+        )
+
+    # Use this to exclude files from data sets for known reasons
+    # If something is added here, please comment a reason
+    files_to_exclude = ()
+
+    datasets = {
+        "ALS_CSF_Biomarker_Study-1530309740015": "normalHuman",
+        #  "Coon-HeLa-APD-Data": "normalHuman",  # 2 / 6 files with not hits, others < 25%
+        # "Coon-SingleShotFusionYeast": "normalYeast",  # this may be due to different species of "yeast" pombe?
+        "DIA-Files": "normalMouse",
+        #"Differential_analysis_of_a_synaptic_density_fraction_from_Homer2_knockout_and_wild-type_olfactory_bulb_digests-1534804159922": "normalMouse",  # This dataset has no hits!
+        # "Differential_analysis_of_hemolyzed_mouse_plasma-1534802693575": "normalMouse", # No hits
+        "Momo_Control_Yeast_DDA": "normalYeast",
+        "PES_Unfractionated-1533935400961": "normalRoundworm",
+        "PXD001250-Mann_Mouse_Brain_Proteome": "normalMouse",  #  Unusual number of FPs, maybe specific to brain tissue?
+        # "PXD001873": "silacLys6Arg6Human", #  SIALC phospho (not parameter set)
+        # "PXD002079": "phosphorylationHuman",  # uses reductive dimentylation for isobaric labeling
+        # "PXD002098-Mann_SILAC_Human_Cell_Lines": "silacLys8Arg10Human",  # this is super-silac Lys8 only
+        # "PXD002801-TMT10": "tmt6Mouse",  # MS3
+        # "PXD003177": "itraq8Mouse", # no data
+        # "PXD005323": "itraq4Human", # itraq8 reagents used in "itraq4" experiment
+        "PXD005709": "normalHuman",
+        # "PXD009220": "itraq8Mouse", # Most files have 0 hits
+        # "PXD009227": "phosphorylationHuman", # mixed phospho and not phospho
+        # "PXD009240": "phosphorylationFruitFly", # mixed phospho and not phospho
+        "Unit-Resolution_Test_Files": "normalHuman",
+        }
+
+    # check_data(datasets)
+    #graph_thresholds(datasets)
+
+    threshold = 0.25
+    [correct, unknown, wrong] = calculate_scores(threshold, datasets)
+
+    graph(correct, unknown, wrong, threshold)
 
 
-def calculate_score(file, specie, threshold):
-    [scores, cost] = parse_file(file)
-    top_score = None
-    top_specie = None
-    correct_count = 0
-    unknown_count = 0
+def graph_thresholds(datasets):
+    fig, ax = plt.subplots()
+    thresholds = [0.05, 0.10, 0.15, 0.20, 0.25, 0.30, 0.35, 0.40, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7]
+    threshold_results = {}
 
-    for fasta in scores.keys():
-        if top_score is None or top_score < scores[fasta]:
-            top_score = scores[fasta]
-            top_specie = fasta
+    for threshold in thresholds:
+        threshold_results[threshold] = calculate_scores(threshold, datasets)
+        print(threshold, threshold_results[threshold])
 
-    if top_score < threshold:
-        unknown_count += 1
-        #print("Unknown", file, "Top score", top_score)
-    elif top_specie == specie:
-        correct_count += 1
-    else:
-        print("Incorrect", file, "Expected", specie, "Actual", top_specie)
+    tags = ["medic_500", "medic_1000", "medic_2000", "500", "1000", "2000"]
+    for tag in tags:
+        x_values = []
+        y_values = []
+        for threshold in thresholds:
+            [correct, unknown, wrong] = threshold_results[threshold]
+            x_values.append(correct[tag])
+            y_values.append(wrong[tag])
+        plt.plot(x_values, y_values, marker="x", label=tag)
 
-    return [correct_count, unknown_count, 1, 1, cost]
+    plt.ylabel("Wrong Percentage")
+    plt.xlabel("Correct Percentage")
+    plt.legend()
+    plot_name = "data_counts/thresholds.png"
+    plt.show()
+    print("Plot", plot_name)
+    fig.savefig(plot_name)
+    plt.close()
 
 
-def calculate_scores(threshold):
+def calculate_scores(threshold, datasets):
     scores = {}
     tops = [
         500,
         1000,
         2000,
         ]
-
-    datasets = {
-        "ALS_CSF_Biomarker_Study-1530309740015": "normalHuman",
-        "Coon-HeLa-APD-Data": "normalHuman",
-        "Coon-SingleShotFusionYeast": "normalYeast",
-        "DIA-Files": "normalMouse",
-        "Differential_analysis_of_a_synaptic_density_fraction_from_Homer2_knockout_and_wild-type_olfactory_bulb_digests-1534804159922": "normalMouse",
-        "Differential_analysis_of_hemolyzed_mouse_plasma-1534802693575": "normalMouse",
-        "Momo_Control_Yeast_DDA": "normalYeast",
-        "PES_Unfractionated-1533935400961": "normalRoundworm",
-        "PXD001250-Mann_Mouse_Brain_Proteome": "normalMouse",
-        # "PXD001873": "silacLys6Arg6Human",  # This is SILAC human phospho
-        "PXD002079": "phosphorylationHuman",
-        "PXD002098-Mann_SILAC_Human_Cell_Lines": "silacLys8Arg10Human",
-        #" PXD002801-TMT10": "tmt6Mouse", # This one uses MS3, so exclude
-        # "PXD003177": "itraq8Mouse",
-        # "PXD005323": "itraq4Human",  # This is use of 4 reagents 117, 118, 119, 121 from 8plex, will tricky medic
-        "PXD005709": "normalHuman",
-        "PXD009220": "itraq8Mouse",
-        "PXD009227": "phosphorylationHuman",
-        "PXD009240": "phosphorylationFruitFly",
-        "Unit-Resolution_Test_Files": "normalHuman",
-        }
 
     folders = list(datasets.keys())
     folders.sort()
@@ -129,6 +142,47 @@ def calculate_scores(threshold):
     return [correct, unknown, wrong]
 
 
+def parse_file(file):
+    specie_scores = {}
+    f = open(file)
+    lines = f.readlines()
+    cost = sum(list(map(lambda c: float(c), lines[1].split(",")[1:])))
+    lines = lines[1:]
+    for line in lines:
+        parts = line.strip().split(",")
+        assert (len(parts) == 2)
+        fasta = parts[0]
+        if len(parts[1]) == 0:
+            score = 0
+        else:
+            score = int(parts[1])
+        specie_scores[fasta] = score
+    return [specie_scores, cost]
+
+
+def calculate_score(file, specie, threshold):
+    [scores, cost] = parse_file(file)
+    top_score = None
+    top_specie = None
+    correct_count = 0
+    unknown_count = 0
+
+    for fasta in scores.keys():
+        if top_score is None or top_score < scores[fasta]:
+            top_score = scores[fasta]
+            top_specie = fasta
+
+    if top_score < threshold:
+        unknown_count += 1
+        print("Unknown", file, "Top score", top_score)
+    elif top_specie == specie:
+        correct_count += 1
+    else:
+        print("Incorrect", file, "Expected", specie, "Actual", top_specie)
+
+    return [correct_count, unknown_count, 1, 1, cost]
+
+
 def graph(correct, unknown, wrong, threshold):
     fig, ax = plt.subplots()
     # x_values = list(correct.keys())
@@ -158,43 +212,13 @@ def graph(correct, unknown, wrong, threshold):
     plt.title("Spectra Labels (Threshold={0:f}%)".format(threshold * 100))
     plt.xticks(indices, x_values)
     plot_name = "data_counts/accuracy_{0:f}.png".format(threshold)
+    plt.show()
     print("Plot", plot_name)
     fig.savefig(plot_name)
     plt.close()
 
 
-def graph_thresholds():
-    fig, ax = plt.subplots()
-    thresholds = [0.05, 0.10, 0.15, 0.20, 0.25, 0.30, 0.35, 0.40, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7]
-    threshold_results = {}
-
-    for threshold in thresholds:
-        threshold_results[threshold] = calculate_scores(threshold)
-
-    for threshold in thresholds:
-        print(threshold, threshold_results[threshold])
-        print("")
-
-    datasets = ["medic_500", "medic_1000", "medic_2000", "500", "1000", "2000"]
-    for dataset in datasets:
-        x_values = []
-        y_values = []
-        for threshold in thresholds:
-            [correct, unknown, wrong] = threshold_results[threshold]
-            x_values.append(correct[dataset])
-            y_values.append(wrong[dataset])
-        plt.plot(x_values, y_values, marker="x", label=dataset)
-
-    plt.ylabel("Wrong Percentage")
-    plt.xlabel("Correct Percentage")
-    plt.legend()
-    plot_name = "data_counts/thresholds.png"
-    print("Plot", plot_name)
-    fig.savefig(plot_name)
-    plt.close()
-
-
-def check_data():
+def check_data(datasets):
     base_500_results = {}
     base_1000_results = {}
     base_2000_results = {}
@@ -341,15 +365,7 @@ def check_data():
     print("Num compare files", count)
 
 
-def main():
-    check_data()
-    graph_thresholds()
 
-    threshold = 0.25
-    [correct, unknown, wrong] = calculate_scores(threshold)
-
-
-    graph(correct, unknown, wrong, threshold)
 
 
 if __name__ == "__main__":
