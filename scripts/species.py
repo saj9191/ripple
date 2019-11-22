@@ -34,18 +34,8 @@ species = [
 
 
 def run(folder, top, prefix, pfile, typ):
-  os.chdir("..")
-  params = json.loads(open(pfile).read())
-#  params["sample_bucket"] = "tide-source-data"
-  params["folder"] = "tide"
-  [access_key, secret_key] = util.get_credentials(params["credential_profile"])
-  params["access_key"] = access_key
-  params["secret_key"] = secret_key
-
-  #setup.setup(params)
-
   s3 = boto3.resource("s3")
-  sample_bucket_name = params["sample_bucket"]#"tide-source-data"
+  sample_bucket_name = "tide-source-data"
   sample_bucket = s3.Bucket(sample_bucket_name)
 
   p = folder
@@ -55,7 +45,7 @@ def run(folder, top, prefix, pfile, typ):
   objects = list(filter(lambda obj: obj.key.endswith(".mzML"), objects))
   objects.reverse()
 
-  data_folder = "scripts/data_counts"
+  data_folder = "data_counts"
   if not os.path.isdir(data_folder):
     os.mkdir(data_folder)
 
@@ -89,34 +79,14 @@ def run(folder, top, prefix, pfile, typ):
       continue
     open(path, "a").close()
 
-    s3_key, _, _ = upload.upload(params["bucket"], key, sample_bucket_name)
+    s3_key, _, _ = upload.upload("maccoss-tide", key, sample_bucket_name)
     token = s3_key.split("/")[1]
-    params["key"] = s3_key
-    species_to_score = print_species.run(params["bucket"], prefix, token)
-    fastas = list(species_to_score.keys())
-    fastas.sort()
-    sorted_fastas = []
-    for specie in species:
-      for fasta in fastas:
-        if fasta.endswith(specie):
-          sorted_fastas.append(fasta)
+    species_to_score = print_species.run("maccoss-tide", prefix, token)
+    for specie in species_to_score.keys():
+      print(specie, species_to_score[specie])
 
-    [_, costs] = statistics.statistics(params["log"], token, None, params, None)
-
-    print(path)
-    with open(path, "w+") as f:
-      f.write("Cost,{0:f}\n".format(costs[-1]))
-      # Fasta scores
-      for fasta in sorted_fastas:
-        f.write(fasta)
-        if fasta in species_to_score:
-          v = species_to_score[fasta]
-        else:
-          v = 0
-        f.write(",{0:d}\n".format(v))
-
-    clear.clear(params["bucket"], token, None)
-    clear.clear(params["log"], token, None)
+#    clear.clear(params["bucket"], token, None)
+#    clear.clear(params["log"], token, None)
 
 
 def main():

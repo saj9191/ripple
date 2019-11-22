@@ -1,5 +1,4 @@
 import boto3
-import benchmark
 import inspect
 import os
 import sys
@@ -10,9 +9,10 @@ currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentfram
 parentdir = os.path.dirname(currentdir)
 sys.path.insert(0, parentdir + "/formats")
 import confidence
+sys.path.insert(0, parentdir + "/database")
+from s3 import S3
 
 s3 = boto3.resource("s3")
-bucket = s3.Bucket("shjoyner-logs")
 
 token_to_scores = {}
 token_to_file = {}
@@ -39,7 +39,7 @@ class Request(threading.Thread):
 
 
 def run(bucket_name, prefix, token=None):
-  bucket = s3.Bucket(bucket_name)
+  db = S3({})
   keys = []
   if token is not None:
     prefix += token + "/"
@@ -47,7 +47,7 @@ def run(bucket_name, prefix, token=None):
   num_keys = None
   while num_keys is None or len(keys) < num_keys:
     try:
-      keys = list(map(lambda o: o.key, list(bucket.objects.filter(Prefix=prefix))))
+      keys = list(map(lambda o: o.key, list(db.get_entries("maccoss-tide", prefix))))
       if len(keys) > 0:
         num_keys = util.parse_file_name(keys[0])["num_files"]
     except Exception as e:
@@ -59,9 +59,9 @@ def run(bucket_name, prefix, token=None):
   species_to_score = {}
 
   print("Processing...")
-  for i in range(len(keys)):
-    obj = s3.Object(bucket_name, keys[i])
-    it = confidence.Iterator(obj, 10*1000)
+  objs = db.get_entries("maccoss-tide", prefix)
+  for obj in objs:
+    it = confidence.Iterator(obj, None)
     s = it.sum("q-value")
     specie = util.parse_file_name(obj.key)["suffix"]
     species_to_score[specie] = s
