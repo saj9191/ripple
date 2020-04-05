@@ -4,6 +4,7 @@ Ripple is a serverless computing framework designed to make complex applications
 Ripple allows the user to chain lambda functions using S3 triggers 
 
 ## Setup
+To start, run `./install.sh` to make sure all necessary dependencies are installed.
 Ripple works by chaining a series of Lambda functions together.
 We'll walk through one simple Ripple example.
 
