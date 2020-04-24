@@ -18,7 +18,6 @@ import boto3
 import json
 import os
 from pathlib import Path
-import setup
 import sys
 import util
 
@@ -30,7 +29,7 @@ def process_objects(s3, bucket_name, objects, params, subfolder):
   read_count = {-1: 0}
   write_count = {-1: 0}
   path = os.path.dirname(os.path.realpath(__file__))
-  memory_parameters = json.loads(open(path + "/json/memory.json").read())
+  memory_parameters = json.loads(open(path + "../json/memory.json").read())
   statistics = []
 
   for stage in params["pipeline"]:
@@ -136,7 +135,6 @@ def main():
   parser.add_argument("--output_folder", type=str, help="Output folder to record statistics")
   args = parser.parse_args()
   params = json.loads(open(args.parameters).read())
-  setup.process_functions(params)
   statistics(args.bucket_name, args.token, args.prefix, params, args.output_folder)
 
 
